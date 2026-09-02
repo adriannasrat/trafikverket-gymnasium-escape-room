@@ -2,7 +2,7 @@
 
 A redevelopment of the Gymnasium escape-room experience and management platform I designed and implemented during a university collaboration with Trafikverket.
 
-The application is intended for event computers where teams complete configurable infrastructure-themed challenges. The lowest verified completion time wins. Event staff can securely manage game content, complete answers, images, activation, and timing without changing source code.
+The application is intended for event computers where players complete configurable infrastructure-themed challenges. The lowest verified completion time wins. Event staff can securely manage game content, complete answers, images, activation, and timing without changing source code.
 
 ## Current status
 

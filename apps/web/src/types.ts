@@ -8,7 +8,7 @@ export type Session = {
 export type Challenge = {
   completed: false; sessionId: string; playerName: string; startedAtUtc: string; game: GameSummary
   challenge: {
-    id: string; prompt: string; imagePath: string | null; timeLimitSeconds: number
+    id: string; prompt: string; imagePath: string | null; number: number; total: number; timeLimitSeconds: number
     challengeStartedAtUtc: string; secondsRemaining: number
     options: Array<{ id: string; text: string }>
   }

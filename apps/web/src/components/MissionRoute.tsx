@@ -19,7 +19,7 @@ export function MissionRoute({ current = 1, total = 4 }: { current?: number; tot
           )
         })}
       </ol>
-      <div className="route-note"><span>LIVE</span><p>Varje rätt svar tar laget närmare målet. Totaltiden avgör placeringen.</p></div>
+      <div className="route-note"><span>LIVE</span><p>Varje rätt svar tar dig närmare målet. Totaltiden avgör placeringen.</p></div>
     </aside>
   )
 }

@@ -95,6 +95,12 @@ public static class SessionEndpoints
         var limit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
         var startedAt = session.CurrentChallengeStartedAtUtc ?? session.StartedAtUtc;
         var elapsed = timeProvider.GetUtcNow() - startedAt;
+        var challengeIds = await db.Challenges.AsNoTracking()
+            .Where(candidate => candidate.GameId == challenge.GameId)
+            .OrderBy(candidate => candidate.SortOrder)
+            .Select(candidate => candidate.Id)
+            .ToListAsync(cancellationToken);
+        var challengeNumber = challengeIds.IndexOf(challenge.Id) + 1;
 
         return Results.Ok(new
         {
@@ -115,6 +121,8 @@ public static class SessionEndpoints
                 challenge.Id,
                 challenge.Prompt,
                 challenge.ImagePath,
+                number = challengeNumber,
+                total = challengeIds.Count,
                 timeLimitSeconds = limit,
                 challengeStartedAtUtc = startedAt,
                 secondsRemaining = Math.Max(0, limit - elapsed.TotalSeconds),

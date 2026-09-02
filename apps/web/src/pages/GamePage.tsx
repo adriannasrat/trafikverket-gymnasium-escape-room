@@ -75,9 +75,9 @@ export function GamePage() {
     <div className="app-shell game-shell">
       <BrandHeader playerName={data.playerName} elapsed={formatElapsed(elapsed)} />
       <div className="game-layout">
-        <MissionRoute />
+        <MissionRoute current={data.challenge.number} total={data.challenge.total} />
         <main className="challenge-stage">
-          <div className="challenge-heading"><div><p className="eyebrow">ETAPP 01 · {data.game.title.toUpperCase()}</p><h1>{data.challenge.prompt}</h1></div><span className="challenge-index">01<span>/04</span></span></div>
+          <div className="challenge-heading"><div><p className="eyebrow">ETAPP {data.challenge.number.toString().padStart(2, '0')} · {data.game.title.toUpperCase()}</p><h1>{data.challenge.prompt}</h1></div><span className="challenge-index">{data.challenge.number.toString().padStart(2, '0')}<span>/{data.challenge.total.toString().padStart(2, '0')}</span></span></div>
           {data.challenge.imagePath && <img className="challenge-image" src={data.challenge.imagePath} alt="Ledtråd till uppdraget" />}
           <ChallengeTimer remaining={remaining} total={data.challenge.timeLimitSeconds} />
           <fieldset className="answer-grid"><legend>Välj ett svar</legend>{data.challenge.options.map((option, index) => <label className={selected === option.id ? 'selected' : ''} key={option.id}><input type="radio" name="answer" value={option.id} checked={selected === option.id} onChange={() => { setSelected(option.id); setFeedback(null) }} /><span>{String.fromCharCode(65 + index)}</span><strong>{option.text}</strong></label>)}</fieldset>

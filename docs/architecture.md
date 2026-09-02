@@ -25,8 +25,8 @@ The first slice proves the whole architecture with one configurable quiz game:
 
 1. An event operator signs into the protected administration area.
 2. The operator edits the game, its answers, time limit, and active state.
-3. A team starts a server-timed session.
-4. The team answers the challenge.
+3. A player starts a server-timed session.
+4. The player answers the challenge.
 5. The server validates the answer and records completion time.
 6. The leaderboard ranks the lowest valid elapsed time first.
 

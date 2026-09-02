@@ -24,12 +24,12 @@ public static class SessionEndpoints
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
-        var teamName = request.TeamName.Trim();
-        if (teamName.Length is < 2 or > 80)
+        var playerName = request.PlayerName.Trim();
+        if (playerName.Length is < 2 or > 80)
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>
             {
-                ["teamName"] = ["Lagnamnet måste innehålla mellan 2 och 80 tecken."]
+                ["playerName"] = ["Namnet måste innehålla mellan 2 och 80 tecken."]
             });
         }
 
@@ -46,7 +46,7 @@ public static class SessionEndpoints
         var now = timeProvider.GetUtcNow();
         var session = new GameSession
         {
-            TeamName = teamName,
+            PlayerName = playerName,
             StartedAtUtc = now,
             CurrentChallengeId = firstChallenge.Id,
             CurrentChallengeStartedAtUtc = now
@@ -95,12 +95,18 @@ public static class SessionEndpoints
         var limit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
         var startedAt = session.CurrentChallengeStartedAtUtc ?? session.StartedAtUtc;
         var elapsed = timeProvider.GetUtcNow() - startedAt;
+        var challengeIds = await db.Challenges.AsNoTracking()
+            .Where(candidate => candidate.GameId == challenge.GameId)
+            .OrderBy(candidate => candidate.SortOrder)
+            .Select(candidate => candidate.Id)
+            .ToListAsync(cancellationToken);
+        var challengeNumber = challengeIds.IndexOf(challenge.Id) + 1;
 
         return Results.Ok(new
         {
             completed = false,
             sessionId = session.Id,
-            session.TeamName,
+            session.PlayerName,
             session.StartedAtUtc,
             game = new
             {
@@ -115,6 +121,8 @@ public static class SessionEndpoints
                 challenge.Id,
                 challenge.Prompt,
                 challenge.ImagePath,
+                number = challengeNumber,
+                total = challengeIds.Count,
                 timeLimitSeconds = limit,
                 challengeStartedAtUtc = startedAt,
                 secondsRemaining = Math.Max(0, limit - elapsed.TotalSeconds),
@@ -228,7 +236,7 @@ public static class SessionEndpoints
             .Select(session => new
             {
                 session.Id,
-                session.TeamName,
+                session.PlayerName,
                 session.CompletedAtUtc,
                 elapsedMilliseconds = (long)(session.CompletedAtUtc!.Value - session.StartedAtUtc).TotalMilliseconds
             })
@@ -239,7 +247,7 @@ public static class SessionEndpoints
             {
                 rank = index + 1,
                 result.Id,
-                result.TeamName,
+                result.PlayerName,
                 result.elapsedMilliseconds,
                 result.CompletedAtUtc
             });
@@ -256,13 +264,13 @@ public static class SessionEndpoints
     private static object ToSessionResponse(GameSession session, DateTimeOffset now) => new
     {
         session.Id,
-        session.TeamName,
+        session.PlayerName,
         session.StartedAtUtc,
         session.CompletedAtUtc,
         status = session.Status.ToString(),
         elapsedMilliseconds = (long)((session.CompletedAtUtc ?? now) - session.StartedAtUtc).TotalMilliseconds
     };
 
-    public sealed record StartSessionRequest(string TeamName);
+    public sealed record StartSessionRequest(string PlayerName);
     public sealed record SubmitAnswerRequest(Guid ChallengeId, Guid OptionId);
 }

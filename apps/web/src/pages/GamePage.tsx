@@ -65,19 +65,19 @@ export function GamePage() {
   if (error) return <div className="fatal-state"><h1>Kontakten bröts</h1><p>{error}</p><Link to="/">Till startsidan</Link></div>
   if (completed) return (
     <div className="app-shell completion-shell">
-      <BrandHeader teamName={data?.teamName} elapsed={formatElapsed(elapsed)} />
-      <main className="completion-card"><span className="completion-icon"><CheckCircle2 /></span><p className="eyebrow">UPPDRAG SLUTFÖRT</p><h1>Systemet är säkrat.</h1><p>Bra jobbat, <strong>{data?.teamName}</strong>! Er totaltid är registrerad.</p><div className="final-time"><small>SLUTTID</small><strong>{formatElapsed(elapsed)}</strong></div><div className="completion-actions"><Link className="primary-button" to="/leaderboard"><Trophy size={18} /> Visa topplistan</Link><Link className="secondary-button" to="/"><RotateCcw size={17} /> Nästa lag</Link></div></main>
+      <BrandHeader playerName={data?.playerName} elapsed={formatElapsed(elapsed)} />
+      <main className="completion-card"><span className="completion-icon"><CheckCircle2 /></span><p className="eyebrow">UPPDRAG SLUTFÖRT</p><h1>Systemet är säkrat.</h1><p>Bra jobbat, <strong>{data?.playerName}</strong>! Din totaltid är registrerad.</p><div className="final-time"><small>SLUTTID</small><strong>{formatElapsed(elapsed)}</strong></div><div className="completion-actions"><Link className="primary-button" to="/leaderboard"><Trophy size={18} /> Visa topplistan</Link><Link className="secondary-button" to="/"><RotateCcw size={17} /> Nästa spelare</Link></div></main>
     </div>
   )
   if (!data) return <LoadingScreen />
 
   return (
     <div className="app-shell game-shell">
-      <BrandHeader teamName={data.teamName} elapsed={formatElapsed(elapsed)} />
+      <BrandHeader playerName={data.playerName} elapsed={formatElapsed(elapsed)} />
       <div className="game-layout">
-        <MissionRoute />
+        <MissionRoute current={data.challenge.number} total={data.challenge.total} />
         <main className="challenge-stage">
-          <div className="challenge-heading"><div><p className="eyebrow">ETAPP 01 · {data.game.title.toUpperCase()}</p><h1>{data.challenge.prompt}</h1></div><span className="challenge-index">01<span>/04</span></span></div>
+          <div className="challenge-heading"><div><p className="eyebrow">ETAPP {data.challenge.number.toString().padStart(2, '0')} · {data.game.title.toUpperCase()}</p><h1>{data.challenge.prompt}</h1></div><span className="challenge-index">{data.challenge.number.toString().padStart(2, '0')}<span>/{data.challenge.total.toString().padStart(2, '0')}</span></span></div>
           {data.challenge.imagePath && <img className="challenge-image" src={data.challenge.imagePath} alt="Ledtråd till uppdraget" />}
           <ChallengeTimer remaining={remaining} total={data.challenge.timeLimitSeconds} />
           <fieldset className="answer-grid"><legend>Välj ett svar</legend>{data.challenge.options.map((option, index) => <label className={selected === option.id ? 'selected' : ''} key={option.id}><input type="radio" name="answer" value={option.id} checked={selected === option.id} onChange={() => { setSelected(option.id); setFeedback(null) }} /><span>{String.fromCharCode(65 + index)}</span><strong>{option.text}</strong></label>)}</fieldset>

@@ -18,9 +18,9 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
     }
 
     [Fact]
-    public async Task TeamCanCompleteActiveGameAndReachLeaderboard()
+    public async Task PlayerCanCompleteActiveGameAndReachLeaderboard()
     {
-        var started = await client.PostAsJsonAsync("/api/sessions/", new { teamName = "Testlaget" });
+        var started = await client.PostAsJsonAsync("/api/sessions/", new { playerName = "Testspelaren" });
         Assert.Equal(HttpStatusCode.Created, started.StatusCode);
         var session = await started.Content.ReadFromJsonAsync<SessionResponse>();
         Assert.NotNull(session);
@@ -29,6 +29,8 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
             $"/api/sessions/{session.Id}/current-challenge");
         Assert.NotNull(challenge);
         Assert.DoesNotContain(challenge.Challenge.Options, option => option.IsCorrect is not null);
+        Assert.Equal(1, challenge.Challenge.Number);
+        Assert.True(challenge.Challenge.Total >= 1);
 
         Guid correctOptionId;
         using (var scope = factory.Services.CreateScope())
@@ -49,13 +51,13 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.True(result?.Completed);
 
         var leaderboard = await client.GetFromJsonAsync<List<LeaderboardResponse>>("/api/leaderboard");
-        Assert.Contains(leaderboard!, entry => entry.TeamName == "Testlaget" && entry.Rank == 1);
+        Assert.Contains(leaderboard!, entry => entry.PlayerName == "Testspelaren" && entry.Rank == 1);
     }
 
     private sealed record SessionResponse(Guid Id);
     private sealed record ChallengeResponse(ChallengeBody Challenge);
-    private sealed record ChallengeBody(Guid Id, List<OptionBody> Options);
+    private sealed record ChallengeBody(Guid Id, int Number, int Total, List<OptionBody> Options);
     private sealed record OptionBody(Guid Id, string Text, bool? IsCorrect);
     private sealed record AnswerResponse(bool Correct, bool Completed);
-    private sealed record LeaderboardResponse(int Rank, string TeamName);
+    private sealed record LeaderboardResponse(int Rank, string PlayerName);
 }

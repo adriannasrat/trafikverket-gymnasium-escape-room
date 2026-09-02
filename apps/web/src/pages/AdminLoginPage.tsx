@@ -27,6 +27,7 @@ export function AdminLoginPage() {
         <form onSubmit={login}><label htmlFor="username">ANVÄNDARNAMN</label><input id="username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /><label htmlFor="password">LÖSENORD</label><input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button" disabled={busy || !username || !password}>{busy ? 'Loggar in…' : 'Öppna kontrollrummet'} <ArrowRight size={18} /></button></form>
         <Link className="back-link" to="/">Tillbaka till spelet</Link>
       </main>
+      <footer className="event-footer"><span>TRAFIKVERKET · GYMNASIUM</span><nav><Link to="/">Spelarvy</Link></nav></footer>
     </div>
   )
 }

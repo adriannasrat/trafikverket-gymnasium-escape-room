@@ -24,12 +24,12 @@ public static class SessionEndpoints
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
-        var teamName = request.TeamName.Trim();
-        if (teamName.Length is < 2 or > 80)
+        var playerName = request.PlayerName.Trim();
+        if (playerName.Length is < 2 or > 80)
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>
             {
-                ["teamName"] = ["Lagnamnet måste innehålla mellan 2 och 80 tecken."]
+                ["playerName"] = ["Namnet måste innehålla mellan 2 och 80 tecken."]
             });
         }
 
@@ -46,7 +46,7 @@ public static class SessionEndpoints
         var now = timeProvider.GetUtcNow();
         var session = new GameSession
         {
-            TeamName = teamName,
+            PlayerName = playerName,
             StartedAtUtc = now,
             CurrentChallengeId = firstChallenge.Id,
             CurrentChallengeStartedAtUtc = now
@@ -100,7 +100,7 @@ public static class SessionEndpoints
         {
             completed = false,
             sessionId = session.Id,
-            session.TeamName,
+            session.PlayerName,
             session.StartedAtUtc,
             game = new
             {
@@ -228,7 +228,7 @@ public static class SessionEndpoints
             .Select(session => new
             {
                 session.Id,
-                session.TeamName,
+                session.PlayerName,
                 session.CompletedAtUtc,
                 elapsedMilliseconds = (long)(session.CompletedAtUtc!.Value - session.StartedAtUtc).TotalMilliseconds
             })
@@ -239,7 +239,7 @@ public static class SessionEndpoints
             {
                 rank = index + 1,
                 result.Id,
-                result.TeamName,
+                result.PlayerName,
                 result.elapsedMilliseconds,
                 result.CompletedAtUtc
             });
@@ -256,13 +256,13 @@ public static class SessionEndpoints
     private static object ToSessionResponse(GameSession session, DateTimeOffset now) => new
     {
         session.Id,
-        session.TeamName,
+        session.PlayerName,
         session.StartedAtUtc,
         session.CompletedAtUtc,
         status = session.Status.ToString(),
         elapsedMilliseconds = (long)((session.CompletedAtUtc ?? now) - session.StartedAtUtc).TotalMilliseconds
     };
 
-    public sealed record StartSessionRequest(string TeamName);
+    public sealed record StartSessionRequest(string PlayerName);
     public sealed record SubmitAnswerRequest(Guid ChallengeId, Guid OptionId);
 }

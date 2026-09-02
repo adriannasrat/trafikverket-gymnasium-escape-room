@@ -1,12 +1,12 @@
 export type GameSummary = { id: string; slug: string; title: string; summary: string; sortOrder: number; type: string }
 
 export type Session = {
-  id: string; teamName: string; startedAtUtc: string; completedAtUtc: string | null
+  id: string; playerName: string; startedAtUtc: string; completedAtUtc: string | null
   status: 'InProgress' | 'Completed' | 'Abandoned'; elapsedMilliseconds: number
 }
 
 export type Challenge = {
-  completed: false; sessionId: string; teamName: string; startedAtUtc: string; game: GameSummary
+  completed: false; sessionId: string; playerName: string; startedAtUtc: string; game: GameSummary
   challenge: {
     id: string; prompt: string; imagePath: string | null; timeLimitSeconds: number
     challengeStartedAtUtc: string; secondsRemaining: number
@@ -20,7 +20,7 @@ export type AnswerResult = {
 }
 
 export type LeaderboardEntry = {
-  rank: number; id: string; teamName: string; elapsedMilliseconds: number; completedAtUtc: string
+  rank: number; id: string; playerName: string; elapsedMilliseconds: number; completedAtUtc: string
 }
 
 export type AdminOption = { id: string; text: string; sortOrder: number; isCorrect: boolean }

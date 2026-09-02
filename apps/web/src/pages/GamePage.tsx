@@ -65,15 +65,15 @@ export function GamePage() {
   if (error) return <div className="fatal-state"><h1>Kontakten bröts</h1><p>{error}</p><Link to="/">Till startsidan</Link></div>
   if (completed) return (
     <div className="app-shell completion-shell">
-      <BrandHeader teamName={data?.teamName} elapsed={formatElapsed(elapsed)} />
-      <main className="completion-card"><span className="completion-icon"><CheckCircle2 /></span><p className="eyebrow">UPPDRAG SLUTFÖRT</p><h1>Systemet är säkrat.</h1><p>Bra jobbat, <strong>{data?.teamName}</strong>! Er totaltid är registrerad.</p><div className="final-time"><small>SLUTTID</small><strong>{formatElapsed(elapsed)}</strong></div><div className="completion-actions"><Link className="primary-button" to="/leaderboard"><Trophy size={18} /> Visa topplistan</Link><Link className="secondary-button" to="/"><RotateCcw size={17} /> Nästa lag</Link></div></main>
+      <BrandHeader playerName={data?.playerName} elapsed={formatElapsed(elapsed)} />
+      <main className="completion-card"><span className="completion-icon"><CheckCircle2 /></span><p className="eyebrow">UPPDRAG SLUTFÖRT</p><h1>Systemet är säkrat.</h1><p>Bra jobbat, <strong>{data?.playerName}</strong>! Din totaltid är registrerad.</p><div className="final-time"><small>SLUTTID</small><strong>{formatElapsed(elapsed)}</strong></div><div className="completion-actions"><Link className="primary-button" to="/leaderboard"><Trophy size={18} /> Visa topplistan</Link><Link className="secondary-button" to="/"><RotateCcw size={17} /> Nästa spelare</Link></div></main>
     </div>
   )
   if (!data) return <LoadingScreen />
 
   return (
     <div className="app-shell game-shell">
-      <BrandHeader teamName={data.teamName} elapsed={formatElapsed(elapsed)} />
+      <BrandHeader playerName={data.playerName} elapsed={formatElapsed(elapsed)} />
       <div className="game-layout">
         <MissionRoute />
         <main className="challenge-stage">

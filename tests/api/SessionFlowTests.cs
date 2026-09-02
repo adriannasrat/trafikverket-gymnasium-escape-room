@@ -18,9 +18,9 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
     }
 
     [Fact]
-    public async Task TeamCanCompleteActiveGameAndReachLeaderboard()
+    public async Task PlayerCanCompleteActiveGameAndReachLeaderboard()
     {
-        var started = await client.PostAsJsonAsync("/api/sessions/", new { teamName = "Testlaget" });
+        var started = await client.PostAsJsonAsync("/api/sessions/", new { playerName = "Testspelaren" });
         Assert.Equal(HttpStatusCode.Created, started.StatusCode);
         var session = await started.Content.ReadFromJsonAsync<SessionResponse>();
         Assert.NotNull(session);
@@ -49,7 +49,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.True(result?.Completed);
 
         var leaderboard = await client.GetFromJsonAsync<List<LeaderboardResponse>>("/api/leaderboard");
-        Assert.Contains(leaderboard!, entry => entry.TeamName == "Testlaget" && entry.Rank == 1);
+        Assert.Contains(leaderboard!, entry => entry.PlayerName == "Testspelaren" && entry.Rank == 1);
     }
 
     private sealed record SessionResponse(Guid Id);
@@ -57,5 +57,5 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
     private sealed record ChallengeBody(Guid Id, List<OptionBody> Options);
     private sealed record OptionBody(Guid Id, string Text, bool? IsCorrect);
     private sealed record AnswerResponse(bool Correct, bool Completed);
-    private sealed record LeaderboardResponse(int Rank, string TeamName);
+    private sealed record LeaderboardResponse(int Rank, string PlayerName);
 }

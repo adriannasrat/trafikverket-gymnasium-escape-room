@@ -14,7 +14,7 @@ POST {{EscapeRoom.Api_HostAddress}}/api/sessions/
 Content-Type: application/json
 
 {
-  "teamName": "Testlaget"
+  "playerName": "Testspelaren"
 }
 
 ###

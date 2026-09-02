@@ -1,9 +1,9 @@
 import { LockKeyhole, Trophy } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-type Props = { mode?: 'player' | 'admin'; teamName?: string; elapsed?: string }
+type Props = { mode?: 'player' | 'admin'; playerName?: string; elapsed?: string }
 
-export function BrandHeader({ mode = 'player', teamName, elapsed }: Props) {
+export function BrandHeader({ mode = 'player', playerName, elapsed }: Props) {
   return (
     <header className="brand-header">
       <Link className="brand" to="/" aria-label="Till startsidan">
@@ -12,7 +12,7 @@ export function BrandHeader({ mode = 'player', teamName, elapsed }: Props) {
       </Link>
       {mode === 'player' ? (
         <div className="header-tools">
-          {teamName && <span className="team-chip">Lag <strong>{teamName}</strong></span>}
+          {playerName && <span className="team-chip">Spelare <strong>{playerName}</strong></span>}
           {elapsed && <span className="elapsed-chip"><small>TOTAL TID</small><strong>{elapsed}</strong></span>}
           <Link className="icon-link" to="/leaderboard" aria-label="Topplista"><Trophy size={19} /></Link>
         </div>

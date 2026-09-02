@@ -36,7 +36,7 @@ async function protectedRequest<T>(path: string, init: RequestInit) {
 
 export const api = {
   games: () => request<GameSummary[]>('/api/games'),
-  startSession: (teamName: string) => request<Session>('/api/sessions/', { method: 'POST', body: JSON.stringify({ teamName }) }),
+  startSession: (playerName: string) => request<Session>('/api/sessions/', { method: 'POST', body: JSON.stringify({ playerName }) }),
   session: (id: string) => request<Session>(`/api/sessions/${id}`),
   currentChallenge: (id: string) => request<Challenge | { completed: true }>(`/api/sessions/${id}/current-challenge`),
   answer: (sessionId: string, challengeId: string, optionId: string) => request<AnswerResult>(`/api/sessions/${sessionId}/answers`, { method: 'POST', body: JSON.stringify({ challengeId, optionId }) }),

@@ -3,7 +3,7 @@ namespace EscapeRoom.Api.Domain;
 public sealed class GameSession
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public required string TeamName { get; set; }
+    public required string PlayerName { get; set; }
     public DateTimeOffset StartedAtUtc { get; set; }
     public DateTimeOffset? CompletedAtUtc { get; set; }
     public SessionStatus Status { get; set; } = SessionStatus.InProgress;

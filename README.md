@@ -1,12 +1,12 @@
 # Trafikverket Gymnasium Escape Room
 
-A redevelopment of the Gymnasium escape-room experience and management platform I designed and implemented during a university collaboration with Trafikverket.
+A redevelopment of the Gymnasium escape room experience and management platform I designed and implemented during a university collaboration with Trafikverket.
 
-The application is intended for event computers where players complete configurable infrastructure-themed challenges. The lowest verified completion time wins. Event staff can securely manage game content, complete answers, images, activation, and timing without changing source code.
+The application is intended for event computers where teams complete configurable infrastructure-themed challenges. The lowest verified completion time wins. Event staff can securely manage game content, complete answers, images, activation and timing without changing source code.
 
 ## Current status
 
-The first production-minded milestone is implemented: a configurable quiz, server-authoritative timing, protected administration, persistent image uploads, audit history, and a ranked leaderboard.
+The first production milestone is implemented. A configurable quiz, server-authoritative timing, protected administration, persistent image uploads, audit history and a ranked leaderboard.
 
 ## Technology
 
@@ -54,7 +54,7 @@ npm run dev
 
 The Vite development server proxies `/api` to the local API.
 
-Run all frontend checks with `npm run lint`, `npm run test`, and `npm run build`. The API integration suite runs with `dotnet test EscapeRoom.sln` when .NET 10 is installed, or through the SDK container used by CI.
+Run all frontend checks with `npm run lint`, `npm run test` and `npm run build`. The API integration suite runs with `dotnet test EscapeRoom.sln` when .NET 10 is installed, or through the SDK container used by CI.
 
 ## Repository structure
 
@@ -73,4 +73,4 @@ This repository focuses on the Gymnasium experience and supporting administratio
 
 ## License
 
-No open-source license has been granted for this repository. Trafikverket names, logos, and visual assets remain the property of their respective rights holders.
+No open-source license has been granted for this repository. Trafikverket names, logos and visual assets remain the property of their respective rights holders.

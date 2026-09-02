@@ -12,7 +12,7 @@ export function LeaderboardPage() {
   useEffect(() => { api.leaderboard().then(setEntries).catch(() => setEntries([])) }, [])
   if (!entries) return <LoadingScreen label="Hämtar topplistan…" />
   return (
-    <div className="app-shell">
+    <div className="app-shell leaderboard-shell">
       <BrandHeader />
       <main className="leaderboard-page content-page">
         <Link className="back-link" to="/"><ArrowLeft size={16} /> Nytt uppdrag</Link>
@@ -23,6 +23,7 @@ export function LeaderboardPage() {
           )}
         </section>
       </main>
+      <footer className="event-footer"><span>TRAFIKVERKET · GYMNASIUM</span><nav><Link to="/">Starta uppdrag</Link><Link to="/admin/login">Admin</Link></nav></footer>
     </div>
   )
 }

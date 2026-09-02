@@ -12,7 +12,7 @@ export function BrandHeader({ mode = 'player', playerName, elapsed }: Props) {
       </Link>
       {mode === 'player' ? (
         <div className="header-tools">
-          {playerName && <span className="team-chip">Spelare <strong>{playerName}</strong></span>}
+          {playerName && <span className="player-chip">Spelare <strong>{playerName}</strong></span>}
           {elapsed && <span className="elapsed-chip"><small>TOTAL TID</small><strong>{elapsed}</strong></span>}
           <Link className="icon-link" to="/leaderboard" aria-label="Topplista"><Trophy size={19} /></Link>
         </div>

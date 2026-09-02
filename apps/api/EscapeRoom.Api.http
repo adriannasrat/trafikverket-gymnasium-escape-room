@@ -1,0 +1,20 @@
+@EscapeRoom.Api_HostAddress = http://localhost:5140
+
+GET {{EscapeRoom.Api_HostAddress}}/health/live
+Accept: application/json
+
+###
+
+GET {{EscapeRoom.Api_HostAddress}}/api/games
+Accept: application/json
+
+###
+
+POST {{EscapeRoom.Api_HostAddress}}/api/sessions/
+Content-Type: application/json
+
+{
+  "teamName": "Testlaget"
+}
+
+###

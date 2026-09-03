@@ -29,6 +29,9 @@ docker compose up --build -d
 ```
 
 Open `http://localhost:8088` for the player experience and `http://localhost:8088/admin` for administration.
+The administrator username and password are the `ADMIN_USERNAME` and `ADMIN_PASSWORD`
+values in `.env`. After changing either value, run `docker compose up -d api` to apply
+the new credentials without deleting games or event results.
 
 Stop the stack without deleting event data:
 

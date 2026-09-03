@@ -27,8 +27,10 @@ services:
       ConnectionStrings__Database: Host=db;Port=5432;Database=${POSTGRES_DB:-escape_room};Username=${POSTGRES_USER:-escape_room};Password=${POSTGRES_PASSWORD}
       Admin__Username: ${ADMIN_USERNAME:-admin}
       Admin__Password: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      DataProtection__KeysPath: /app/data-protection-keys
     volumes:
       - escape-room-uploads:/app/uploads
+      - escape-room-data-protection:/app/data-protection-keys
     depends_on:
       db:
         condition: service_healthy
@@ -57,3 +59,4 @@ services:
 volumes:
   escape-room-data:
   escape-room-uploads:
+  escape-room-data-protection:

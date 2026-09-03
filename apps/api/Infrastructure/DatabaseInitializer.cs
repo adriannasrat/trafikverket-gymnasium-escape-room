@@ -68,11 +68,6 @@ public sealed class DatabaseInitializer(
 
     private async Task SeedAdminAsync(CancellationToken cancellationToken)
     {
-        if (await db.AdminUsers.AnyAsync(cancellationToken))
-        {
-            return;
-        }
-
         var username = configuration["Admin:Username"];
         var password = configuration["Admin:Password"];
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
@@ -81,21 +76,63 @@ public sealed class DatabaseInitializer(
             return;
         }
 
-        var user = new AdminUser
+        var normalizedUsername = username.Trim();
+        var passwordHasher = new PasswordHasher<AdminUser>();
+        var user = await db.AdminUsers
+            .OrderBy(candidate => candidate.Username)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (user is null)
         {
-            Username = username.Trim(),
-            PasswordHash = string.Empty
-        };
-        user.PasswordHash = new PasswordHasher<AdminUser>().HashPassword(user, password);
-        db.AdminUsers.Add(user);
+            user = new AdminUser
+            {
+                Username = normalizedUsername,
+                PasswordHash = string.Empty
+            };
+            user.PasswordHash = passwordHasher.HashPassword(user, password);
+            db.AdminUsers.Add(user);
+            db.AuditEntries.Add(new AuditEntry
+            {
+                OccurredAtUtc = timeProvider.GetUtcNow(),
+                Actor = "system",
+                Action = "created",
+                EntityType = "admin-user",
+                EntityId = user.Id.ToString(),
+                Summary = $"Created the initial administrator account '{user.Username}'."
+            });
+
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        var usernameChanged = user.Username != normalizedUsername;
+        var passwordVerification = passwordHasher.VerifyHashedPassword(
+            user,
+            user.PasswordHash,
+            password);
+        var passwordNeedsUpdate = passwordVerification != PasswordVerificationResult.Success;
+
+        if (!usernameChanged && !passwordNeedsUpdate)
+        {
+            return;
+        }
+
+        user.Username = normalizedUsername;
+        if (passwordNeedsUpdate)
+        {
+            user.PasswordHash = passwordHasher.HashPassword(user, password);
+        }
+        user.FailedLoginCount = 0;
+        user.LockoutEndUtc = null;
+
         db.AuditEntries.Add(new AuditEntry
         {
             OccurredAtUtc = timeProvider.GetUtcNow(),
             Actor = "system",
-            Action = "created",
+            Action = "updated",
             EntityType = "admin-user",
             EntityId = user.Id.ToString(),
-            Summary = $"Created the initial administrator account '{user.Username}'."
+            Summary = $"Synchronized administrator account '{user.Username}' with the event configuration."
         });
 
         await db.SaveChangesAsync(cancellationToken);

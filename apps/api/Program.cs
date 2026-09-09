@@ -34,7 +34,7 @@ builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
-        options.Cookie.Name = "trv-admin-session";
+        options.Cookie.Name = "trv-admin-session-v2";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Strict;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
@@ -56,7 +56,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-CSRF-TOKEN";
-    options.Cookie.Name = "trv-antiforgery";
+    options.Cookie.Name = "trv-antiforgery-v2";
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;

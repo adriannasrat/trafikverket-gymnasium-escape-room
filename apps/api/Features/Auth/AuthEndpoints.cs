@@ -32,8 +32,11 @@ public static class AuthEndpoints
         }).RequireAuthorization().WithMetadata(new RequireAntiforgeryTokenAttribute(true));
 
         group.MapGet("/me", (ClaimsPrincipal user) =>
-            Results.Ok(new { username = user.Identity?.Name }))
-            .RequireAuthorization();
+            Results.Ok(new
+            {
+                authenticated = user.Identity?.IsAuthenticated == true,
+                username = user.Identity?.Name
+            }));
 
         return endpoints;
     }

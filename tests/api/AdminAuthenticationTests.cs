@@ -38,6 +38,11 @@ public sealed class AdminAuthenticationTests(ApiFactory factory) : IClassFixture
         }
 
         using var client = factory.CreateClient();
+        var anonymousSession = await client.GetFromJsonAsync<AuthStatusResponse>("/api/auth/me");
+        Assert.NotNull(anonymousSession);
+        Assert.False(anonymousSession.Authenticated);
+        Assert.Null(anonymousSession.Username);
+
         var antiforgery = await client.GetFromJsonAsync<AntiforgeryResponse>("/api/auth/csrf");
         Assert.NotNull(antiforgery);
 
@@ -54,9 +59,12 @@ public sealed class AdminAuthenticationTests(ApiFactory factory) : IClassFixture
         var loginResponse = await client.SendAsync(loginRequest);
         Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
 
-        var meResponse = await client.GetAsync("/api/auth/me");
-        Assert.Equal(HttpStatusCode.OK, meResponse.StatusCode);
+        var authenticatedSession = await client.GetFromJsonAsync<AuthStatusResponse>("/api/auth/me");
+        Assert.NotNull(authenticatedSession);
+        Assert.True(authenticatedSession.Authenticated);
+        Assert.Equal("event-admin", authenticatedSession.Username);
     }
 
     private sealed record AntiforgeryResponse(string Token);
+    private sealed record AuthStatusResponse(bool Authenticated, string? Username);
 }

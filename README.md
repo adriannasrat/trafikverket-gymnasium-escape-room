@@ -6,7 +6,7 @@ The application is intended for event computers where players complete configura
 
 ## Current status
 
-The first production-minded milestone is implemented: a configurable quiz, server-authoritative timing, protected administration, persistent image uploads, audit history, and a ranked leaderboard.
+The first production-minded milestone is implemented: a configurable quiz with addable and removable questions, server-authoritative timing, protected administration, persistent per-question image uploads, audit history, and a ranked leaderboard.
 
 ## Technology
 

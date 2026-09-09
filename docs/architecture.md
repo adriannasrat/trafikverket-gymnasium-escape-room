@@ -17,7 +17,8 @@ The application is a modular monolith designed for a single offline-capable even
 - Challenge countdowns communicate urgency; total elapsed session time determines ranking.
 - Games are data-driven so content can be edited without rebuilding the application.
 - Uploaded challenge images are validated and stored in a dedicated persistent volume.
-- Administrative changes and image uploads create audit entries.
+- Questions can be added and soft-deleted so historical attempts remain intact.
+- Administrative changes, question lifecycle events, and image uploads create audit entries.
 
 ## Initial vertical slice
 

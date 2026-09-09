@@ -9,6 +9,7 @@ export type Challenge = {
   completed: false; sessionId: string; playerName: string; startedAtUtc: string; game: GameSummary
   challenge: {
     id: string; prompt: string; imagePath: string | null; number: number; total: number; timeLimitSeconds: number
+    awaitingNext: boolean
     challengeStartedAtUtc: string; secondsRemaining: number
     options: Array<{ id: string; text: string }>
   }
@@ -17,6 +18,11 @@ export type Challenge = {
 export type AnswerResult = {
   correct: boolean; expired?: boolean; completed?: boolean; message?: string; successMessage?: string
   challengeStartedAtUtc?: string; timeLimitSeconds?: number; elapsedMilliseconds?: number
+}
+
+export type TimeoutResult = {
+  expired: boolean; message?: string; challengeStartedAtUtc: string
+  timeLimitSeconds: number; secondsRemaining?: number
 }
 
 export type LeaderboardEntry = {

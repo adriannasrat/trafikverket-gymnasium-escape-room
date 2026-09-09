@@ -22,6 +22,8 @@ export function GamePage() {
   const [elapsed, setElapsed] = useState(0);
   const [remaining, setRemaining] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [timingOut, setTimingOut] = useState(false);
+  const [awaitingNext, setAwaitingNext] = useState(false);
   const [error, setError] = useState("");
 
   const loadChallenge = useCallback(async () => {
@@ -32,6 +34,13 @@ export function GamePage() {
     }
     setData(result);
     setRemaining(result.challenge.secondsRemaining);
+    setSelected("");
+    setAwaitingNext(result.challenge.awaitingNext);
+    setFeedback(
+      result.challenge.awaitingNext
+        ? { correct: true, text: "Frågan är klar. Gå vidare när du är redo." }
+        : null,
+    );
   }, [sessionId]);
 
   useEffect(() => {
@@ -42,6 +51,7 @@ export function GamePage() {
     if (!data || completed) return;
     const tick = () => {
       setElapsed(Date.now() - new Date(data.startedAtUtc).getTime());
+      if (awaitingNext) return;
       const challengeElapsed =
         (Date.now() -
           new Date(data.challenge.challengeStartedAtUtc).getTime()) /
@@ -53,10 +63,52 @@ export function GamePage() {
     tick();
     const timer = window.setInterval(tick, 100);
     return () => window.clearInterval(timer);
-  }, [data, completed]);
+  }, [data, completed, awaitingNext]);
+
+  useEffect(() => {
+    const challengeId = data?.challenge.id;
+    if (!challengeId || completed || awaitingNext || timingOut || remaining > 0) return;
+    // oxlint-disable-next-line react/set-state-in-effect -- zero on the visible server timer triggers one timeout registration.
+    setTimingOut(true);
+    api
+      .timeout(sessionId, challengeId)
+      .then((result) => {
+        setData((current) =>
+          current?.challenge.id === challengeId
+            ? {
+                ...current,
+                challenge: {
+                  ...current.challenge,
+                  challengeStartedAtUtc: result.challengeStartedAtUtc,
+                },
+              }
+            : current,
+        );
+        setRemaining(
+          result.secondsRemaining ?? result.timeLimitSeconds,
+        );
+        if (result.expired) {
+          setSelected("");
+          setFeedback({
+            correct: false,
+            text: result.message ?? "Tiden tog slut. Försök igen.",
+          });
+        }
+      })
+      .catch((caught) => {
+        setFeedback({
+          correct: false,
+          text:
+            caught instanceof Error
+              ? caught.message
+              : "Tiden kunde inte registreras.",
+        });
+      })
+      .finally(() => setTimingOut(false));
+  }, [awaitingNext, completed, data?.challenge.id, remaining, sessionId, timingOut]);
 
   async function submit() {
-    if (!data || !selected) return;
+    if (!data || !selected || awaitingNext || timingOut) return;
     setSubmitting(true);
     setFeedback(null);
     try {
@@ -69,11 +121,8 @@ export function GamePage() {
         setElapsed(result.elapsedMilliseconds ?? elapsed);
         setCompleted(true);
       } else if (result.correct) {
-        window.setTimeout(() => {
-          setSelected("");
-          setFeedback(null);
-          loadChallenge();
-        }, 1200);
+        setAwaitingNext(true);
+        setRemaining(0);
       } else if (result.challengeStartedAtUtc) {
         setData({
           ...data,
@@ -82,6 +131,9 @@ export function GamePage() {
             challengeStartedAtUtc: result.challengeStartedAtUtc,
           },
         });
+        setRemaining(
+          result.timeLimitSeconds ?? data.challenge.timeLimitSeconds,
+        );
         setSelected("");
       }
     } catch (caught) {
@@ -91,6 +143,25 @@ export function GamePage() {
           caught instanceof Error
             ? caught.message
             : "Svaret kunde inte skickas.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function goToNextChallenge() {
+    if (!awaitingNext || submitting) return;
+    setSubmitting(true);
+    try {
+      await api.nextChallenge(sessionId);
+      await loadChallenge();
+    } catch (caught) {
+      setFeedback({
+        correct: false,
+        text:
+          caught instanceof Error
+            ? caught.message
+            : "Nästa fråga kunde inte laddas.",
       });
     } finally {
       setSubmitting(false);
@@ -172,7 +243,7 @@ export function GamePage() {
           </div>
           {data.challenge.imagePath && (
             <img
-              className="mt-[22px] block max-h-[300px] w-full object-cover"
+              className="mt-[22px] block max-h-[360px] w-full bg-white object-contain p-3"
               src={data.challenge.imagePath}
               alt="Ledtråd till uppdraget"
             />
@@ -180,14 +251,18 @@ export function GamePage() {
           <ChallengeTimer
             remaining={remaining}
             total={data.challenge.timeLimitSeconds}
+            complete={awaitingNext}
           />
           <fieldset className="m-0 grid grid-cols-2 gap-[13px] border-0 p-0 max-[720px]:grid-cols-1">
             <legend className="absolute size-px overflow-hidden">Välj ett svar</legend>
             {data.challenge.options.map((option, index) => (
               <label
                 className={cx(
-                  'grid min-h-[78px] cursor-pointer grid-cols-[38px_minmax(0,1fr)] items-center gap-[15px] border border-[#cfcfcf] bg-white p-[15px] text-[#202020] transition-[border-color,box-shadow] duration-150 hover:border-[#888]',
-                  selected === option.id && 'border-2 border-[#d70000] p-[14px] shadow-[0_5px_18px_rgba(215,0,0,0.08)]',
+                  'grid min-h-[78px] cursor-pointer grid-cols-[38px_minmax(0,1fr)] items-center gap-[15px] border border-[#cfcfcf] bg-white p-[15px] text-[#202020]',
+                  selected === option.id
+                    ? 'border-2 border-[#d70000] p-[14px] shadow-[0_5px_18px_rgba(215,0,0,0.08)] hover:border-[#d70000]'
+                    : 'hover:border-[#888]',
+                  awaitingNext && 'cursor-default',
                 )}
                 key={option.id}
               >
@@ -197,12 +272,13 @@ export function GamePage() {
                   name="answer"
                   value={option.id}
                   checked={selected === option.id}
+                  disabled={awaitingNext || submitting || timingOut}
                   onChange={() => {
                     setSelected(option.id);
                     setFeedback(null);
                   }}
                 />
-                <span className={cx(`${barlow} grid size-9 place-items-center bg-[#ededed] text-[18px] font-bold text-[#555]`, selected === option.id && 'bg-[#d70000] text-white')}>{String.fromCharCode(65 + index)}</span>
+                <span className={cx(`${barlow} grid size-9 place-items-center bg-[#ededed] text-[18px] font-bold text-[#555]`, selected === option.id && 'bg-[#f9eeee] text-[#d70000]')}>{String.fromCharCode(65 + index)}</span>
                 <strong className="text-[14px] leading-[1.45]">{option.text}</strong>
               </label>
             ))}
@@ -223,10 +299,18 @@ export function GamePage() {
             </div>
             <button
               className={`${primaryButton} max-[720px]:w-full`}
-              disabled={!selected || submitting}
-              onClick={submit}
+              disabled={awaitingNext ? submitting : !selected || submitting || timingOut}
+              onClick={awaitingNext ? goToNextChallenge : submit}
             >
-              {submitting ? "Kontrollerar…" : "Bekräfta svar"}{" "}
+              {submitting
+                ? awaitingNext
+                  ? "Laddar nästa…"
+                  : "Kontrollerar…"
+                : awaitingNext
+                  ? "Nästa fråga"
+                  : timingOut
+                    ? "Tiden registreras…"
+                    : "Bekräfta svar"}{" "}
               <ArrowRight size={18} />
             </button>
           </div>

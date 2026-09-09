@@ -17,6 +17,10 @@ public static class AdminEndpoints
         group.MapGet("/games", GetGamesAsync);
         group.MapPut("/games/{gameId:guid}", UpdateGameAsync)
             .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
+        group.MapPost("/games/{gameId:guid}/challenges", AddChallengeAsync)
+            .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
+        group.MapDelete("/challenges/{challengeId:guid}", DeleteChallengeAsync)
+            .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapPost("/challenges/{challengeId:guid}/image", UploadChallengeImageAsync)
             .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapGet("/audit", GetAuditAsync);
@@ -28,7 +32,7 @@ public static class AdminEndpoints
         CancellationToken cancellationToken)
     {
         var games = await db.Games.AsNoTracking()
-            .Include(game => game.Challenges)
+            .Include(game => game.Challenges.Where(challenge => challenge.IsActive))
                 .ThenInclude(challenge => challenge.Options)
             .OrderBy(game => game.SortOrder)
             .ToListAsync(cancellationToken);
@@ -45,7 +49,7 @@ public static class AdminEndpoints
         CancellationToken cancellationToken)
     {
         var game = await db.Games
-            .Include(candidate => candidate.Challenges)
+            .Include(candidate => candidate.Challenges.Where(challenge => challenge.IsActive))
                 .ThenInclude(challenge => challenge.Options)
             .SingleOrDefaultAsync(candidate => candidate.Id == gameId, cancellationToken);
         if (game is null)
@@ -92,6 +96,133 @@ public static class AdminEndpoints
         return Results.Ok(ToAdminGame(game));
     }
 
+    private static async Task<IResult> AddChallengeAsync(
+        Guid gameId,
+        ClaimsPrincipal principal,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var game = await db.Games
+            .SingleOrDefaultAsync(candidate => candidate.Id == gameId, cancellationToken);
+        if (game is null)
+        {
+            return Results.NotFound();
+        }
+
+        var highestSortOrder = await db.Challenges
+            .Where(candidate => candidate.GameId == game.Id && candidate.IsActive)
+            .MaxAsync(candidate => (int?)candidate.SortOrder, cancellationToken) ?? 0;
+        var challenge = new Challenge
+        {
+            GameId = game.Id,
+            Prompt = "Ny fråga",
+            SortOrder = highestSortOrder + 1,
+            Options =
+            [
+                new ChallengeOption { Text = "Svarsalternativ A", SortOrder = 1, IsCorrect = true },
+                new ChallengeOption { Text = "Svarsalternativ B", SortOrder = 2 },
+                new ChallengeOption { Text = "Svarsalternativ C", SortOrder = 3 },
+                new ChallengeOption { Text = "Svarsalternativ D", SortOrder = 4 }
+            ]
+        };
+
+        db.Challenges.Add(challenge);
+        db.AuditEntries.Add(new AuditEntry
+        {
+            OccurredAtUtc = timeProvider.GetUtcNow(),
+            Actor = principal.Identity?.Name ?? "unknown",
+            Action = "created",
+            EntityType = "challenge",
+            EntityId = challenge.Id.ToString(),
+            Summary = $"Added a new challenge to game '{game.Title}'."
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.Created($"/api/admin/challenges/{challenge.Id}", ToAdminChallenge(challenge));
+    }
+
+    private static async Task<IResult> DeleteChallengeAsync(
+        Guid challengeId,
+        ClaimsPrincipal principal,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var challenge = await db.Challenges
+            .Include(candidate => candidate.Game)
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == challengeId && candidate.IsActive,
+                cancellationToken);
+        if (challenge is null)
+        {
+            return Results.NotFound();
+        }
+
+        var remainingChallenges = await db.Challenges
+            .Where(candidate =>
+                candidate.GameId == challenge.GameId &&
+                candidate.IsActive &&
+                candidate.Id != challenge.Id)
+            .OrderBy(candidate => candidate.SortOrder)
+            .ToListAsync(cancellationToken);
+        if (remainingChallenges.Count == 0)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["challenge"] = ["Spelet måste innehålla minst en fråga."]
+            });
+        }
+
+        var nextChallengeId = await db.Challenges
+            .Where(candidate =>
+                candidate.IsActive &&
+                candidate.Id != challenge.Id &&
+                candidate.Game.IsActive &&
+                (candidate.Game.SortOrder > challenge.Game.SortOrder ||
+                 (candidate.GameId == challenge.GameId && candidate.SortOrder > challenge.SortOrder)))
+            .OrderBy(candidate => candidate.Game.SortOrder)
+            .ThenBy(candidate => candidate.SortOrder)
+            .Select(candidate => (Guid?)candidate.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        challenge.IsActive = false;
+        for (var index = 0; index < remainingChallenges.Count; index++)
+        {
+            remainingChallenges[index].SortOrder = index + 1;
+        }
+
+        var affectedSessions = await db.GameSessions
+            .Where(session =>
+                session.Status == SessionStatus.InProgress &&
+                session.CurrentChallengeId == challenge.Id)
+            .ToListAsync(cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        foreach (var session in affectedSessions)
+        {
+            session.CurrentChallengeId = nextChallengeId;
+            session.CurrentChallengeStartedAtUtc = nextChallengeId is null ? null : now;
+            if (nextChallengeId is null)
+            {
+                session.Status = SessionStatus.Completed;
+                session.CompletedAtUtc = now;
+            }
+        }
+
+        db.AuditEntries.Add(new AuditEntry
+        {
+            OccurredAtUtc = now,
+            Actor = principal.Identity?.Name ?? "unknown",
+            Action = "deleted",
+            EntityType = "challenge",
+            EntityId = challenge.Id.ToString(),
+            Summary = $"Removed challenge '{challenge.Prompt}' from game '{challenge.Game.Title}'."
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.NoContent();
+    }
+
     private static async Task<IResult> GetAuditAsync(
         AppDbContext db,
         CancellationToken cancellationToken)
@@ -128,7 +259,7 @@ public static class AdminEndpoints
         }
 
         var challenge = await db.Challenges.SingleOrDefaultAsync(
-            candidate => candidate.Id == challengeId,
+            candidate => candidate.Id == challengeId && candidate.IsActive,
             cancellationToken);
         if (challenge is null)
         {
@@ -186,9 +317,14 @@ public static class AdminEndpoints
         foreach (var update in request.Challenges)
         {
             var challenge = game.Challenges.Single(candidate => candidate.Id == update.Id);
-            if (string.IsNullOrWhiteSpace(update.Prompt))
+            if (string.IsNullOrWhiteSpace(update.Prompt) || update.Prompt.Length > 1200)
             {
-                errors[$"challenges.{update.Id}.prompt"] = ["Instruktionen får inte vara tom."];
+                errors[$"challenges.{update.Id}.prompt"] = ["Instruktionen måste innehålla mellan 1 och 1200 tecken."];
+            }
+
+            if (update.TimeLimitSeconds is < 5 or > 900)
+            {
+                errors[$"challenges.{update.Id}.timeLimitSeconds"] = ["Frågans tidsgräns måste vara mellan 5 och 900 sekunder."];
             }
 
             if (update.Options.Count != challenge.Options.Count ||
@@ -203,9 +339,10 @@ public static class AdminEndpoints
                 errors[$"challenges.{update.Id}.correctAnswer"] = ["Exakt ett svar måste vara markerat som korrekt."];
             }
 
-            if (update.Options.Any(option => string.IsNullOrWhiteSpace(option.Text)))
+            if (update.Options.Any(option =>
+                    string.IsNullOrWhiteSpace(option.Text) || option.Text.Length > 500))
             {
-                errors[$"challenges.{update.Id}.optionText"] = ["Svarsalternativ får inte vara tomma."];
+                errors[$"challenges.{update.Id}.optionText"] = ["Svarsalternativ måste innehålla mellan 1 och 500 tecken."];
             }
         }
 
@@ -223,20 +360,25 @@ public static class AdminEndpoints
         game.IsActive,
         game.DefaultTimeLimitSeconds,
         game.SuccessMessage,
-        challenges = game.Challenges.OrderBy(challenge => challenge.SortOrder).Select(challenge => new
+        challenges = game.Challenges
+            .Where(challenge => challenge.IsActive)
+            .OrderBy(challenge => challenge.SortOrder)
+            .Select(ToAdminChallenge)
+    };
+
+    private static object ToAdminChallenge(Challenge challenge) => new
+    {
+        challenge.Id,
+        challenge.Prompt,
+        challenge.ImagePath,
+        challenge.SortOrder,
+        challenge.TimeLimitSeconds,
+        options = challenge.Options.OrderBy(option => option.SortOrder).Select(option => new
         {
-            challenge.Id,
-            challenge.Prompt,
-            challenge.ImagePath,
-            challenge.SortOrder,
-            challenge.TimeLimitSeconds,
-            options = challenge.Options.OrderBy(option => option.SortOrder).Select(option => new
-            {
-                option.Id,
-                option.Text,
-                option.SortOrder,
-                option.IsCorrect
-            })
+            option.Id,
+            option.Text,
+            option.SortOrder,
+            option.IsCorrect
         })
     };
 

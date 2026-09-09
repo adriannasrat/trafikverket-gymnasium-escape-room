@@ -5,6 +5,7 @@ using EscapeRoom.Api.Features.Games;
 using EscapeRoom.Api.Features.Sessions;
 using EscapeRoom.Api.Infrastructure;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -19,11 +20,21 @@ builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("database");
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<DatabaseInitializer>();
 
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+var dataProtection = builder.Services
+    .AddDataProtection()
+    .SetApplicationName("TrafikverketEscapeRoom");
+if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    Directory.CreateDirectory(dataProtectionKeysPath);
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
+
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
-        options.Cookie.Name = "trv-admin-session";
+        options.Cookie.Name = "trv-admin-session-v2";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Strict;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
@@ -45,7 +56,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-CSRF-TOKEN";
-    options.Cookie.Name = "trv-antiforgery";
+    options.Cookie.Name = "trv-antiforgery-v2";
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;

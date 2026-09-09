@@ -12,7 +12,13 @@ export function AdminLoginPage() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const navigate = useNavigate()
-  useEffect(() => { api.me().then(() => navigate('/admin', { replace: true })).catch(() => undefined) }, [navigate])
+  useEffect(() => {
+    api.me()
+      .then((session) => {
+        if (session.authenticated) navigate('/admin', { replace: true })
+      })
+      .catch(() => undefined)
+  }, [navigate])
 
   async function login(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('')

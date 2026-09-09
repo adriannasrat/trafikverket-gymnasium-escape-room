@@ -13,6 +13,8 @@ public static class SessionEndpoints
         group.MapGet("/{sessionId:guid}", GetSessionAsync);
         group.MapGet("/{sessionId:guid}/current-challenge", GetCurrentChallengeAsync);
         group.MapPost("/{sessionId:guid}/answers", SubmitAnswerAsync);
+        group.MapPost("/{sessionId:guid}/timeout", RegisterTimeoutAsync);
+        group.MapPost("/{sessionId:guid}/next", MoveToNextChallengeAsync);
 
         endpoints.MapGet("/api/leaderboard", GetLeaderboardAsync).WithTags("Leaderboard");
         return endpoints;
@@ -93,10 +95,12 @@ public static class SessionEndpoints
             .Include(candidate => candidate.Options)
             .SingleAsync(candidate => candidate.Id == session.CurrentChallengeId, cancellationToken);
         var limit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
-        var startedAt = session.CurrentChallengeStartedAtUtc ?? session.StartedAtUtc;
-        var elapsed = timeProvider.GetUtcNow() - startedAt;
+        var now = timeProvider.GetUtcNow();
+        var awaitingNext = session.CurrentChallengeStartedAtUtc is null;
+        var startedAt = session.CurrentChallengeStartedAtUtc ?? now;
+        var elapsed = awaitingNext ? TimeSpan.Zero : now - startedAt;
         var challengeIds = await db.Challenges.AsNoTracking()
-            .Where(candidate => candidate.GameId == challenge.GameId)
+            .Where(candidate => candidate.GameId == challenge.GameId && candidate.IsActive)
             .OrderBy(candidate => candidate.SortOrder)
             .Select(candidate => candidate.Id)
             .ToListAsync(cancellationToken);
@@ -123,6 +127,7 @@ public static class SessionEndpoints
                 challenge.ImagePath,
                 number = challengeNumber,
                 total = challengeIds.Count,
+                awaitingNext,
                 timeLimitSeconds = limit,
                 challengeStartedAtUtc = startedAt,
                 secondsRemaining = Math.Max(0, limit - elapsed.TotalSeconds),
@@ -131,6 +136,117 @@ public static class SessionEndpoints
                     .Select(option => new { option.Id, option.Text })
             }
         });
+    }
+
+    private static async Task<IResult> RegisterTimeoutAsync(
+        Guid sessionId,
+        ChallengeTimeoutRequest request,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var session = await db.GameSessions
+            .SingleOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken);
+        if (session is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (session.Status != SessionStatus.InProgress || session.CurrentChallengeId is null)
+        {
+            return Results.Conflict(new { message = "Spelsessionen är redan avslutad." });
+        }
+
+        if (session.CurrentChallengeId != request.ChallengeId)
+        {
+            return Results.BadRequest(new { message = "Tiden gäller inte det aktuella uppdraget." });
+        }
+
+        if (session.CurrentChallengeStartedAtUtc is null)
+        {
+            return Results.Conflict(new { message = "Frågan är redan klar. Gå vidare till nästa fråga." });
+        }
+
+        var challenge = await db.Challenges
+            .Include(candidate => candidate.Game)
+            .SingleAsync(candidate => candidate.Id == request.ChallengeId, cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        var limit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
+        var elapsed = now - session.CurrentChallengeStartedAtUtc.Value;
+        var secondsRemaining = limit - elapsed.TotalSeconds;
+        if (secondsRemaining > 0)
+        {
+            return Results.Ok(new
+            {
+                expired = false,
+                challengeStartedAtUtc = session.CurrentChallengeStartedAtUtc.Value,
+                timeLimitSeconds = limit,
+                secondsRemaining
+            });
+        }
+
+        db.ChallengeAttempts.Add(new ChallengeAttempt
+        {
+            GameSessionId = session.Id,
+            ChallengeId = challenge.Id,
+            SubmittedAtUtc = now,
+            IsCorrect = false,
+            WasExpired = true
+        });
+        session.CurrentChallengeStartedAtUtc = now;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            expired = true,
+            message = "Tiden tog slut. Försök igen.",
+            challengeStartedAtUtc = now,
+            timeLimitSeconds = limit,
+            secondsRemaining = (double)limit
+        });
+    }
+
+    private static async Task<IResult> MoveToNextChallengeAsync(
+        Guid sessionId,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var session = await db.GameSessions
+            .SingleOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken);
+        if (session is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (session.Status != SessionStatus.InProgress || session.CurrentChallengeId is null)
+        {
+            return Results.Conflict(new { message = "Spelsessionen är redan avslutad." });
+        }
+
+        if (session.CurrentChallengeStartedAtUtc is not null)
+        {
+            return Results.Conflict(new { message = "Besvara den aktuella frågan innan du går vidare." });
+        }
+
+        var orderedChallengeIds = await LoadOrderedChallenges(db)
+            .Select(candidate => candidate.Id)
+            .ToListAsync(cancellationToken);
+        var currentIndex = orderedChallengeIds.IndexOf(session.CurrentChallengeId.Value);
+        var nextChallengeId = currentIndex >= 0 && currentIndex + 1 < orderedChallengeIds.Count
+            ? orderedChallengeIds[currentIndex + 1]
+            : (Guid?)null;
+        var now = timeProvider.GetUtcNow();
+        session.CurrentChallengeId = nextChallengeId;
+        session.CurrentChallengeStartedAtUtc = nextChallengeId is null ? null : now;
+        if (nextChallengeId is null)
+        {
+            session.Status = SessionStatus.Completed;
+            session.CompletedAtUtc = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> SubmitAnswerAsync(
@@ -157,6 +273,11 @@ public static class SessionEndpoints
             return Results.BadRequest(new { message = "Svaret tillhör inte det aktuella uppdraget." });
         }
 
+        if (session.CurrentChallengeStartedAtUtc is null)
+        {
+            return Results.Conflict(new { message = "Frågan är redan klar. Gå vidare till nästa fråga." });
+        }
+
         var challenge = await db.Challenges
             .Include(candidate => candidate.Game)
             .Include(candidate => candidate.Options)
@@ -168,7 +289,7 @@ public static class SessionEndpoints
         }
 
         var now = timeProvider.GetUtcNow();
-        var challengeStartedAt = session.CurrentChallengeStartedAtUtc ?? session.StartedAtUtc;
+        var challengeStartedAt = session.CurrentChallengeStartedAtUtc.Value;
         var timeLimit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
         var expired = now - challengeStartedAt > TimeSpan.FromSeconds(timeLimit);
 
@@ -204,12 +325,16 @@ public static class SessionEndpoints
             ? orderedChallengeIds[currentIndex + 1]
             : (Guid?)null;
 
-        session.CurrentChallengeId = nextChallengeId;
-        session.CurrentChallengeStartedAtUtc = nextChallengeId is null ? null : now;
         if (nextChallengeId is null)
         {
+            session.CurrentChallengeId = null;
+            session.CurrentChallengeStartedAtUtc = null;
             session.Status = SessionStatus.Completed;
             session.CompletedAtUtc = now;
+        }
+        else
+        {
+            session.CurrentChallengeStartedAtUtc = null;
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -257,7 +382,7 @@ public static class SessionEndpoints
 
     private static IQueryable<Challenge> LoadOrderedChallenges(AppDbContext db) =>
         db.Challenges
-            .Where(challenge => challenge.Game.IsActive)
+            .Where(challenge => challenge.Game.IsActive && challenge.IsActive)
             .OrderBy(challenge => challenge.Game.SortOrder)
             .ThenBy(challenge => challenge.SortOrder);
 
@@ -273,4 +398,5 @@ public static class SessionEndpoints
 
     public sealed record StartSessionRequest(string PlayerName);
     public sealed record SubmitAnswerRequest(Guid ChallengeId, Guid OptionId);
+    public sealed record ChallengeTimeoutRequest(Guid ChallengeId);
 }

@@ -10,8 +10,9 @@ RUN dotnet publish apps/api/EscapeRoom.Api.csproj --configuration Release --no-r
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
-RUN addgroup -S escape-room && adduser -S escape-room -G escape-room \
-    && mkdir -p /app/uploads \
+RUN apk add --no-cache krb5-libs \
+    && addgroup -S escape-room && adduser -S escape-room -G escape-room \
+    && mkdir -p /app/uploads /app/data-protection-keys \
     && chown -R escape-room:escape-room /app
 USER escape-room
 COPY --from=build --chown=escape-room:escape-room /app/publish .

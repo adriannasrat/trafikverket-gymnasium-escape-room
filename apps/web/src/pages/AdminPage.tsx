@@ -5,9 +5,11 @@ import {
   ImagePlus,
   LayoutDashboard,
   LogOut,
+  Plus,
   Save,
   Settings2,
   ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -15,7 +17,7 @@ import { BrandHeader } from "../components/BrandHeader";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { ApiError, api } from "../lib/api";
 import type { AdminGame } from "../types";
-import { barlow, cx, eyebrow, field, fieldLabel, focusRing, primaryButton } from "../uiStyles";
+import { barlow, cx, eyebrow, field, fieldLabel, focusRing, primaryButton, secondaryButton } from "../uiStyles";
 
 const sidebarButton = `flex min-h-[45px] w-full cursor-pointer items-center gap-[11px] border-0 bg-transparent px-3 text-left text-[12px] text-[#777] disabled:cursor-not-allowed disabled:opacity-[0.42] [&>svg]:w-[17px] max-[980px]:justify-center max-[980px]:text-[0px] max-[980px]:[&>svg]:w-[19px] max-[720px]:min-h-[42px] max-[720px]:w-auto max-[720px]:justify-start max-[720px]:px-3 max-[720px]:text-[11px] ${focusRing}`;
 
@@ -24,9 +26,11 @@ export function AdminPage() {
   const [selectedId, setSelectedId] = useState("");
   const [status, setStatus] = useState("");
   const [saving, setSaving] = useState(false);
+  const [mutating, setMutating] = useState<string | null>(null);
   const navigate = useNavigate();
   const game =
     games?.find((candidate) => candidate.id === selectedId) ?? games?.[0];
+  const canManageQuestions = Boolean(game && game.id === games?.[0]?.id);
 
   useEffect(() => {
     api
@@ -76,12 +80,59 @@ export function AdminPage() {
     }
   }
 
+  async function addChallenge() {
+    if (!game || !canManageQuestions) return;
+    setMutating("add");
+    setStatus("");
+    try {
+      const challenge = await api.createChallenge(game.id);
+      updateGame({ challenges: [...game.challenges, challenge] });
+      setStatus("En ny fråga har lagts till. Fyll i innehållet och spara ändringarna.");
+    } catch (caught) {
+      setStatus(
+        caught instanceof Error
+          ? caught.message
+          : "Frågan kunde inte läggas till.",
+      );
+    } finally {
+      setMutating(null);
+    }
+  }
+
+  async function deleteChallenge(challengeId: string) {
+    if (!game || !canManageQuestions || game.challenges.length <= 1) return;
+    const challenge = game.challenges.find((item) => item.id === challengeId);
+    if (!challenge) return;
+    if (!window.confirm(`Ta bort frågan ”${challenge.prompt}”?`)) return;
+
+    setMutating(challengeId);
+    setStatus("");
+    try {
+      await api.deleteChallenge(challengeId);
+      updateGame({
+        challenges: game.challenges
+          .filter((item) => item.id !== challengeId)
+          .map((item, index) => ({ ...item, sortOrder: index + 1 })),
+      });
+      setStatus("Frågan har tagits bort från spelet.");
+    } catch (caught) {
+      setStatus(
+        caught instanceof Error
+          ? caught.message
+          : "Frågan kunde inte tas bort.",
+      );
+    } finally {
+      setMutating(null);
+    }
+  }
+
   async function logout() {
     await api.logout();
     navigate("/admin/login");
   }
   async function uploadImage(challengeId: string, image?: File) {
     if (!game || !image) return;
+    setMutating(`image-${challengeId}`);
     setStatus("Laddar upp bilden…");
     try {
       const result = await api.uploadChallengeImage(challengeId, image);
@@ -99,6 +150,8 @@ export function AdminPage() {
           ? caught.message
           : "Bilden kunde inte laddas upp.",
       );
+    } finally {
+      setMutating(null);
     }
   }
   if (!games) return <LoadingScreen label="Öppnar kontrollrummet…" />;
@@ -151,51 +204,6 @@ export function AdminPage() {
             <p className="mb-[18px] flex items-center gap-[7px] border-l-[3px] border-[#23845e] bg-[#eaf6f0] px-[15px] py-[11px] text-[12px] text-[#166b4c]" role="status">
               <Check size={16} /> {status}
             </p>
-          )}
-          {game && (
-            <section className="mb-[18px] flex items-center gap-[18px] overflow-x-auto border border-[#dedede] bg-white p-[17px] max-[720px]:grid max-[720px]:items-stretch max-[720px]:overflow-visible">
-              <div className="min-w-[210px] max-[720px]:min-w-0">
-                <p className={`${eyebrow} mb-[5px]`}>UPPDRAGSBILDER</p>
-                <span className="text-[10px] text-[#686868]">
-                  Valfria ledtrådsbilder som visas för deltagarna.
-                </span>
-              </div>
-              {game.challenges.map((challenge, index) => (
-                <div
-                  className="grid min-w-[300px] grid-cols-[70px_1fr] items-center gap-x-[10px] gap-y-[5px] border-l border-[#dedede] pl-[14px] max-[720px]:min-w-0 max-[720px]:border-t max-[720px]:border-l-0 max-[720px]:pt-[14px] max-[720px]:pl-0"
-                  key={challenge.id}
-                >
-                  {challenge.imagePath ? (
-                    <img
-                      className="row-span-2 h-12 w-[70px] object-cover"
-                      src={challenge.imagePath}
-                      alt={`Bild för uppdrag ${index + 1}`}
-                    />
-                  ) : (
-                    <span className="row-span-2 grid h-12 w-[70px] place-items-center bg-[#f5f5f5] text-center text-[8px] text-[#777] [&>svg]:w-[17px]">
-                      <ImagePlus /> Ingen bild
-                    </span>
-                  )}
-                  <label
-                    className={`flex w-max cursor-pointer items-center gap-[6px] border border-[#999] bg-white px-[9px] py-[7px] text-[9px] font-extrabold text-[#202020] uppercase focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[rgba(215,0,0,0.25)]`}
-                  >
-                    <ImagePlus size={15} />{" "}
-                    {challenge.imagePath ? "Byt bild" : "Ladda upp"}
-                    <input
-                      className="absolute size-px opacity-0"
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={(event) =>
-                        uploadImage(challenge.id, event.target.files?.[0])
-                      }
-                    />
-                  </label>
-                  <small className="text-[8px] text-[#777]">
-                    Uppdrag {index + 1} · max 5 MB
-                  </small>
-                </div>
-              ))}
-            </section>
           )}
           <div className="grid min-h-[600px] grid-cols-[235px_minmax(0,1fr)] border border-[#dedede] bg-white max-[980px]:grid-cols-1">
             <section className="border-r border-[#dedede] bg-[#fafafa] px-3 py-[18px] max-[980px]:border-r-0 max-[980px]:border-b">
@@ -300,6 +308,29 @@ export function AdminPage() {
                     />
                   </label>
                 </div>
+                <div className="mb-[18px] flex items-end justify-between gap-5 border-b border-[#dedede] pb-[17px] max-[720px]:items-stretch">
+                  <div>
+                    <p className={`${eyebrow} mb-[5px]`}>FRÅGOR I SPELET</p>
+                    <p className="m-0 text-[11px] text-[#686868]">
+                      Lägg till textfrågor eller använd en bild som deltagaren ska tolka.
+                    </p>
+                  </div>
+                  {canManageQuestions && (
+                    <button
+                      className={`${secondaryButton} shrink-0 max-[720px]:px-3`}
+                      type="button"
+                      onClick={addChallenge}
+                      disabled={mutating !== null || saving}
+                    >
+                      <Plus size={17} /> Lägg till fråga
+                    </button>
+                  )}
+                </div>
+                {!canManageQuestions && (
+                  <p className="mb-[18px] border-l-[3px] border-[#d70000] bg-[#f9eeee] px-[14px] py-[11px] text-[11px] text-[#6b2424]">
+                    Nya frågor och bilder hanteras endast för det första spelet i den här etappen.
+                  </p>
+                )}
                 <div className="grid gap-[22px]">
                   {game.challenges.map((challenge, challengeIndex) => (
                     <article
@@ -318,6 +349,19 @@ export function AdminPage() {
                             {challenge.prompt}
                           </strong>
                         </div>
+                        {canManageQuestions && (
+                          <button
+                            className={`ml-auto inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-[6px] border border-[#c9c9c9] bg-white px-[10px] text-[9px] font-bold tracking-[0.08em] text-[#8f2424] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
+                            type="button"
+                            aria-label={`Ta bort uppdrag ${challengeIndex + 1}`}
+                            title={game.challenges.length <= 1 ? "Spelet måste ha minst en fråga" : "Ta bort frågan"}
+                            disabled={game.challenges.length <= 1 || mutating !== null || saving}
+                            onClick={() => deleteChallenge(challenge.id)}
+                          >
+                            <Trash2 size={14} />
+                            <span className="max-[720px]:hidden">Ta bort</span>
+                          </button>
+                        )}
                       </header>
                       <label className={`${fieldLabel} px-5 pt-5`}>
                         FRÅGA / INSTRUKTION
@@ -335,6 +379,50 @@ export function AdminPage() {
                           }
                         />
                       </label>
+                      <section className="mx-5 mt-4 grid grid-cols-[150px_minmax(0,1fr)] items-center gap-4 border border-[#dedede] bg-[#fafafa] p-3 max-[720px]:mx-3 max-[720px]:grid-cols-1">
+                        {challenge.imagePath ? (
+                          <img
+                            className="h-[105px] w-full bg-white object-contain p-1"
+                            src={challenge.imagePath}
+                            alt={`Bild för uppdrag ${challengeIndex + 1}`}
+                          />
+                        ) : (
+                          <span className="grid h-[105px] place-items-center gap-1 bg-white text-center text-[9px] text-[#777]">
+                            <ImagePlus size={25} /> Ingen bild vald
+                          </span>
+                        )}
+                        <div className="grid justify-items-start gap-2">
+                          <div>
+                            <p className="m-0 text-[9px] font-extrabold tracking-[0.12em] text-[#555]">
+                              BILD TILL FRÅGAN <span className="font-normal tracking-normal text-[#777]">(VALFRI)</span>
+                            </p>
+                            <p className="mt-1 mb-0 text-[10px] leading-[1.5] text-[#777]">
+                              JPG, PNG eller WebP · högst 5 MB. Hela bilden visas utan beskärning.
+                            </p>
+                          </div>
+                          {canManageQuestions && (
+                            <label className={`inline-flex min-h-9 cursor-pointer items-center gap-[7px] border border-[#777] bg-white px-[11px] text-[9px] font-extrabold tracking-[0.06em] text-[#202020] uppercase focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[rgba(215,0,0,0.25)]`}>
+                              <ImagePlus size={15} />
+                              {mutating === `image-${challenge.id}`
+                                ? "Laddar upp…"
+                                : challenge.imagePath
+                                  ? "Byt bild"
+                                  : "Ladda upp bild"}
+                              <input
+                                className="absolute size-px opacity-0"
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                disabled={mutating !== null || saving}
+                                onChange={(event) => {
+                                  const image = event.target.files?.[0];
+                                  event.target.value = "";
+                                  void uploadImage(challenge.id, image);
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </section>
                       <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
                         <p className="text-[9px] font-extrabold tracking-[0.12em] text-[#555]">
                           SVARSALTERNATIV{" "}

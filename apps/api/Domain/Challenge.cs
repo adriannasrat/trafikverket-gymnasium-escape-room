@@ -7,6 +7,7 @@ public sealed class Challenge
     public Game Game { get; set; } = null!;
     public required string Prompt { get; set; }
     public string? ImagePath { get; set; }
+    public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; }
     public int? TimeLimitSeconds { get; set; }
     public List<ChallengeOption> Options { get; set; } = [];

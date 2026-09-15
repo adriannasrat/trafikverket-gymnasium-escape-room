@@ -10,5 +10,7 @@ public sealed class GameSession
     public Guid? CurrentChallengeId { get; set; }
     public Challenge? CurrentChallenge { get; set; }
     public DateTimeOffset? CurrentChallengeStartedAtUtc { get; set; }
+    public DateTimeOffset? PausedAtUtc { get; set; }
+    public long TotalPausedMilliseconds { get; set; }
     public List<ChallengeAttempt> Attempts { get; set; } = [];
 }

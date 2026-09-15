@@ -6,7 +6,7 @@ The application is intended for event computers where teams complete configurabl
 
 ## Current status
 
-The first production milestone is implemented. A configurable quiz, server-authoritative timing, protected administration, persistent image uploads, audit history and a ranked leaderboard.
+Two games are implemented, a configurable quiz and the one-to-one Risk & Safety matching board. Both use server timing and validation. The protected administration supports questions, scenarios, risk zones, correct mappings, optional images, activation, audit history, and a ranked leaderboard without requiring source-code changes.
 
 ## Technology
 

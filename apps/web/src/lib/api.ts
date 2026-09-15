@@ -1,10 +1,12 @@
 import type {
   AdminChallenge,
+  AddedMatchingOption,
   AdminGame,
   AnswerResult,
   Challenge,
   GameSummary,
   LeaderboardEntry,
+  MatchingResult,
   Session,
   TimeoutResult,
 } from "../types";
@@ -76,6 +78,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ challengeId, optionId }),
     }),
+  submitMatches: (
+    sessionId: string,
+    challengeId: string,
+    selections: Array<{ challengeId: string; optionId: string }>,
+  ) =>
+    request<MatchingResult>(`/api/sessions/${sessionId}/matches`, {
+      method: "POST",
+      body: JSON.stringify({ challengeId, selections }),
+    }),
   timeout: (sessionId: string, challengeId: string) =>
     request<TimeoutResult>(`/api/sessions/${sessionId}/timeout`, {
       method: "POST",
@@ -104,6 +115,16 @@ export const api = {
     protectedRequest<AdminChallenge>(`/api/admin/games/${gameId}/challenges`, {
       method: "POST",
     }),
+  addMatchingDestination: (gameId: string) =>
+    protectedRequest<{ options: AddedMatchingOption[] }>(
+      `/api/admin/games/${gameId}/matching-destinations`,
+      { method: "POST" },
+    ),
+  deleteMatchingDestination: (gameId: string, sortOrder: number) =>
+    protectedRequest<void>(
+      `/api/admin/games/${gameId}/matching-destinations/${sortOrder}`,
+      { method: "DELETE" },
+    ),
   deleteChallenge: (challengeId: string) =>
     protectedRequest<void>(`/api/admin/challenges/${challengeId}`, {
       method: "DELETE",

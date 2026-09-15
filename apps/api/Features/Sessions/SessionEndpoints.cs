@@ -13,6 +13,7 @@ public static class SessionEndpoints
         group.MapGet("/{sessionId:guid}", GetSessionAsync);
         group.MapGet("/{sessionId:guid}/current-challenge", GetCurrentChallengeAsync);
         group.MapPost("/{sessionId:guid}/answers", SubmitAnswerAsync);
+        group.MapPost("/{sessionId:guid}/matches", SubmitMatchesAsync);
         group.MapPost("/{sessionId:guid}/timeout", RegisterTimeoutAsync);
         group.MapPost("/{sessionId:guid}/next", MoveToNextChallengeAsync);
 
@@ -104,7 +105,35 @@ public static class SessionEndpoints
             .OrderBy(candidate => candidate.SortOrder)
             .Select(candidate => candidate.Id)
             .ToListAsync(cancellationToken);
-        var challengeNumber = challengeIds.IndexOf(challenge.Id) + 1;
+        var activeGameIds = await db.Games.AsNoTracking()
+            .Where(game => game.IsActive && game.Challenges.Any(candidate => candidate.IsActive))
+            .OrderBy(game => game.SortOrder)
+            .Select(game => game.Id)
+            .ToListAsync(cancellationToken);
+        var gameNumber = activeGameIds.IndexOf(challenge.GameId) + 1;
+        var questionNumber = challengeIds.IndexOf(challenge.Id) + 1;
+
+        object? matching = null;
+        if (challenge.Game.Type == GameType.Matching)
+        {
+            var scenarios = await db.Challenges.AsNoTracking()
+                .Where(candidate => candidate.GameId == challenge.GameId && candidate.IsActive)
+                .OrderBy(candidate => candidate.SortOrder)
+                .Select(candidate => new MatchingScenarioResponse(
+                    candidate.Id,
+                    candidate.Prompt,
+                    candidate.ImagePath,
+                    candidate.Options
+                        .OrderBy(option => option.SortOrder)
+                        .Select(option => new MatchingOptionResponse(option.Id, option.Text))
+                        .ToList()))
+                .ToListAsync(cancellationToken);
+            matching = new
+            {
+                scenarios,
+                destinations = scenarios.FirstOrDefault()?.Options.Select(option => option.Text).ToList() ?? []
+            };
+        }
 
         return Results.Ok(new
         {
@@ -112,21 +141,25 @@ public static class SessionEndpoints
             sessionId = session.Id,
             session.PlayerName,
             session.StartedAtUtc,
+            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now),
             game = new
             {
                 challenge.Game.Id,
                 challenge.Game.Slug,
                 challenge.Game.Title,
                 challenge.Game.Summary,
-                challenge.Game.SortOrder
+                challenge.Game.SortOrder,
+                type = challenge.Game.Type.ToString()
             },
             challenge = new
             {
                 challenge.Id,
                 challenge.Prompt,
                 challenge.ImagePath,
-                number = challengeNumber,
-                total = challengeIds.Count,
+                number = gameNumber,
+                total = activeGameIds.Count,
+                questionNumber,
+                questionTotal = challengeIds.Count,
                 awaitingNext,
                 timeLimitSeconds = limit,
                 challengeStartedAtUtc = startedAt,
@@ -134,7 +167,8 @@ public static class SessionEndpoints
                 options = challenge.Options
                     .OrderBy(option => option.SortOrder)
                     .Select(option => new { option.Id, option.Text })
-            }
+            },
+            matching
         });
     }
 
@@ -229,14 +263,28 @@ public static class SessionEndpoints
             return Results.Conflict(new { message = "Besvara den aktuella frågan innan du går vidare." });
         }
 
-        var orderedChallengeIds = await LoadOrderedChallenges(db)
-            .Select(candidate => candidate.Id)
+        var currentChallenge = await db.Challenges.AsNoTracking()
+            .Where(candidate => candidate.Id == session.CurrentChallengeId)
+            .Select(candidate => new { candidate.GameId, candidate.Game.Type })
+            .SingleAsync(cancellationToken);
+        var orderedChallenges = await LoadOrderedChallenges(db)
+            .Select(candidate => new { candidate.Id, candidate.GameId })
             .ToListAsync(cancellationToken);
-        var currentIndex = orderedChallengeIds.IndexOf(session.CurrentChallengeId.Value);
-        var nextChallengeId = currentIndex >= 0 && currentIndex + 1 < orderedChallengeIds.Count
-            ? orderedChallengeIds[currentIndex + 1]
-            : (Guid?)null;
+        var currentIndex = orderedChallenges.FindIndex(candidate => candidate.Id == session.CurrentChallengeId.Value);
+        var nextChallenge = currentIndex < 0
+            ? null
+            : orderedChallenges
+                .Skip(currentIndex + 1)
+                .FirstOrDefault(candidate =>
+                    currentChallenge.Type != GameType.Matching || candidate.GameId != currentChallenge.GameId);
+        var nextChallengeId = nextChallenge?.Id;
         var now = timeProvider.GetUtcNow();
+        if (session.PausedAtUtc is { } pausedAt)
+        {
+            session.TotalPausedMilliseconds += Math.Max(0, (long)(now - pausedAt).TotalMilliseconds);
+            session.PausedAtUtc = null;
+        }
+
         session.CurrentChallengeId = nextChallengeId;
         session.CurrentChallengeStartedAtUtc = nextChallengeId is null ? null : now;
         if (nextChallengeId is null)
@@ -247,6 +295,141 @@ public static class SessionEndpoints
 
         await db.SaveChangesAsync(cancellationToken);
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> SubmitMatchesAsync(
+        Guid sessionId,
+        SubmitMatchesRequest request,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var session = await db.GameSessions
+            .SingleOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken);
+        if (session is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (session.Status != SessionStatus.InProgress || session.CurrentChallengeId is null)
+        {
+            return Results.Conflict(new { message = "Spelsessionen är redan avslutad." });
+        }
+
+        if (session.CurrentChallengeId != request.ChallengeId)
+        {
+            return Results.BadRequest(new { message = "Matchningarna tillhör inte det aktuella uppdraget." });
+        }
+
+        if (session.CurrentChallengeStartedAtUtc is null)
+        {
+            return Results.Conflict(new { message = "Uppdraget är redan klart. Gå vidare när du är redo." });
+        }
+
+        var currentChallenge = await db.Challenges
+            .Include(candidate => candidate.Game)
+            .SingleAsync(candidate => candidate.Id == session.CurrentChallengeId, cancellationToken);
+        if (currentChallenge.Game.Type != GameType.Matching)
+        {
+            return Results.BadRequest(new { message = "Det aktuella uppdraget är inte ett matchningsspel." });
+        }
+
+        var scenarios = await db.Challenges
+            .Where(candidate => candidate.GameId == currentChallenge.GameId && candidate.IsActive)
+            .Include(candidate => candidate.Options)
+            .OrderBy(candidate => candidate.SortOrder)
+            .ToListAsync(cancellationToken);
+        if (request.Selections.Count != scenarios.Count ||
+            request.Selections.Select(selection => selection.ChallengeId).Distinct().Count() != scenarios.Count)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["selections"] = ["Varje scenario måste vara kopplat till exakt en riskzon."]
+            });
+        }
+
+        var selectedOptions = new List<(Challenge Challenge, ChallengeOption Option)>();
+        foreach (var scenario in scenarios)
+        {
+            var selection = request.Selections.SingleOrDefault(candidate => candidate.ChallengeId == scenario.Id);
+            var option = scenario.Options.SingleOrDefault(candidate => candidate.Id == selection?.OptionId);
+            if (option is null)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["selections"] = ["En vald riskzon tillhör inte rätt scenario."]
+                });
+            }
+
+            selectedOptions.Add((scenario, option));
+        }
+
+        if (selectedOptions.Select(selected => selected.Option.SortOrder).Distinct().Count() != scenarios.Count)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["selections"] = ["Varje riskzon kan bara kopplas till ett scenario."]
+            });
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var timeLimit = currentChallenge.TimeLimitSeconds ?? currentChallenge.Game.DefaultTimeLimitSeconds;
+        var expired = now - session.CurrentChallengeStartedAtUtc.Value > TimeSpan.FromSeconds(timeLimit);
+        foreach (var selected in selectedOptions)
+        {
+            db.ChallengeAttempts.Add(new ChallengeAttempt
+            {
+                GameSessionId = session.Id,
+                ChallengeId = selected.Challenge.Id,
+                SelectedOptionId = selected.Option.Id,
+                SubmittedAtUtc = now,
+                IsCorrect = selected.Option.IsCorrect && !expired,
+                WasExpired = expired
+            });
+        }
+
+        if (expired)
+        {
+            session.CurrentChallengeStartedAtUtc = now;
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Ok(new
+            {
+                correct = false,
+                expired = true,
+                message = "Tiden tog slut. Kopplingarna har återställts – försök igen.",
+                incorrectChallengeIds = scenarios.Select(scenario => scenario.Id),
+                challengeStartedAtUtc = now,
+                timeLimitSeconds = timeLimit
+            });
+        }
+
+        var incorrectChallengeIds = selectedOptions
+            .Where(selected => !selected.Option.IsCorrect)
+            .Select(selected => selected.Challenge.Id)
+            .ToList();
+        if (incorrectChallengeIds.Count > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Ok(new
+            {
+                correct = false,
+                expired = false,
+                message = "Några kopplingar är fel. De gröna är låsta – rätta de röda och försök igen.",
+                incorrectChallengeIds
+            });
+        }
+
+        session.CurrentChallengeStartedAtUtc = null;
+        session.PausedAtUtc = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new
+        {
+            correct = true,
+            completed = false,
+            currentChallenge.Game.SuccessMessage,
+            incorrectChallengeIds,
+            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+        });
     }
 
     private static async Task<IResult> SubmitAnswerAsync(
@@ -329,12 +512,14 @@ public static class SessionEndpoints
         {
             session.CurrentChallengeId = null;
             session.CurrentChallengeStartedAtUtc = null;
+            session.PausedAtUtc = null;
             session.Status = SessionStatus.Completed;
             session.CompletedAtUtc = now;
         }
         else
         {
             session.CurrentChallengeStartedAtUtc = null;
+            session.PausedAtUtc = now;
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -343,7 +528,7 @@ public static class SessionEndpoints
             correct = true,
             completed = session.Status == SessionStatus.Completed,
             challenge.Game.SuccessMessage,
-            elapsedMilliseconds = (long)(now - session.StartedAtUtc).TotalMilliseconds
+            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
         });
     }
 
@@ -363,7 +548,7 @@ public static class SessionEndpoints
                 session.Id,
                 session.PlayerName,
                 session.CompletedAtUtc,
-                elapsedMilliseconds = (long)(session.CompletedAtUtc!.Value - session.StartedAtUtc).TotalMilliseconds
+                elapsedMilliseconds = CalculateElapsedMilliseconds(session, session.CompletedAtUtc!.Value)
             })
             .OrderBy(result => result.elapsedMilliseconds)
             .ThenBy(result => result.CompletedAtUtc)
@@ -393,10 +578,31 @@ public static class SessionEndpoints
         session.StartedAtUtc,
         session.CompletedAtUtc,
         status = session.Status.ToString(),
-        elapsedMilliseconds = (long)((session.CompletedAtUtc ?? now) - session.StartedAtUtc).TotalMilliseconds
+        elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
     };
+
+    private static long CalculateElapsedMilliseconds(GameSession session, DateTimeOffset now)
+    {
+        var end = session.CompletedAtUtc ?? now;
+        var pausedMilliseconds = session.TotalPausedMilliseconds;
+        if (session.PausedAtUtc is { } pausedAt)
+        {
+            pausedMilliseconds += Math.Max(0, (long)(end - pausedAt).TotalMilliseconds);
+        }
+
+        var totalMilliseconds = (long)(end - session.StartedAtUtc).TotalMilliseconds;
+        return Math.Max(0, totalMilliseconds - pausedMilliseconds);
+    }
 
     public sealed record StartSessionRequest(string PlayerName);
     public sealed record SubmitAnswerRequest(Guid ChallengeId, Guid OptionId);
+    public sealed record SubmitMatchesRequest(Guid ChallengeId, List<MatchSelectionRequest> Selections);
+    public sealed record MatchSelectionRequest(Guid ChallengeId, Guid OptionId);
     public sealed record ChallengeTimeoutRequest(Guid ChallengeId);
+    private sealed record MatchingScenarioResponse(
+        Guid Id,
+        string Prompt,
+        string? ImagePath,
+        List<MatchingOptionResponse> Options);
+    private sealed record MatchingOptionResponse(Guid Id, string Text);
 }

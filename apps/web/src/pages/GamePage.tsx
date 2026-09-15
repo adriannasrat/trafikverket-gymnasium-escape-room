@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { BrandHeader } from "../components/BrandHeader";
 import { ChallengeTimer } from "../components/ChallengeTimer";
 import { LoadingScreen } from "../components/LoadingScreen";
+import { MatchingBoard } from "../components/MatchingBoard";
 import { MissionRoute } from "../components/MissionRoute";
 import { api } from "../lib/api";
 import { formatElapsed } from "../lib/time";
@@ -24,6 +25,14 @@ export function GamePage() {
   const [submitting, setSubmitting] = useState(false);
   const [timingOut, setTimingOut] = useState(false);
   const [awaitingNext, setAwaitingNext] = useState(false);
+  const [connections, setConnections] = useState<Record<string, string>>({});
+  const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
+  const [lockedScenarioIds, setLockedScenarioIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [invalidScenarioIds, setInvalidScenarioIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [error, setError] = useState("");
 
   const loadChallenge = useCallback(async () => {
@@ -33,14 +42,26 @@ export function GamePage() {
       return;
     }
     setData(result);
+    setElapsed(result.elapsedMilliseconds);
     setRemaining(result.challenge.secondsRemaining);
     setSelected("");
+    setConnections({});
+    setActiveScenarioId(null);
+    setLockedScenarioIds(new Set());
+    setInvalidScenarioIds(new Set());
     setAwaitingNext(result.challenge.awaitingNext);
+    const isMatchingChallenge = result.game.type === "Matching";
     setFeedback(
       result.challenge.awaitingNext
-        ? { correct: true, text: "Frågan är klar. Gå vidare när du är redo." }
+        ? {
+            correct: true,
+            text: isMatchingChallenge
+              ? "Alla kopplingar är klara. Gå vidare när du är redo."
+              : "Frågan är klar. Gå vidare när du är redo.",
+          }
         : null,
     );
+    window.scrollTo(0, 0);
   }, [sessionId]);
 
   useEffect(() => {
@@ -49,8 +70,12 @@ export function GamePage() {
   }, [loadChallenge]);
   useEffect(() => {
     if (!data || completed) return;
+    let previousTick = performance.now();
     const tick = () => {
-      setElapsed(Date.now() - new Date(data.startedAtUtc).getTime());
+      const now = performance.now();
+      const delta = now - previousTick;
+      previousTick = now;
+      if (!awaitingNext) setElapsed((current) => current + delta);
       if (awaitingNext) return;
       const challengeElapsed =
         (Date.now() -
@@ -89,6 +114,10 @@ export function GamePage() {
         );
         if (result.expired) {
           setSelected("");
+          setConnections({});
+          setActiveScenarioId(null);
+          setLockedScenarioIds(new Set());
+          setInvalidScenarioIds(new Set());
           setFeedback({
             correct: false,
             text: result.message ?? "Tiden tog slut. Försök igen.",
@@ -117,8 +146,10 @@ export function GamePage() {
         correct: result.correct,
         text: result.successMessage ?? result.message ?? "",
       });
+      if (result.elapsedMilliseconds !== undefined) {
+        setElapsed(result.elapsedMilliseconds);
+      }
       if (result.completed) {
-        setElapsed(result.elapsedMilliseconds ?? elapsed);
         setCompleted(true);
       } else if (result.correct) {
         setAwaitingNext(true);
@@ -143,6 +174,104 @@ export function GamePage() {
           caught instanceof Error
             ? caught.message
             : "Svaret kunde inte skickas.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function selectScenario(scenarioId: string) {
+    if (lockedScenarioIds.has(scenarioId) || awaitingNext) return;
+    if (invalidScenarioIds.has(scenarioId)) {
+      setConnections((current) => {
+        const next = { ...current };
+        delete next[scenarioId];
+        return next;
+      });
+      setInvalidScenarioIds((current) => {
+        const next = new Set(current);
+        next.delete(scenarioId);
+        return next;
+      });
+    }
+    setActiveScenarioId((current) => current === scenarioId ? null : scenarioId);
+    setFeedback(null);
+  }
+
+  function selectDestination(destination: string) {
+    if (!activeScenarioId || awaitingNext) return;
+    setConnections((current) => {
+      const next = { ...current };
+      const previousScenario = Object.entries(next)
+        .find(([, target]) => target === destination)?.[0];
+      if (previousScenario && !lockedScenarioIds.has(previousScenario)) {
+        delete next[previousScenario];
+      }
+      next[activeScenarioId] = destination;
+      return next;
+    });
+    setInvalidScenarioIds((current) => {
+      const next = new Set(current);
+      next.delete(activeScenarioId);
+      return next;
+    });
+    setActiveScenarioId(null);
+    setFeedback(null);
+  }
+
+  async function submitMatches() {
+    if (!data?.matching || awaitingNext || timingOut) return;
+    const selections = data.matching.scenarios.flatMap((scenario) => {
+      const destination = connections[scenario.id];
+      const option = scenario.options.find(candidate => candidate.text === destination);
+      return option ? [{ challengeId: scenario.id, optionId: option.id }] : [];
+    });
+    if (selections.length !== data.matching.scenarios.length) return;
+
+    setSubmitting(true);
+    setFeedback(null);
+    try {
+      const result = await api.submitMatches(sessionId, data.challenge.id, selections);
+      setFeedback({
+        correct: result.correct,
+        text: result.successMessage ?? result.message ?? "",
+      });
+      if (result.elapsedMilliseconds !== undefined) {
+        setElapsed(result.elapsedMilliseconds);
+      }
+      if (result.expired) {
+        setConnections({});
+        setLockedScenarioIds(new Set());
+        setInvalidScenarioIds(new Set());
+        setActiveScenarioId(null);
+        if (result.challengeStartedAtUtc) {
+          setData({
+            ...data,
+            challenge: {
+              ...data.challenge,
+              challengeStartedAtUtc: result.challengeStartedAtUtc,
+            },
+          });
+        }
+        setRemaining(result.timeLimitSeconds ?? data.challenge.timeLimitSeconds);
+      } else if (result.correct) {
+        setLockedScenarioIds(new Set(data.matching.scenarios.map(scenario => scenario.id)));
+        setInvalidScenarioIds(new Set());
+        setAwaitingNext(true);
+        setRemaining(0);
+      } else {
+        const invalid = new Set(result.incorrectChallengeIds);
+        setInvalidScenarioIds(invalid);
+        setLockedScenarioIds(new Set(
+          data.matching.scenarios
+            .filter(scenario => !invalid.has(scenario.id))
+            .map(scenario => scenario.id),
+        ));
+      }
+    } catch (caught) {
+      setFeedback({
+        correct: false,
+        text: caught instanceof Error ? caught.message : "Kopplingarna kunde inte kontrolleras.",
       });
     } finally {
       setSubmitting(false);
@@ -215,6 +344,9 @@ export function GamePage() {
       </div>
     );
   if (!data) return <LoadingScreen />;
+  const isMatching = data.game.type === "Matching" && data.matching !== null;
+  const allScenariosConnected = isMatching &&
+    data.matching!.scenarios.every(scenario => Boolean(connections[scenario.id]));
 
   return (
     <div className="min-h-screen bg-[#f5f5f5]">
@@ -231,17 +363,23 @@ export function GamePage() {
           <div className="flex justify-between gap-10 border-b border-[#dedede] pb-[25px] max-[720px]:gap-[10px]">
             <div>
               <p className={eyebrow}>
-                ETAPP {data.challenge.number.toString().padStart(2, "0")} ·{" "}
+                {isMatching ? "ETAPP" : "FRÅGA"} {(
+                  isMatching ? data.challenge.number : data.challenge.questionNumber
+                ).toString().padStart(2, "0")} ·{" "}
                 {data.game.title.toUpperCase()}
               </p>
-              <h1 className={`${barlow} m-0 max-w-[820px] text-[clamp(33px,3.4vw,50px)] leading-[1.05] text-[#202020] uppercase max-[420px]:text-[31px]`}>{data.challenge.prompt}</h1>
+              <h1 className={`${barlow} m-0 max-w-[820px] text-[clamp(33px,3.4vw,50px)] leading-[1.05] text-[#202020] uppercase max-[420px]:text-[31px]`}>
+                {isMatching ? data.game.summary : data.challenge.prompt}
+              </h1>
             </div>
             <span className={`${barlow} text-[49px] font-bold text-[#d70000] max-[720px]:hidden`}>
-              {data.challenge.number.toString().padStart(2, "0")}
-              <span className="text-[20px] text-[#999]">/{data.challenge.total.toString().padStart(2, "0")}</span>
+              {(isMatching ? data.challenge.number : data.challenge.questionNumber).toString().padStart(2, "0")}
+              <span className="text-[20px] text-[#999]">/{(
+                isMatching ? data.challenge.total : data.challenge.questionTotal
+              ).toString().padStart(2, "0")}</span>
             </span>
           </div>
-          {data.challenge.imagePath && (
+          {!isMatching && data.challenge.imagePath && (
             <img
               className="mt-[22px] block max-h-[360px] w-full bg-white object-contain p-3"
               src={data.challenge.imagePath}
@@ -252,7 +390,21 @@ export function GamePage() {
             remaining={remaining}
             total={data.challenge.timeLimitSeconds}
             complete={awaitingNext}
+            completeLabel={isMatching ? "KOPPLINGARNA ÄR KLARA" : undefined}
           />
+          {isMatching ? (
+            <MatchingBoard
+              scenarios={data.matching!.scenarios}
+              destinations={data.matching!.destinations}
+              connections={connections}
+              activeScenarioId={activeScenarioId}
+              lockedIds={lockedScenarioIds}
+              invalidIds={invalidScenarioIds}
+              disabled={awaitingNext || submitting || timingOut}
+              onSelectScenario={selectScenario}
+              onSelectDestination={selectDestination}
+            />
+          ) : (
           <fieldset className="m-0 grid grid-cols-2 gap-[13px] border-0 p-0 max-[720px]:grid-cols-1">
             <legend className="absolute size-px overflow-hidden">Välj ett svar</legend>
             {data.challenge.options.map((option, index) => (
@@ -283,6 +435,7 @@ export function GamePage() {
               </label>
             ))}
           </fieldset>
+          )}
           <div className="mt-[22px] grid min-h-[52px] grid-cols-[1fr_auto] items-center gap-5 max-[720px]:grid-cols-1">
             <div>
               {feedback && (
@@ -299,18 +452,32 @@ export function GamePage() {
             </div>
             <button
               className={`${primaryButton} max-[720px]:w-full`}
-              disabled={awaitingNext ? submitting : !selected || submitting || timingOut}
-              onClick={awaitingNext ? goToNextChallenge : submit}
+              disabled={
+                awaitingNext
+                  ? submitting
+                  : isMatching
+                    ? !allScenariosConnected || submitting || timingOut
+                    : !selected || submitting || timingOut
+              }
+              onClick={awaitingNext ? goToNextChallenge : isMatching ? submitMatches : submit}
             >
               {submitting
                 ? awaitingNext
-                  ? "Laddar nästa…"
+                  ? isMatching
+                    ? "Slutför uppdraget…"
+                    : "Laddar nästa…"
                   : "Kontrollerar…"
                 : awaitingNext
-                  ? "Nästa fråga"
+                  ? isMatching
+                    ? data.challenge.number === data.challenge.total
+                      ? "Slutför uppdraget"
+                      : "Nästa spel"
+                    : "Nästa fråga"
                   : timingOut
                     ? "Tiden registreras…"
-                    : "Bekräfta svar"}{" "}
+                    : isMatching
+                      ? "Kontrollera kopplingar"
+                      : "Bekräfta svar"}{" "}
               <ArrowRight size={18} />
             </button>
           </div>

@@ -19,6 +19,10 @@ public static class AdminEndpoints
             .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapPost("/games/{gameId:guid}/challenges", AddChallengeAsync)
             .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
+        group.MapPost("/games/{gameId:guid}/matching-destinations", AddMatchingDestinationAsync)
+            .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
+        group.MapDelete("/games/{gameId:guid}/matching-destinations/{sortOrder:int}", DeleteMatchingDestinationAsync)
+            .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapDelete("/challenges/{challengeId:guid}", DeleteChallengeAsync)
             .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapPost("/challenges/{challengeId:guid}/image", UploadChallengeImageAsync)
@@ -32,6 +36,7 @@ public static class AdminEndpoints
         CancellationToken cancellationToken)
     {
         var games = await db.Games.AsNoTracking()
+            .AsSplitQuery()
             .Include(game => game.Challenges.Where(challenge => challenge.IsActive))
                 .ThenInclude(challenge => challenge.Options)
             .OrderBy(game => game.SortOrder)
@@ -49,6 +54,7 @@ public static class AdminEndpoints
         CancellationToken cancellationToken)
     {
         var game = await db.Games
+            .AsSplitQuery()
             .Include(candidate => candidate.Challenges.Where(challenge => challenge.IsActive))
                 .ThenInclude(challenge => challenge.Options)
             .SingleOrDefaultAsync(candidate => candidate.Id == gameId, cancellationToken);
@@ -104,27 +110,64 @@ public static class AdminEndpoints
         CancellationToken cancellationToken)
     {
         var game = await db.Games
+            .AsSplitQuery()
+            .Include(candidate => candidate.Challenges.Where(challenge => challenge.IsActive))
+                .ThenInclude(challenge => challenge.Options)
             .SingleOrDefaultAsync(candidate => candidate.Id == gameId, cancellationToken);
         if (game is null)
         {
             return Results.NotFound();
         }
 
+        if (game.Type == GameType.Matching &&
+            game.Challenges.Count >= (game.Challenges.FirstOrDefault()?.Options.Count ?? 0))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["challenges"] = ["Lägg till en ny riskzon innan du lägger till fler scenarier."]
+            });
+        }
+
         var highestSortOrder = await db.Challenges
             .Where(candidate => candidate.GameId == game.Id && candidate.IsActive)
             .MaxAsync(candidate => (int?)candidate.SortOrder, cancellationToken) ?? 0;
+        var matchingTemplateOptions = game.Type == GameType.Matching
+            ? game.Challenges
+                .OrderBy(candidate => candidate.SortOrder)
+                .First()
+                .Options
+                .OrderBy(option => option.SortOrder)
+                .ToList()
+            : [];
+        var usedCorrectSortOrders = game.Challenges
+            .SelectMany(candidate => candidate.Options)
+            .Where(option => option.IsCorrect)
+            .Select(option => option.SortOrder)
+            .ToHashSet();
+        var nextCorrectSortOrder = matchingTemplateOptions
+            .Select(option => option.SortOrder)
+            .FirstOrDefault(sortOrder => !usedCorrectSortOrders.Contains(sortOrder));
         var challenge = new Challenge
         {
             GameId = game.Id,
-            Prompt = "Ny fråga",
+            Prompt = game.Type == GameType.Matching ? "Nytt riskscenario" : "Ny fråga",
             SortOrder = highestSortOrder + 1,
-            Options =
-            [
-                new ChallengeOption { Text = "Svarsalternativ A", SortOrder = 1, IsCorrect = true },
-                new ChallengeOption { Text = "Svarsalternativ B", SortOrder = 2 },
-                new ChallengeOption { Text = "Svarsalternativ C", SortOrder = 3 },
-                new ChallengeOption { Text = "Svarsalternativ D", SortOrder = 4 }
-            ]
+            Options = game.Type == GameType.Matching
+                ? matchingTemplateOptions
+                    .Select(option => new ChallengeOption
+                    {
+                        Text = option.Text,
+                        SortOrder = option.SortOrder,
+                        IsCorrect = option.SortOrder == nextCorrectSortOrder
+                    })
+                    .ToList()
+                :
+                [
+                    new ChallengeOption { Text = "Svarsalternativ A", SortOrder = 1, IsCorrect = true },
+                    new ChallengeOption { Text = "Svarsalternativ B", SortOrder = 2 },
+                    new ChallengeOption { Text = "Svarsalternativ C", SortOrder = 3 },
+                    new ChallengeOption { Text = "Svarsalternativ D", SortOrder = 4 }
+                ]
         };
 
         db.Challenges.Add(challenge);
@@ -140,6 +183,138 @@ public static class AdminEndpoints
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/admin/challenges/{challenge.Id}", ToAdminChallenge(challenge));
+    }
+
+    private static async Task<IResult> AddMatchingDestinationAsync(
+        Guid gameId,
+        ClaimsPrincipal principal,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var game = await db.Games
+            .AsSplitQuery()
+            .Include(candidate => candidate.Challenges.Where(challenge => challenge.IsActive))
+                .ThenInclude(challenge => challenge.Options)
+            .SingleOrDefaultAsync(candidate => candidate.Id == gameId, cancellationToken);
+        if (game is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (game.Type != GameType.Matching)
+        {
+            return Results.BadRequest(new { message = "Riskzoner kan bara läggas till i ett matchningsspel." });
+        }
+
+        var currentCount = game.Challenges.FirstOrDefault()?.Options.Count ?? 0;
+        if (currentCount >= 6)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["destinations"] = ["Ett matchningsspel kan ha högst sex riskzoner."]
+            });
+        }
+
+        var sortOrder = currentCount + 1;
+        var addedOptions = game.Challenges.Select(challenge => new ChallengeOption
+        {
+            ChallengeId = challenge.Id,
+            Text = "Ny riskzon",
+            SortOrder = sortOrder
+        }).ToList();
+        db.ChallengeOptions.AddRange(addedOptions);
+        db.AuditEntries.Add(new AuditEntry
+        {
+            OccurredAtUtc = timeProvider.GetUtcNow(),
+            Actor = principal.Identity?.Name ?? "unknown",
+            Action = "created",
+            EntityType = "matching-destination",
+            EntityId = game.Id.ToString(),
+            Summary = $"Added a destination to matching game '{game.Title}'."
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.Created($"/api/admin/games/{game.Id}/matching-destinations/{sortOrder}", new
+        {
+            options = addedOptions.Select(option => new
+            {
+                option.ChallengeId,
+                option.Id,
+                option.Text,
+                option.SortOrder,
+                option.IsCorrect
+            })
+        });
+    }
+
+    private static async Task<IResult> DeleteMatchingDestinationAsync(
+        Guid gameId,
+        int sortOrder,
+        ClaimsPrincipal principal,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var game = await db.Games
+            .AsSplitQuery()
+            .Include(candidate => candidate.Challenges.Where(challenge => challenge.IsActive))
+                .ThenInclude(challenge => challenge.Options)
+            .SingleOrDefaultAsync(candidate => candidate.Id == gameId, cancellationToken);
+        if (game is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (game.Type != GameType.Matching)
+        {
+            return Results.BadRequest(new { message = "Riskzoner kan bara tas bort från ett matchningsspel." });
+        }
+
+        var options = game.Challenges
+            .SelectMany(challenge => challenge.Options)
+            .Where(option => option.SortOrder == sortOrder)
+            .ToList();
+        if (options.Count == 0)
+        {
+            return Results.NotFound();
+        }
+
+        if (game.Challenges.Any(challenge => challenge.Options.Count <= 2) ||
+            game.Challenges.First().Options.Count <= game.Challenges.Count)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["destinations"] = ["Spelet behöver minst lika många riskzoner som scenarier."]
+            });
+        }
+
+        if (options.Any(option => option.IsCorrect))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["destinations"] = ["Byt rätt riskzon för berörda scenarier innan riskzonen tas bort."]
+            });
+        }
+
+        db.ChallengeOptions.RemoveRange(options);
+        foreach (var option in game.Challenges.SelectMany(challenge => challenge.Options)
+                     .Where(option => option.SortOrder > sortOrder))
+        {
+            option.SortOrder--;
+        }
+
+        db.AuditEntries.Add(new AuditEntry
+        {
+            OccurredAtUtc = timeProvider.GetUtcNow(),
+            Actor = principal.Identity?.Name ?? "unknown",
+            Action = "deleted",
+            EntityType = "matching-destination",
+            EntityId = game.Id.ToString(),
+            Summary = $"Removed a destination from matching game '{game.Title}'."
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> DeleteChallengeAsync(
@@ -200,6 +375,12 @@ public static class AdminEndpoints
         var now = timeProvider.GetUtcNow();
         foreach (var session in affectedSessions)
         {
+            if (session.PausedAtUtc is { } pausedAt)
+            {
+                session.TotalPausedMilliseconds += Math.Max(0, (long)(now - pausedAt).TotalMilliseconds);
+                session.PausedAtUtc = null;
+            }
+
             session.CurrentChallengeId = nextChallengeId;
             session.CurrentChallengeStartedAtUtc = nextChallengeId is null ? null : now;
             if (nextChallengeId is null)
@@ -343,6 +524,54 @@ public static class AdminEndpoints
                     string.IsNullOrWhiteSpace(option.Text) || option.Text.Length > 500))
             {
                 errors[$"challenges.{update.Id}.optionText"] = ["Svarsalternativ måste innehålla mellan 1 och 500 tecken."];
+            }
+        }
+
+        if (game.Type == GameType.Matching &&
+            request.Challenges.Count > 0 &&
+            !errors.Keys.Any(key => key.EndsWith(".options", StringComparison.Ordinal)))
+        {
+            var destinationSets = request.Challenges.Select(update =>
+            {
+                var challenge = game.Challenges.Single(candidate => candidate.Id == update.Id);
+                return update.Options
+                    .Select(option => new
+                    {
+                        SortOrder = challenge.Options.Single(existing => existing.Id == option.Id).SortOrder,
+                        Text = option.Text.Trim()
+                    })
+                    .OrderBy(option => option.SortOrder)
+                    .Select(option => option.Text)
+                    .ToArray();
+            }).ToList();
+            if (destinationSets.Skip(1).Any(set => !set.SequenceEqual(destinationSets[0])))
+            {
+                errors["destinations"] = ["Riskzonerna måste vara likadana för alla scenarier."];
+            }
+
+            if (destinationSets[0].Length < 2 ||
+                destinationSets[0].Distinct(StringComparer.OrdinalIgnoreCase).Count() != destinationSets[0].Length)
+            {
+                errors["destinations"] = ["Ange minst två riskzoner med unika namn."];
+            }
+
+            if (destinationSets[0].Length < request.Challenges.Count)
+            {
+                errors["destinations"] = ["Spelet behöver minst lika många riskzoner som scenarier."];
+            }
+
+            if (request.Challenges.All(update => update.Options.Count(option => option.IsCorrect) == 1))
+            {
+                var correctSortOrders = request.Challenges.Select(update =>
+                {
+                    var challenge = game.Challenges.Single(candidate => candidate.Id == update.Id);
+                    var correctOptionId = update.Options.Single(option => option.IsCorrect).Id;
+                    return challenge.Options.Single(option => option.Id == correctOptionId).SortOrder;
+                }).ToList();
+                if (correctSortOrders.Distinct().Count() != correctSortOrders.Count)
+                {
+                    errors["matchingAnswers"] = ["Varje scenario måste ha en egen korrekt riskzon."];
+                }
             }
         }
 

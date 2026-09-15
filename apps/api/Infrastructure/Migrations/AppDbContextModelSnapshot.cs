@@ -256,11 +256,17 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<DateTimeOffset?>("PausedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset>("StartedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
+
+                    b.Property<long>("TotalPausedMilliseconds")
+                        .HasColumnType("bigint");
 
                     b.HasKey("Id");
 

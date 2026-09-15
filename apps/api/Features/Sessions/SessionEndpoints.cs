@@ -112,6 +112,7 @@ public static class SessionEndpoints
             sessionId = session.Id,
             session.PlayerName,
             session.StartedAtUtc,
+            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now),
             game = new
             {
                 challenge.Game.Id,
@@ -237,6 +238,12 @@ public static class SessionEndpoints
             ? orderedChallengeIds[currentIndex + 1]
             : (Guid?)null;
         var now = timeProvider.GetUtcNow();
+        if (session.PausedAtUtc is { } pausedAt)
+        {
+            session.TotalPausedMilliseconds += Math.Max(0, (long)(now - pausedAt).TotalMilliseconds);
+            session.PausedAtUtc = null;
+        }
+
         session.CurrentChallengeId = nextChallengeId;
         session.CurrentChallengeStartedAtUtc = nextChallengeId is null ? null : now;
         if (nextChallengeId is null)
@@ -329,12 +336,14 @@ public static class SessionEndpoints
         {
             session.CurrentChallengeId = null;
             session.CurrentChallengeStartedAtUtc = null;
+            session.PausedAtUtc = null;
             session.Status = SessionStatus.Completed;
             session.CompletedAtUtc = now;
         }
         else
         {
             session.CurrentChallengeStartedAtUtc = null;
+            session.PausedAtUtc = now;
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -343,7 +352,7 @@ public static class SessionEndpoints
             correct = true,
             completed = session.Status == SessionStatus.Completed,
             challenge.Game.SuccessMessage,
-            elapsedMilliseconds = (long)(now - session.StartedAtUtc).TotalMilliseconds
+            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
         });
     }
 
@@ -363,7 +372,7 @@ public static class SessionEndpoints
                 session.Id,
                 session.PlayerName,
                 session.CompletedAtUtc,
-                elapsedMilliseconds = (long)(session.CompletedAtUtc!.Value - session.StartedAtUtc).TotalMilliseconds
+                elapsedMilliseconds = CalculateElapsedMilliseconds(session, session.CompletedAtUtc!.Value)
             })
             .OrderBy(result => result.elapsedMilliseconds)
             .ThenBy(result => result.CompletedAtUtc)
@@ -393,8 +402,21 @@ public static class SessionEndpoints
         session.StartedAtUtc,
         session.CompletedAtUtc,
         status = session.Status.ToString(),
-        elapsedMilliseconds = (long)((session.CompletedAtUtc ?? now) - session.StartedAtUtc).TotalMilliseconds
+        elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
     };
+
+    private static long CalculateElapsedMilliseconds(GameSession session, DateTimeOffset now)
+    {
+        var end = session.CompletedAtUtc ?? now;
+        var pausedMilliseconds = session.TotalPausedMilliseconds;
+        if (session.PausedAtUtc is { } pausedAt)
+        {
+            pausedMilliseconds += Math.Max(0, (long)(end - pausedAt).TotalMilliseconds);
+        }
+
+        var totalMilliseconds = (long)(end - session.StartedAtUtc).TotalMilliseconds;
+        return Math.Max(0, totalMilliseconds - pausedMilliseconds);
+    }
 
     public sealed record StartSessionRequest(string PlayerName);
     public sealed record SubmitAnswerRequest(Guid ChallengeId, Guid OptionId);

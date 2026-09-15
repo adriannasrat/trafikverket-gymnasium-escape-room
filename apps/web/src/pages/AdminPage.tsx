@@ -1,5 +1,6 @@
 import {
   Check,
+  ChevronDown,
   ChevronRight,
   Gamepad2,
   ImagePlus,
@@ -27,6 +28,9 @@ export function AdminPage() {
   const [status, setStatus] = useState("");
   const [saving, setSaving] = useState(false);
   const [mutating, setMutating] = useState<string | null>(null);
+  const [openChallengeIds, setOpenChallengeIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const navigate = useNavigate();
   const game =
     games?.find((candidate) => candidate.id === selectedId) ?? games?.[0];
@@ -54,6 +58,15 @@ export function AdminPage() {
         ) ?? null,
     );
     setStatus("");
+  }
+
+  function toggleChallenge(challengeId: string) {
+    setOpenChallengeIds((current) => {
+      const next = new Set(current);
+      if (next.has(challengeId)) next.delete(challengeId);
+      else next.add(challengeId);
+      return next;
+    });
   }
 
   async function save() {
@@ -87,6 +100,7 @@ export function AdminPage() {
     try {
       const challenge = await api.createChallenge(game.id);
       updateGame({ challenges: [...game.challenges, challenge] });
+      setOpenChallengeIds((current) => new Set(current).add(challenge.id));
       setStatus("En ny fråga har lagts till. Fyll i innehållet och spara ändringarna.");
     } catch (caught) {
       setStatus(
@@ -113,6 +127,11 @@ export function AdminPage() {
         challenges: game.challenges
           .filter((item) => item.id !== challengeId)
           .map((item, index) => ({ ...item, sortOrder: index + 1 })),
+      });
+      setOpenChallengeIds((current) => {
+        const next = new Set(current);
+        next.delete(challengeId);
+        return next;
       });
       setStatus("Frågan har tagits bort från spelet.");
     } catch (caught) {
@@ -218,7 +237,10 @@ export function AdminPage() {
                     candidate.id === game?.id &&
                       "border-l-[3px] border-[#d70000] bg-[#f9eeee] pl-2",
                   )}
-                  onClick={() => setSelectedId(candidate.id)}
+                  onClick={() => {
+                    setSelectedId(candidate.id);
+                    setOpenChallengeIds(new Set());
+                  }}
                 >
                   <span className="grid min-w-0 flex-1 gap-[5px]">
                     <strong className="text-[12px] text-[#202020]">
@@ -332,26 +354,44 @@ export function AdminPage() {
                   </p>
                 )}
                 <div className="grid gap-[22px]">
-                  {game.challenges.map((challenge, challengeIndex) => (
+                  {game.challenges.map((challenge, challengeIndex) => {
+                    const isOpen = openChallengeIds.has(challenge.id);
+                    const contentId = `challenge-content-${challenge.id}`;
+                    return (
                     <article
                       className="overflow-hidden border border-[#dedede] bg-white"
                       key={challenge.id}
                     >
-                      <header className="flex items-center gap-[13px] border-t-[3px] border-t-[#d70000] border-b border-b-[#dedede] bg-[#fafafa] px-[18px] py-[15px] text-[#202020]">
-                        <span className={`${barlow} text-[27px] text-[#d70000]`}>
-                          {(challengeIndex + 1).toString().padStart(2, "0")}
-                        </span>
-                        <div className="grid min-w-0 gap-0.5">
-                          <small className="text-[8px] tracking-[0.14em] text-[#777]">
-                            UPPDRAG
-                          </small>
-                          <strong className="overflow-hidden text-[12px] text-ellipsis whitespace-nowrap max-[720px]:max-w-[70vw]">
-                            {challenge.prompt}
-                          </strong>
-                        </div>
+                      <header className="flex items-center border-t-[3px] border-t-[#d70000] border-b border-b-[#dedede] bg-[#fafafa] text-[#202020]">
+                        <button
+                          className={`flex min-w-0 flex-1 cursor-pointer items-center gap-[13px] border-0 bg-transparent px-[18px] py-[15px] text-left text-[#202020] ${focusRing}`}
+                          type="button"
+                          aria-expanded={isOpen}
+                          aria-controls={contentId}
+                          onClick={() => toggleChallenge(challenge.id)}
+                        >
+                          <span className={`${barlow} text-[27px] text-[#d70000]`}>
+                            {(challengeIndex + 1).toString().padStart(2, "0")}
+                          </span>
+                          <span className="grid min-w-0 flex-1 gap-0.5">
+                            <small className="text-[8px] tracking-[0.14em] text-[#777]">
+                              UPPDRAG
+                            </small>
+                            <strong className="overflow-hidden text-[12px] text-ellipsis whitespace-nowrap">
+                              {challenge.prompt}
+                            </strong>
+                          </span>
+                          <ChevronDown
+                            className={cx(
+                              "size-[18px] shrink-0 text-[#777]",
+                              isOpen && "rotate-180",
+                            )}
+                            aria-hidden="true"
+                          />
+                        </button>
                         {canManageQuestions && (
                           <button
-                            className={`ml-auto inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-[6px] border border-[#c9c9c9] bg-white px-[10px] text-[9px] font-bold tracking-[0.08em] text-[#8f2424] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
+                            className={`mr-[10px] inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-[6px] border border-[#c9c9c9] bg-white px-[10px] text-[9px] font-bold tracking-[0.08em] text-[#8f2424] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
                             type="button"
                             aria-label={`Ta bort uppdrag ${challengeIndex + 1}`}
                             title={game.challenges.length <= 1 ? "Spelet måste ha minst en fråga" : "Ta bort frågan"}
@@ -363,6 +403,8 @@ export function AdminPage() {
                           </button>
                         )}
                       </header>
+                      {isOpen && (
+                      <div id={contentId}>
                       <label className={`${fieldLabel} px-5 pt-5`}>
                         FRÅGA / INSTRUKTION
                         <textarea
@@ -501,8 +543,11 @@ export function AdminPage() {
                           </div>
                         ))}
                       </div>
+                      </div>
+                      )}
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}

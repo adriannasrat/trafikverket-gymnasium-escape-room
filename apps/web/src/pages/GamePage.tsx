@@ -33,6 +33,7 @@ export function GamePage() {
       return;
     }
     setData(result);
+    setElapsed(result.elapsedMilliseconds);
     setRemaining(result.challenge.secondsRemaining);
     setSelected("");
     setAwaitingNext(result.challenge.awaitingNext);
@@ -49,8 +50,12 @@ export function GamePage() {
   }, [loadChallenge]);
   useEffect(() => {
     if (!data || completed) return;
+    let previousTick = performance.now();
     const tick = () => {
-      setElapsed(Date.now() - new Date(data.startedAtUtc).getTime());
+      const now = performance.now();
+      const delta = now - previousTick;
+      previousTick = now;
+      if (!awaitingNext) setElapsed((current) => current + delta);
       if (awaitingNext) return;
       const challengeElapsed =
         (Date.now() -
@@ -117,8 +122,10 @@ export function GamePage() {
         correct: result.correct,
         text: result.successMessage ?? result.message ?? "",
       });
+      if (result.elapsedMilliseconds !== undefined) {
+        setElapsed(result.elapsedMilliseconds);
+      }
       if (result.completed) {
-        setElapsed(result.elapsedMilliseconds ?? elapsed);
         setCompleted(true);
       } else if (result.correct) {
         setAwaitingNext(true);

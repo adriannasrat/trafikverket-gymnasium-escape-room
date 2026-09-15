@@ -71,8 +71,30 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
             $"/api/sessions/{session.Id}/answers",
             new { challengeId = firstChallenge.Challenge.Id, optionId = correctOptionId });
         answer.EnsureSuccessStatusCode();
+
+        var pausedBefore = await client.GetFromJsonAsync<SessionStatusResponse>(
+            $"/api/sessions/{session.Id}");
+        await Task.Delay(100);
+        var pausedAfter = await client.GetFromJsonAsync<SessionStatusResponse>(
+            $"/api/sessions/{session.Id}");
+        Assert.InRange(
+            Math.Abs(pausedAfter!.ElapsedMilliseconds - pausedBefore!.ElapsedMilliseconds),
+            0,
+            10);
+
         var nextResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
         Assert.Equal(HttpStatusCode.NoContent, nextResponse.StatusCode);
+
+        await using (var pauseScope = factory.Services.CreateAsyncScope())
+        {
+            var pausedSession = await pauseScope.ServiceProvider
+                .GetRequiredService<AppDbContext>()
+                .GameSessions
+                .SingleAsync(candidate => candidate.Id == session.Id);
+            Assert.Null(pausedSession.PausedAtUtc);
+            Assert.True(pausedSession.TotalPausedMilliseconds >= 100);
+        }
+
         var imageChallenge = await client.GetFromJsonAsync<ChallengeEnvelope>(
             $"/api/sessions/{session.Id}/current-challenge");
         Assert.Equal(created.Id, imageChallenge?.Challenge.Id);
@@ -125,7 +147,7 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
     private sealed record AntiforgeryResponse(string Token);
     private sealed record ImageResponse(string ImagePath);
     private sealed record SessionResponse(Guid Id);
-    private sealed record SessionStatusResponse(string Status);
+    private sealed record SessionStatusResponse(string Status, long ElapsedMilliseconds);
     private sealed record ChallengeEnvelope(AdminChallengeBody Challenge);
     private sealed record AdminChallengeBody(Guid Id, string? ImagePath);
     private sealed record AdminGameResponse(Guid Id, List<AdminChallengeResponse> Challenges);

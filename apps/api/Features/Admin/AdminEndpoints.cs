@@ -200,6 +200,12 @@ public static class AdminEndpoints
         var now = timeProvider.GetUtcNow();
         foreach (var session in affectedSessions)
         {
+            if (session.PausedAtUtc is { } pausedAt)
+            {
+                session.TotalPausedMilliseconds += Math.Max(0, (long)(now - pausedAt).TotalMilliseconds);
+                session.PausedAtUtc = null;
+            }
+
             session.CurrentChallengeId = nextChallengeId;
             session.CurrentChallengeStartedAtUtc = nextChallengeId is null ? null : now;
             if (nextChallengeId is null)

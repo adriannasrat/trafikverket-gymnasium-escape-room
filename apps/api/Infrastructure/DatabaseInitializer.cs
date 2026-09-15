@@ -10,6 +10,9 @@ public sealed class DatabaseInitializer(
     TimeProvider timeProvider,
     ILogger<DatabaseInitializer> logger)
 {
+    private static readonly string[] MatchingDestinationNames =
+        ["Järnvägskorsning", "Halt väglag", "Skolområde"];
+
     private static readonly Action<ILogger, Exception?> AdminCredentialsMissing =
         LoggerMessage.Define(
             LogLevel.Warning,
@@ -32,36 +35,82 @@ public sealed class DatabaseInitializer(
 
     private async Task SeedGameAsync(CancellationToken cancellationToken)
     {
-        if (await db.Games.AnyAsync(cancellationToken))
+        if (!await db.Games.AnyAsync(game => game.Slug == "trafikverket-uppdraget", cancellationToken))
         {
-            return;
+            var challenge = new Challenge
+            {
+                Prompt = "Vad står IKT för i Trafikverkets verksamhet?",
+                SortOrder = 1,
+                TimeLimitSeconds = 30,
+                Options =
+                [
+                    new ChallengeOption { Text = "Intern kontroll av transporter", SortOrder = 1 },
+                    new ChallengeOption { Text = "Informations- och kommunikationsteknik", SortOrder = 2, IsCorrect = true },
+                    new ChallengeOption { Text = "Infrastruktur, kvalitet och trafik", SortOrder = 3 },
+                    new ChallengeOption { Text = "Integrerad kollektivtrafik", SortOrder = 4 }
+                ]
+            };
+
+            db.Games.Add(new Game
+            {
+                Slug = "trafikverket-uppdraget",
+                Title = "Trafikverket – Uppdraget",
+                Summary = "Upptäck hur digital teknik håller Sveriges vägar och järnvägar i rörelse.",
+                Type = GameType.Quiz,
+                SortOrder = 1,
+                DefaultTimeLimitSeconds = 30,
+                SuccessMessage = "Rätt! IKT hjälper Trafikverket att övervaka, styra och skydda transportsystemet.",
+                Challenges = [challenge]
+            });
         }
 
-        var challenge = new Challenge
+        if (!await db.Games.AnyAsync(game => game.Slug == "risk-och-sakerhet", cancellationToken))
         {
-            Prompt = "Vad står IKT för i Trafikverkets verksamhet?",
-            SortOrder = 1,
-            TimeLimitSeconds = 30,
-            Options =
-            [
-                new ChallengeOption { Text = "Intern kontroll av transporter", SortOrder = 1 },
-                new ChallengeOption { Text = "Informations- och kommunikationsteknik", SortOrder = 2, IsCorrect = true },
-                new ChallengeOption { Text = "Infrastruktur, kvalitet och trafik", SortOrder = 3 },
-                new ChallengeOption { Text = "Integrerad kollektivtrafik", SortOrder = 4 }
-            ]
-        };
+            static Challenge CreateScenario(string prompt, int sortOrder, int correctOption)
+            {
+                var options = MatchingDestinationNames
+                    .Select((text, index) => new ChallengeOption
+                    {
+                        Text = text,
+                        SortOrder = index + 1,
+                        IsCorrect = index == correctOption
+                    })
+                    .ToList();
 
-        db.Games.Add(new Game
-        {
-            Slug = "trafikverket-uppdraget",
-            Title = "Trafikverket – Uppdraget",
-            Summary = "Upptäck hur digital teknik håller Sveriges vägar och järnvägar i rörelse.",
-            Type = GameType.Quiz,
-            SortOrder = 1,
-            DefaultTimeLimitSeconds = 30,
-            SuccessMessage = "Rätt! IKT hjälper Trafikverket att övervaka, styra och skydda transportsystemet.",
-            Challenges = [challenge]
-        });
+                return new Challenge
+                {
+                    Prompt = prompt,
+                    SortOrder = sortOrder,
+                    Options = options
+                };
+            }
+
+            db.Games.Add(new Game
+            {
+                Slug = "risk-och-sakerhet",
+                Title = "Risk & Säkerhet",
+                Summary = "Koppla varje händelse till platsen där risken behöver hanteras.",
+                Type = GameType.Matching,
+                SortOrder = 2,
+                DefaultTimeLimitSeconds = 60,
+                SuccessMessage = "Alla kopplingar är rätt! Trafikverket arbetar förebyggande för att människor ska kunna resa säkert vid vägar och järnvägar.",
+                Challenges =
+                [
+                    CreateScenario(
+                        "Tekniken ska fungera, men ett tåg i hög hastighet kan inte väja när någon befinner sig på spåret.",
+                        1,
+                        0),
+                    CreateScenario(
+                        "Vägen kan se trygg ut ena stunden och plötsligt ge fordonet mycket sämre grepp.",
+                        2,
+                        1),
+                    CreateScenario(
+                        "Här rör sig många unga trafikanter och fysiska farthinder hjälper förare att sänka hastigheten.",
+                        3,
+                        2)
+                ]
+            });
+        }
 
         await db.SaveChangesAsync(cancellationToken);
     }

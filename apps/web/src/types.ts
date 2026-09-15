@@ -9,15 +9,27 @@ export type Challenge = {
   completed: false; sessionId: string; playerName: string; startedAtUtc: string; elapsedMilliseconds: number; game: GameSummary
   challenge: {
     id: string; prompt: string; imagePath: string | null; number: number; total: number; timeLimitSeconds: number
+    questionNumber: number; questionTotal: number
     awaitingNext: boolean
     challengeStartedAtUtc: string; secondsRemaining: number
     options: Array<{ id: string; text: string }>
+  }
+  matching: null | {
+    scenarios: Array<{
+      id: string; prompt: string; imagePath: string | null
+      options: Array<{ id: string; text: string }>
+    }>
+    destinations: string[]
   }
 }
 
 export type AnswerResult = {
   correct: boolean; expired?: boolean; completed?: boolean; message?: string; successMessage?: string
   challengeStartedAtUtc?: string; timeLimitSeconds?: number; elapsedMilliseconds?: number
+}
+
+export type MatchingResult = AnswerResult & {
+  incorrectChallengeIds: string[]
 }
 
 export type TimeoutResult = {
@@ -30,6 +42,7 @@ export type LeaderboardEntry = {
 }
 
 export type AdminOption = { id: string; text: string; sortOrder: number; isCorrect: boolean }
+export type AddedMatchingOption = AdminOption & { challengeId: string }
 export type AdminChallenge = {
   id: string; prompt: string; imagePath: string | null; sortOrder: number
   timeLimitSeconds: number | null; options: AdminOption[]

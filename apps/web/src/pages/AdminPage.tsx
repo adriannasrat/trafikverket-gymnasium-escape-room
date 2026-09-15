@@ -34,7 +34,8 @@ export function AdminPage() {
   const navigate = useNavigate();
   const game =
     games?.find((candidate) => candidate.id === selectedId) ?? games?.[0];
-  const canManageQuestions = Boolean(game && game.id === games?.[0]?.id);
+  const isMatching = game?.type === "Matching";
+  const canManageQuestions = game?.type === "Quiz" || isMatching;
 
   useEffect(() => {
     api
@@ -101,7 +102,7 @@ export function AdminPage() {
       const challenge = await api.createChallenge(game.id);
       updateGame({ challenges: [...game.challenges, challenge] });
       setOpenChallengeIds((current) => new Set(current).add(challenge.id));
-      setStatus("En ny fråga har lagts till. Fyll i innehållet och spara ändringarna.");
+      setStatus(`${isMatching ? "Ett nytt scenario" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -117,7 +118,7 @@ export function AdminPage() {
     if (!game || !canManageQuestions || game.challenges.length <= 1) return;
     const challenge = game.challenges.find((item) => item.id === challengeId);
     if (!challenge) return;
-    if (!window.confirm(`Ta bort frågan ”${challenge.prompt}”?`)) return;
+    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : "frågan"} ”${challenge.prompt}”?`)) return;
 
     setMutating(challengeId);
     setStatus("");
@@ -133,13 +134,70 @@ export function AdminPage() {
         next.delete(challengeId);
         return next;
       });
-      setStatus("Frågan har tagits bort från spelet.");
+      setStatus(`${isMatching ? "Scenariot" : "Frågan"} har tagits bort från spelet.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
           ? caught.message
           : "Frågan kunde inte tas bort.",
       );
+    } finally {
+      setMutating(null);
+    }
+  }
+
+  async function addMatchingDestination() {
+    if (!game || !isMatching) return;
+    setMutating("add-destination");
+    setStatus("");
+    try {
+      const result = await api.addMatchingDestination(game.id);
+      const optionsByChallenge = new Map(
+        result.options.map((option) => [option.challengeId, option]),
+      );
+      updateGame({
+        challenges: game.challenges.map((challenge) => {
+          const option = optionsByChallenge.get(challenge.id);
+          return option
+            ? { ...challenge, options: [...challenge.options, option] }
+            : challenge;
+        }),
+      });
+      setStatus("En ny riskzon har lagts till. Ge den ett namn och spara ändringarna.");
+    } catch (caught) {
+      setStatus(caught instanceof Error ? caught.message : "Riskzonen kunde inte läggas till.");
+    } finally {
+      setMutating(null);
+    }
+  }
+
+  async function deleteMatchingDestination(sortOrder: number) {
+    if (!game || !isMatching) return;
+    const destination = game.challenges[0]?.options.find(
+      (option) => option.sortOrder === sortOrder,
+    );
+    if (!destination || !window.confirm(`Ta bort riskzonen ”${destination.text}”?`)) return;
+
+    setMutating(`destination-${sortOrder}`);
+    setStatus("");
+    try {
+      await api.deleteMatchingDestination(game.id, sortOrder);
+      updateGame({
+        challenges: game.challenges.map((challenge) => ({
+          ...challenge,
+          options: challenge.options
+            .filter((option) => option.sortOrder !== sortOrder)
+            .map((option) => ({
+              ...option,
+              sortOrder: option.sortOrder > sortOrder
+                ? option.sortOrder - 1
+                : option.sortOrder,
+            })),
+        })),
+      });
+      setStatus("Riskzonen har tagits bort.");
+    } catch (caught) {
+      setStatus(caught instanceof Error ? caught.message : "Riskzonen kunde inte tas bort.");
     } finally {
       setMutating(null);
     }
@@ -291,7 +349,7 @@ export function AdminPage() {
                     />
                   </label>
                   <label className={fieldLabel}>
-                    TID PER UPPDRAG (SEK)
+                    {isMatching ? "TID FÖR MATCHNING (SEK)" : "TID PER UPPDRAG (SEK)"}
                     <input
                       className={field}
                       type="number"
@@ -330,11 +388,99 @@ export function AdminPage() {
                     />
                   </label>
                 </div>
+                {isMatching && game.challenges[0] && (
+                  <section className="mb-[30px] border border-[#dedede] bg-[#fafafa] p-5 max-[720px]:p-4">
+                    <div className="mb-4 flex items-end justify-between gap-5 max-[720px]:items-stretch">
+                      <div>
+                        <p className={`${eyebrow} mb-[5px]`}>RISKZONER</p>
+                        <p className="m-0 text-[11px] text-[#686868]">
+                          Dessa platser visas på matchningsbrädets högra sida.
+                        </p>
+                      </div>
+                      <button
+                        className={`${secondaryButton} shrink-0 max-[720px]:px-3`}
+                        type="button"
+                        onClick={addMatchingDestination}
+                        disabled={
+                          mutating !== null ||
+                          saving ||
+                          game.challenges[0].options.length >= 6
+                        }
+                      >
+                        <Plus size={17} /> Lägg till riskzon
+                      </button>
+                    </div>
+                    <div className="grid gap-2">
+                      {game.challenges[0].options.map((destination, index) => {
+                        const isCorrectForScenario = game.challenges.some(
+                          (challenge) => challenge.options.some(
+                            (option) => option.sortOrder === destination.sortOrder && option.isCorrect,
+                          ),
+                        );
+                        return (
+                          <div
+                            className="grid grid-cols-[34px_minmax(0,1fr)_42px] items-center gap-2"
+                            key={destination.id}
+                          >
+                            <span className={`${barlow} grid size-[34px] place-items-center bg-[#f9eeee] text-[17px] font-bold text-[#d70000]`}>
+                              {index + 1}
+                            </span>
+                            <input
+                              className={field}
+                              aria-label={`Riskzon ${index + 1}`}
+                              value={destination.text}
+                              onChange={(event) =>
+                                updateGame({
+                                  challenges: game.challenges.map((challenge) => ({
+                                    ...challenge,
+                                    options: challenge.options.map((option) =>
+                                      option.sortOrder === destination.sortOrder
+                                        ? { ...option, text: event.target.value }
+                                        : option,
+                                    ),
+                                  })),
+                                })
+                              }
+                            />
+                            <button
+                              className={`grid size-[42px] place-items-center border border-[#c9c9c9] bg-white text-[#8f2424] disabled:cursor-not-allowed disabled:opacity-35 ${focusRing}`}
+                              type="button"
+                              aria-label={`Ta bort riskzonen ${destination.text}`}
+                              title={
+                                game.challenges[0].options.length <= 2
+                                  ? "Spelet måste ha minst två riskzoner"
+                                  : game.challenges[0].options.length <= game.challenges.length
+                                    ? "Spelet behöver minst lika många riskzoner som scenarier"
+                                  : isCorrectForScenario
+                                    ? "Byt rätt riskzon för berörda scenarier först"
+                                    : "Ta bort riskzonen"
+                              }
+                              disabled={
+                                game.challenges[0].options.length <= 2 ||
+                                game.challenges[0].options.length <= game.challenges.length ||
+                                isCorrectForScenario ||
+                                mutating !== null ||
+                                saving
+                              }
+                              onClick={() => deleteMatchingDestination(destination.sortOrder)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
                 <div className="mb-[18px] flex items-end justify-between gap-5 border-b border-[#dedede] pb-[17px] max-[720px]:items-stretch">
                   <div>
-                    <p className={`${eyebrow} mb-[5px]`}>FRÅGOR I SPELET</p>
+                    <p className={`${eyebrow} mb-[5px]`}>
+                      {isMatching ? "SCENARIER I SPELET" : "FRÅGOR I SPELET"}
+                    </p>
                     <p className="m-0 text-[11px] text-[#686868]">
-                      Lägg till textfrågor eller använd en bild som deltagaren ska tolka.
+                      {isMatching
+                        ? "Varje scenario kopplas till exakt en av riskzonerna ovan."
+                        : "Lägg till textfrågor eller använd en bild som deltagaren ska tolka."}
                     </p>
                   </div>
                   {canManageQuestions && (
@@ -342,15 +488,27 @@ export function AdminPage() {
                       className={`${secondaryButton} shrink-0 max-[720px]:px-3`}
                       type="button"
                       onClick={addChallenge}
-                      disabled={mutating !== null || saving}
+                      disabled={
+                        mutating !== null ||
+                        saving ||
+                        Boolean(
+                          isMatching &&
+                          game.challenges.length >= (game.challenges[0]?.options.length ?? 0),
+                        )
+                      }
+                      title={
+                        isMatching && game.challenges.length >= (game.challenges[0]?.options.length ?? 0)
+                          ? "Lägg till en riskzon först"
+                          : undefined
+                      }
                     >
-                      <Plus size={17} /> Lägg till fråga
+                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : "Lägg till fråga"}
                     </button>
                   )}
                 </div>
                 {!canManageQuestions && (
                   <p className="mb-[18px] border-l-[3px] border-[#d70000] bg-[#f9eeee] px-[14px] py-[11px] text-[11px] text-[#6b2424]">
-                    Nya frågor och bilder hanteras endast för det första spelet i den här etappen.
+                    Den här speltypen får stöd för eget innehåll i en kommande etapp.
                   </p>
                 )}
                 <div className="grid gap-[22px]">
@@ -375,7 +533,7 @@ export function AdminPage() {
                           </span>
                           <span className="grid min-w-0 flex-1 gap-0.5">
                             <small className="text-[8px] tracking-[0.14em] text-[#777]">
-                              UPPDRAG
+                              {isMatching ? "SCENARIO" : "UPPDRAG"}
                             </small>
                             <strong className="overflow-hidden text-[12px] text-ellipsis whitespace-nowrap">
                               {challenge.prompt}
@@ -394,7 +552,7 @@ export function AdminPage() {
                             className={`mr-[10px] inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-[6px] border border-[#c9c9c9] bg-white px-[10px] text-[9px] font-bold tracking-[0.08em] text-[#8f2424] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
                             type="button"
                             aria-label={`Ta bort uppdrag ${challengeIndex + 1}`}
-                            title={game.challenges.length <= 1 ? "Spelet måste ha minst en fråga" : "Ta bort frågan"}
+                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : "frågan"}`}
                             disabled={game.challenges.length <= 1 || mutating !== null || saving}
                             onClick={() => deleteChallenge(challenge.id)}
                           >
@@ -406,7 +564,7 @@ export function AdminPage() {
                       {isOpen && (
                       <div id={contentId}>
                       <label className={`${fieldLabel} px-5 pt-5`}>
-                        FRÅGA / INSTRUKTION
+                        {isMatching ? "SCENARIO / HÄNDELSE" : "FRÅGA / INSTRUKTION"}
                         <textarea
                           className={`${field} min-h-[88px] resize-y`}
                           value={challenge.prompt}
@@ -436,7 +594,7 @@ export function AdminPage() {
                         <div className="grid justify-items-start gap-2">
                           <div>
                             <p className="m-0 text-[9px] font-extrabold tracking-[0.12em] text-[#555]">
-                              BILD TILL FRÅGAN <span className="font-normal tracking-normal text-[#777]">(VALFRI)</span>
+                              BILD TILL {isMatching ? "SCENARIOT" : "FRÅGAN"} <span className="font-normal tracking-normal text-[#777]">(VALFRI)</span>
                             </p>
                             <p className="mt-1 mb-0 text-[10px] leading-[1.5] text-[#777]">
                               JPG, PNG eller WebP · högst 5 MB. Hela bilden visas utan beskärning.
@@ -465,6 +623,53 @@ export function AdminPage() {
                           )}
                         </div>
                       </section>
+                      {isMatching ? (
+                        <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
+                          <label className={fieldLabel}>
+                            RÄTT RISKZON
+                            <select
+                              className={field}
+                              value={challenge.options.find((option) => option.isCorrect)?.id ?? ""}
+                              onChange={(event) =>
+                                updateGame({
+                                  challenges: game.challenges.map((item) =>
+                                    item.id === challenge.id
+                                      ? {
+                                          ...item,
+                                          options: item.options.map((option) => ({
+                                            ...option,
+                                            isCorrect: option.id === event.target.value,
+                                          })),
+                                        }
+                                      : item,
+                                  ),
+                                })
+                              }
+                            >
+                              {challenge.options.map((option) => (
+                                <option
+                                  key={option.id}
+                                  value={option.id}
+                                  disabled={game.challenges.some(
+                                    (item) =>
+                                      item.id !== challenge.id &&
+                                      item.options.some(
+                                        (candidate) =>
+                                          candidate.sortOrder === option.sortOrder &&
+                                          candidate.isCorrect,
+                                      ),
+                                  )}
+                                >
+                                  {option.text}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <p className="mt-2 mb-0 text-[10px] leading-[1.5] text-[#777]">
+                            Spelaren kopplar scenariot till denna riskzon. Rätt svar skickas aldrig till spelarvyn.
+                          </p>
+                        </div>
+                      ) : (
                       <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
                         <p className="text-[9px] font-extrabold tracking-[0.12em] text-[#555]">
                           SVARSALTERNATIV{" "}
@@ -543,6 +748,7 @@ export function AdminPage() {
                           </div>
                         ))}
                       </div>
+                      )}
                       </div>
                       )}
                     </article>

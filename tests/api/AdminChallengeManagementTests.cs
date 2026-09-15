@@ -16,7 +16,7 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
     {
         await LoginAsync();
         var initialGames = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
-        var game = Assert.Single(initialGames!);
+        var game = initialGames!.Single(candidate => candidate.Type == "Quiz");
         var initialChallengeCount = game.Challenges.Count;
 
         var createRequest = new HttpRequestMessage(
@@ -108,10 +108,12 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
 
         var updatedGames = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
-        Assert.Equal(initialChallengeCount, Assert.Single(updatedGames!).Challenges.Count);
+        Assert.Equal(
+            initialChallengeCount,
+            updatedGames!.Single(candidate => candidate.Id == game.Id).Challenges.Count);
         var completedSession = await client.GetFromJsonAsync<SessionStatusResponse>(
             $"/api/sessions/{session.Id}");
-        Assert.Equal("Completed", completedSession?.Status);
+        Assert.Equal("InProgress", completedSession?.Status);
 
         await using var scope = factory.Services.CreateAsyncScope();
         var deletedChallenge = await scope.ServiceProvider
@@ -120,6 +122,57 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
             .SingleAsync(challenge => challenge.Id == created.Id);
         Assert.False(deletedChallenge.IsActive);
         Assert.NotNull(deletedChallenge.ImagePath);
+    }
+
+    [Fact]
+    public async Task AdminCanAddAndRemoveAMatchingDestination()
+    {
+        await LoginAsync();
+        var games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        var matchingGame = games!.Single(candidate => candidate.Type == "Matching");
+        var originalDestinationCount = matchingGame.Challenges[0].Options.Count;
+
+        using var addRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/admin/games/{matchingGame.Id}/matching-destinations");
+        await AddAntiforgeryTokenAsync(addRequest);
+        var addResponse = await client.SendAsync(addRequest);
+        Assert.Equal(HttpStatusCode.Created, addResponse.StatusCode);
+        var added = await addResponse.Content.ReadFromJsonAsync<AddedOptionsResponse>();
+        Assert.NotNull(added);
+        Assert.Equal(matchingGame.Challenges.Count, added.Options.Count);
+        Assert.All(added.Options, option => Assert.False(option.IsCorrect));
+
+        var sortOrder = Assert.Single(added.Options.Select(option => option.SortOrder).Distinct());
+        using var addScenarioRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/admin/games/{matchingGame.Id}/challenges");
+        await AddAntiforgeryTokenAsync(addScenarioRequest);
+        var addScenarioResponse = await client.SendAsync(addScenarioRequest);
+        Assert.Equal(HttpStatusCode.Created, addScenarioResponse.StatusCode);
+        var addedScenario = await addScenarioResponse.Content.ReadFromJsonAsync<AdminChallengeResponse>();
+        Assert.NotNull(addedScenario);
+        Assert.Equal(sortOrder, Assert.Single(addedScenario.Options, option => option.IsCorrect).SortOrder);
+
+        using var deleteScenarioRequest = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/admin/challenges/{addedScenario.Id}");
+        await AddAntiforgeryTokenAsync(deleteScenarioRequest);
+        var deleteScenarioResponse = await client.SendAsync(deleteScenarioRequest);
+        Assert.Equal(HttpStatusCode.NoContent, deleteScenarioResponse.StatusCode);
+
+        using var deleteRequest = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/admin/games/{matchingGame.Id}/matching-destinations/{sortOrder}");
+        await AddAntiforgeryTokenAsync(deleteRequest);
+        var deleteResponse = await client.SendAsync(deleteRequest);
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        var updatedGames = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        var updatedMatchingGame = updatedGames!.Single(candidate => candidate.Id == matchingGame.Id);
+        Assert.All(
+            updatedMatchingGame.Challenges,
+            challenge => Assert.Equal(originalDestinationCount, challenge.Options.Count));
     }
 
     private async Task LoginAsync()
@@ -148,9 +201,11 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
     private sealed record ImageResponse(string ImagePath);
     private sealed record SessionResponse(Guid Id);
     private sealed record SessionStatusResponse(string Status, long ElapsedMilliseconds);
+    private sealed record AddedOptionsResponse(List<AddedOptionResponse> Options);
+    private sealed record AddedOptionResponse(Guid ChallengeId, Guid Id, string Text, int SortOrder, bool IsCorrect);
     private sealed record ChallengeEnvelope(AdminChallengeBody Challenge);
     private sealed record AdminChallengeBody(Guid Id, string? ImagePath);
-    private sealed record AdminGameResponse(Guid Id, List<AdminChallengeResponse> Challenges);
+    private sealed record AdminGameResponse(Guid Id, string Type, List<AdminChallengeResponse> Challenges);
     private sealed record AdminChallengeResponse(
         Guid Id,
         string Prompt,

@@ -1,5 +1,6 @@
 import type {
   AdminChallenge,
+  AdminResult,
   AddedMatchingOption,
   AdminGame,
   AnswerResult,
@@ -106,6 +107,13 @@ export const api = {
     }),
   logout: () => protectedRequest<void>("/api/auth/logout", { method: "POST" }),
   adminGames: () => request<AdminGame[]>("/api/admin/games"),
+  adminResults: () => request<AdminResult[]>("/api/admin/results"),
+  deleteAdminResult: (sessionId: string) =>
+    protectedRequest<void>(`/api/admin/results/${sessionId}`, {
+      method: "DELETE",
+    }),
+  deleteAllAdminResults: () =>
+    protectedRequest<void>("/api/admin/results", { method: "DELETE" }),
   updateGame: (game: AdminGame) =>
     protectedRequest<AdminGame>(`/api/admin/games/${game.id}`, {
       method: "PUT",

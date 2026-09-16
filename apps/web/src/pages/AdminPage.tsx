@@ -11,10 +11,12 @@ import {
   Settings2,
   ShieldCheck,
   Trash2,
+  Trophy,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BrandHeader } from "../components/BrandHeader";
+import { AdminResultsPanel } from "../components/AdminResultsPanel";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { ApiError, api } from "../lib/api";
 import type { AdminGame } from "../types";
@@ -23,6 +25,7 @@ import { barlow, cx, eyebrow, field, fieldLabel, focusRing, primaryButton, secon
 const sidebarButton = `flex min-h-[45px] w-full cursor-pointer items-center gap-[11px] border-0 bg-transparent px-3 text-left text-[12px] text-[#777] disabled:cursor-not-allowed disabled:opacity-[0.42] [&>svg]:w-[17px] max-[980px]:justify-center max-[980px]:text-[0px] max-[980px]:[&>svg]:w-[19px] max-[720px]:min-h-[42px] max-[720px]:w-auto max-[720px]:justify-start max-[720px]:px-3 max-[720px]:text-[11px] ${focusRing}`;
 
 export function AdminPage() {
+  const [activeView, setActiveView] = useState<"games" | "results">("games");
   const [games, setGames] = useState<AdminGame[] | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [status, setStatus] = useState("");
@@ -244,8 +247,27 @@ export function AdminPage() {
             <button className={`${sidebarButton} max-[720px]:hidden`} disabled title="Kommer i nästa etapp">
               <LayoutDashboard /> Översikt
             </button>
-            <button className={`${sidebarButton} border-l-[3px] border-[#d70000] bg-[#f9eeee] pl-[9px] font-bold text-[#d70000] max-[980px]:p-0 max-[720px]:px-3`}>
+            <button
+              className={cx(
+                sidebarButton,
+                activeView === "games" &&
+                  "border-l-[3px] border-[#d70000] bg-[#f9eeee] pl-[9px] font-bold text-[#d70000] max-[980px]:p-0 max-[720px]:px-3",
+              )}
+              type="button"
+              onClick={() => setActiveView("games")}
+            >
               <Gamepad2 /> Uppdrag <ChevronRight className="ml-auto w-[13px] max-[980px]:hidden" />
+            </button>
+            <button
+              className={cx(
+                sidebarButton,
+                activeView === "results" &&
+                  "border-l-[3px] border-[#d70000] bg-[#f9eeee] pl-[9px] font-bold text-[#d70000] max-[980px]:p-0 max-[720px]:px-3",
+              )}
+              type="button"
+              onClick={() => setActiveView("results")}
+            >
+              <Trophy /> Spelresultat <ChevronRight className="ml-auto w-[13px] max-[980px]:hidden" />
             </button>
             <button className={`${sidebarButton} max-[720px]:hidden`} disabled title="Kommer i nästa etapp">
               <ShieldCheck /> Händelselogg
@@ -264,6 +286,12 @@ export function AdminPage() {
           </div>
         </aside>
         <main className="min-w-0 px-[clamp(24px,4vw,60px)] pt-[38px] pb-[65px] max-[720px]:px-[14px] max-[720px]:pt-[30px] max-[720px]:pb-[45px]">
+          {activeView === "results" ? (
+            <AdminResultsPanel
+              onUnauthorized={() => navigate("/admin/login", { replace: true })}
+            />
+          ) : (
+          <>
           <div className="mb-7 flex items-end justify-between gap-[30px] max-[720px]:flex-col max-[720px]:items-stretch">
             <div>
               <p className={eyebrow}>INNEHÅLL & SPELFLÖDE</p>
@@ -817,6 +845,8 @@ export function AdminPage() {
               </section>
             )}
           </div>
+          </>
+          )}
         </main>
       </div>
     </div>

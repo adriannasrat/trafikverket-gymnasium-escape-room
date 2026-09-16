@@ -41,6 +41,10 @@ export type LeaderboardEntry = {
   rank: number; id: string; playerName: string; elapsedMilliseconds: number; completedAtUtc: string
 }
 
+export type AdminResult = LeaderboardEntry & {
+  startedAtUtc: string
+}
+
 export type AdminOption = { id: string; text: string; sortOrder: number; isCorrect: boolean }
 export type AddedMatchingOption = AdminOption & { challengeId: string }
 export type AdminChallenge = {

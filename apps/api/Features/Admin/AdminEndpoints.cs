@@ -15,6 +15,11 @@ public static class AdminEndpoints
             .WithTags("Administration");
 
         group.MapGet("/games", GetGamesAsync);
+        group.MapGet("/results", GetResultsAsync);
+        group.MapDelete("/results/{sessionId:guid}", DeleteResultAsync)
+            .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
+        group.MapDelete("/results", DeleteAllResultsAsync)
+            .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapPut("/games/{gameId:guid}", UpdateGameAsync)
             .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapPost("/games/{gameId:guid}/challenges", AddChallengeAsync)
@@ -43,6 +48,98 @@ public static class AdminEndpoints
             .ToListAsync(cancellationToken);
 
         return Results.Ok(games.Select(ToAdminGame));
+    }
+
+    private static async Task<IResult> GetResultsAsync(
+        AppDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var sessions = await db.GameSessions.AsNoTracking()
+            .Where(session =>
+                session.Status == SessionStatus.Completed &&
+                session.CompletedAtUtc != null)
+            .ToListAsync(cancellationToken);
+
+        var results = sessions
+            .Select(session => new
+            {
+                session.Id,
+                session.PlayerName,
+                session.StartedAtUtc,
+                completedAtUtc = session.CompletedAtUtc!.Value,
+                elapsedMilliseconds = CalculateElapsedMilliseconds(session)
+            })
+            .OrderBy(result => result.elapsedMilliseconds)
+            .ThenBy(result => result.completedAtUtc)
+            .Select((result, index) => new
+            {
+                rank = index + 1,
+                result.Id,
+                result.PlayerName,
+                result.StartedAtUtc,
+                result.completedAtUtc,
+                result.elapsedMilliseconds
+            });
+
+        return Results.Ok(results);
+    }
+
+    private static async Task<IResult> DeleteResultAsync(
+        Guid sessionId,
+        ClaimsPrincipal principal,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var session = await db.GameSessions
+            .Include(candidate => candidate.Attempts)
+            .SingleOrDefaultAsync(
+                candidate =>
+                    candidate.Id == sessionId &&
+                    candidate.Status == SessionStatus.Completed,
+                cancellationToken);
+        if (session is null)
+        {
+            return Results.NotFound(new { message = "Spelresultatet finns inte längre." });
+        }
+
+        db.GameSessions.Remove(session);
+        db.AuditEntries.Add(new AuditEntry
+        {
+            OccurredAtUtc = timeProvider.GetUtcNow(),
+            Actor = principal.Identity?.Name ?? "unknown",
+            Action = "deleted",
+            EntityType = "game-result",
+            EntityId = session.Id.ToString(),
+            Summary = "Deleted one completed game result."
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> DeleteAllResultsAsync(
+        ClaimsPrincipal principal,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var sessions = await db.GameSessions
+            .Include(session => session.Attempts)
+            .Where(session => session.Status == SessionStatus.Completed)
+            .ToListAsync(cancellationToken);
+
+        db.GameSessions.RemoveRange(sessions);
+        db.AuditEntries.Add(new AuditEntry
+        {
+            OccurredAtUtc = timeProvider.GetUtcNow(),
+            Actor = principal.Identity?.Name ?? "unknown",
+            Action = "cleared",
+            EntityType = "game-results",
+            EntityId = "all",
+            Summary = $"Deleted all {sessions.Count} completed game results."
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> UpdateGameAsync(
@@ -643,6 +740,12 @@ public static class AdminEndpoints
             option.IsCorrect
         })
     };
+
+    private static long CalculateElapsedMilliseconds(GameSession session)
+    {
+        var totalMilliseconds = (long)(session.CompletedAtUtc!.Value - session.StartedAtUtc).TotalMilliseconds;
+        return Math.Max(0, totalMilliseconds - session.TotalPausedMilliseconds);
+    }
 
     public sealed record UpdateGameRequest(
         string Title,

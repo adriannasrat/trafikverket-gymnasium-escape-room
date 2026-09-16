@@ -500,33 +500,14 @@ public static class SessionEndpoints
             });
         }
 
-        var orderedChallengeIds = await LoadOrderedChallenges(db)
-            .Select(candidate => candidate.Id)
-            .ToListAsync(cancellationToken);
-        var currentIndex = orderedChallengeIds.IndexOf(challenge.Id);
-        var nextChallengeId = currentIndex >= 0 && currentIndex + 1 < orderedChallengeIds.Count
-            ? orderedChallengeIds[currentIndex + 1]
-            : (Guid?)null;
-
-        if (nextChallengeId is null)
-        {
-            session.CurrentChallengeId = null;
-            session.CurrentChallengeStartedAtUtc = null;
-            session.PausedAtUtc = null;
-            session.Status = SessionStatus.Completed;
-            session.CompletedAtUtc = now;
-        }
-        else
-        {
-            session.CurrentChallengeStartedAtUtc = null;
-            session.PausedAtUtc = now;
-        }
+        session.CurrentChallengeStartedAtUtc = null;
+        session.PausedAtUtc = now;
 
         await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(new
         {
             correct = true,
-            completed = session.Status == SessionStatus.Completed,
+            completed = false,
             challenge.Game.SuccessMessage,
             elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
         });

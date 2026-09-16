@@ -6,7 +6,7 @@ The application is intended for event computers where players complete configura
 
 ## Current status
 
-Two games are implemented: a configurable quiz and the one-to-one Risk & Safety matching board. Both use server timing and validation. The protected administration supports questions, scenarios, risk zones, correct mappings, optional images, activation, audit history, and a ranked leaderboard without requiring source-code changes.
+Three games are implemented, a configurable quiz, the one to one Risk & Safety matching board, and a Digital Safety true or false challenge. All use server timing and validation. The protected administration supports questions, statements, scenarios, risk zones, correct answers and mappings, optional images, activation, audit history and a ranked leaderboard without requiring source code changes.
 
 ## Technology
 

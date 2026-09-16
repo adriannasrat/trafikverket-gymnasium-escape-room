@@ -30,7 +30,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.NotNull(challenge);
         Assert.DoesNotContain(challenge.Challenge.Options, option => option.IsCorrect is not null);
         Assert.Equal(1, challenge.Challenge.Number);
-        Assert.True(challenge.Challenge.Total >= 1);
+        Assert.Equal(3, challenge.Challenge.Total);
 
         Guid correctOptionId;
         using (var scope = factory.Services.CreateScope())
@@ -94,8 +94,48 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.True(matchResult?.Correct);
         Assert.False(matchResult?.Completed);
 
-        var finishResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
-        Assert.Equal(HttpStatusCode.NoContent, finishResponse.StatusCode);
+        var nextGameResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
+        Assert.Equal(HttpStatusCode.NoContent, nextGameResponse.StatusCode);
+
+        var trueFalse = await client.GetFromJsonAsync<ChallengeResponse>(
+            $"/api/sessions/{session.Id}/current-challenge");
+        Assert.NotNull(trueFalse);
+        Assert.Equal("TrueFalse", trueFalse.Game.Type);
+        Assert.Equal(3, trueFalse.Challenge.Number);
+        Assert.Equal(["Sant", "Falskt"], trueFalse.Challenge.Options.Select(option => option.Text));
+
+        for (var question = 0; question < 3; question++)
+        {
+            Guid trueFalseOptionId;
+            await using (var scope = factory.Services.CreateAsyncScope())
+            {
+                trueFalseOptionId = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+                    .ChallengeOptions
+                    .Where(option =>
+                        option.ChallengeId == trueFalse.Challenge.Id && option.IsCorrect)
+                    .Select(option => option.Id)
+                    .SingleAsync();
+            }
+
+            var trueFalseAnswer = await client.PostAsJsonAsync(
+                $"/api/sessions/{session.Id}/answers",
+                new { challengeId = trueFalse.Challenge.Id, optionId = trueFalseOptionId });
+            trueFalseAnswer.EnsureSuccessStatusCode();
+            var trueFalseResult = await trueFalseAnswer.Content.ReadFromJsonAsync<AnswerResponse>();
+            Assert.True(trueFalseResult?.Correct);
+            Assert.False(trueFalseResult?.Completed);
+
+            var advanceResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
+            Assert.Equal(HttpStatusCode.NoContent, advanceResponse.StatusCode);
+            if (question < 2)
+            {
+                trueFalse = await client.GetFromJsonAsync<ChallengeResponse>(
+                    $"/api/sessions/{session.Id}/current-challenge");
+                Assert.NotNull(trueFalse);
+                Assert.Equal(question + 2, trueFalse.Challenge.QuestionNumber);
+            }
+        }
+
         var completedSession = await client.GetFromJsonAsync<SessionStatusResponse>(
             $"/api/sessions/{session.Id}");
         Assert.Equal("Completed", completedSession?.Status);
@@ -146,7 +186,12 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
     private sealed record SessionResponse(Guid Id);
     private sealed record ChallengeResponse(GameBody Game, ChallengeBody Challenge, MatchingBody? Matching);
     private sealed record GameBody(string Type);
-    private sealed record ChallengeBody(Guid Id, int Number, int Total, List<OptionBody> Options);
+    private sealed record ChallengeBody(
+        Guid Id,
+        int Number,
+        int Total,
+        int QuestionNumber,
+        List<OptionBody> Options);
     private sealed record MatchingBody(List<MatchingScenarioBody> Scenarios, List<string> Destinations);
     private sealed record MatchingScenarioBody(Guid Id, string Prompt, List<OptionBody> Options);
     private sealed record MatchSelectionRequest(Guid ChallengeId, Guid OptionId);

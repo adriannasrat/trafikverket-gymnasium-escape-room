@@ -150,7 +150,12 @@ public static class AdminEndpoints
         var challenge = new Challenge
         {
             GameId = game.Id,
-            Prompt = game.Type == GameType.Matching ? "Nytt riskscenario" : "Ny fråga",
+            Prompt = game.Type switch
+            {
+                GameType.Matching => "Nytt riskscenario",
+                GameType.TrueFalse => "Nytt påstående",
+                _ => "Ny fråga"
+            },
             SortOrder = highestSortOrder + 1,
             Options = game.Type == GameType.Matching
                 ? matchingTemplateOptions
@@ -161,6 +166,12 @@ public static class AdminEndpoints
                         IsCorrect = option.SortOrder == nextCorrectSortOrder
                     })
                     .ToList()
+                : game.Type == GameType.TrueFalse
+                    ?
+                    [
+                        new ChallengeOption { Text = "Sant", SortOrder = 1, IsCorrect = true },
+                        new ChallengeOption { Text = "Falskt", SortOrder = 2 }
+                    ]
                 :
                 [
                     new ChallengeOption { Text = "Svarsalternativ A", SortOrder = 1, IsCorrect = true },
@@ -571,6 +582,28 @@ public static class AdminEndpoints
                 if (correctSortOrders.Distinct().Count() != correctSortOrders.Count)
                 {
                     errors["matchingAnswers"] = ["Varje scenario måste ha en egen korrekt riskzon."];
+                }
+            }
+        }
+
+        if (game.Type == GameType.TrueFalse)
+        {
+            foreach (var update in request.Challenges)
+            {
+                var challenge = game.Challenges.Single(candidate => candidate.Id == update.Id);
+                var labels = update.Options
+                    .Select(option => new
+                    {
+                        SortOrder = challenge.Options.Single(existing => existing.Id == option.Id).SortOrder,
+                        Text = option.Text.Trim()
+                    })
+                    .OrderBy(option => option.SortOrder)
+                    .Select(option => option.Text)
+                    .ToArray();
+                if (!labels.SequenceEqual(["Sant", "Falskt"], StringComparer.OrdinalIgnoreCase))
+                {
+                    errors[$"challenges.{update.Id}.options"] =
+                        ["Sant eller falskt-frågor måste ha alternativen Sant och Falskt."];
                 }
             }
         }

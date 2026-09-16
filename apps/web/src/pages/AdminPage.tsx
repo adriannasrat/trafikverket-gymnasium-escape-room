@@ -35,7 +35,8 @@ export function AdminPage() {
   const game =
     games?.find((candidate) => candidate.id === selectedId) ?? games?.[0];
   const isMatching = game?.type === "Matching";
-  const canManageQuestions = game?.type === "Quiz" || isMatching;
+  const isTrueFalse = game?.type === "TrueFalse";
+  const canManageQuestions = game?.type === "Quiz" || isMatching || isTrueFalse;
 
   useEffect(() => {
     api
@@ -102,7 +103,7 @@ export function AdminPage() {
       const challenge = await api.createChallenge(game.id);
       updateGame({ challenges: [...game.challenges, challenge] });
       setOpenChallengeIds((current) => new Set(current).add(challenge.id));
-      setStatus(`${isMatching ? "Ett nytt scenario" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
+      setStatus(`${isMatching ? "Ett nytt scenario" : isTrueFalse ? "Ett nytt påstående" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -118,7 +119,7 @@ export function AdminPage() {
     if (!game || !canManageQuestions || game.challenges.length <= 1) return;
     const challenge = game.challenges.find((item) => item.id === challengeId);
     if (!challenge) return;
-    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : "frågan"} ”${challenge.prompt}”?`)) return;
+    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : "frågan"} ”${challenge.prompt}”?`)) return;
 
     setMutating(challengeId);
     setStatus("");
@@ -134,7 +135,7 @@ export function AdminPage() {
         next.delete(challengeId);
         return next;
       });
-      setStatus(`${isMatching ? "Scenariot" : "Frågan"} har tagits bort från spelet.`);
+      setStatus(`${isMatching ? "Scenariot" : isTrueFalse ? "Påståendet" : "Frågan"} har tagits bort från spelet.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -475,12 +476,18 @@ export function AdminPage() {
                 <div className="mb-[18px] flex items-end justify-between gap-5 border-b border-[#dedede] pb-[17px] max-[720px]:items-stretch">
                   <div>
                     <p className={`${eyebrow} mb-[5px]`}>
-                      {isMatching ? "SCENARIER I SPELET" : "FRÅGOR I SPELET"}
+                      {isMatching
+                        ? "SCENARIER I SPELET"
+                        : isTrueFalse
+                          ? "PÅSTÅENDEN I SPELET"
+                          : "FRÅGOR I SPELET"}
                     </p>
                     <p className="m-0 text-[11px] text-[#686868]">
                       {isMatching
                         ? "Varje scenario kopplas till exakt en av riskzonerna ovan."
-                        : "Lägg till textfrågor eller använd en bild som deltagaren ska tolka."}
+                        : isTrueFalse
+                          ? "Deltagaren avgör om varje påstående är sant eller falskt."
+                          : "Lägg till textfrågor eller använd en bild som deltagaren ska tolka."}
                     </p>
                   </div>
                   {canManageQuestions && (
@@ -502,7 +509,7 @@ export function AdminPage() {
                           : undefined
                       }
                     >
-                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : "Lägg till fråga"}
+                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : isTrueFalse ? "Lägg till påstående" : "Lägg till fråga"}
                     </button>
                   )}
                 </div>
@@ -533,7 +540,7 @@ export function AdminPage() {
                           </span>
                           <span className="grid min-w-0 flex-1 gap-0.5">
                             <small className="text-[8px] tracking-[0.14em] text-[#777]">
-                              {isMatching ? "SCENARIO" : "UPPDRAG"}
+                              {isMatching ? "SCENARIO" : isTrueFalse ? "PÅSTÅENDE" : "UPPDRAG"}
                             </small>
                             <strong className="overflow-hidden text-[12px] text-ellipsis whitespace-nowrap">
                               {challenge.prompt}
@@ -552,7 +559,7 @@ export function AdminPage() {
                             className={`mr-[10px] inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-[6px] border border-[#c9c9c9] bg-white px-[10px] text-[9px] font-bold tracking-[0.08em] text-[#8f2424] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
                             type="button"
                             aria-label={`Ta bort uppdrag ${challengeIndex + 1}`}
-                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : "frågan"}`}
+                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : isTrueFalse ? "ett påstående" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : "frågan"}`}
                             disabled={game.challenges.length <= 1 || mutating !== null || saving}
                             onClick={() => deleteChallenge(challenge.id)}
                           >
@@ -564,7 +571,7 @@ export function AdminPage() {
                       {isOpen && (
                       <div id={contentId}>
                       <label className={`${fieldLabel} px-5 pt-5`}>
-                        {isMatching ? "SCENARIO / HÄNDELSE" : "FRÅGA / INSTRUKTION"}
+                        {isMatching ? "SCENARIO / HÄNDELSE" : isTrueFalse ? "PÅSTÅENDE" : "FRÅGA / INSTRUKTION"}
                         <textarea
                           className={`${field} min-h-[88px] resize-y`}
                           value={challenge.prompt}
@@ -669,6 +676,58 @@ export function AdminPage() {
                             Spelaren kopplar scenariot till denna riskzon. Rätt svar skickas aldrig till spelarvyn.
                           </p>
                         </div>
+                      ) : isTrueFalse ? (
+                      <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
+                        <p className="mb-3 text-[9px] font-extrabold tracking-[0.12em] text-[#555]">
+                          RÄTT SVAR{" "}
+                          <small className="ml-2 font-normal tracking-normal text-[#777]">
+                            Välj om påståendet är sant eller falskt.
+                          </small>
+                        </p>
+                        <div className="grid grid-cols-2 gap-3 max-[420px]:grid-cols-1">
+                          {challenge.options.map((option) => (
+                            <label
+                              className={cx(
+                                `grid min-h-[74px] cursor-pointer grid-cols-[28px_minmax(0,1fr)] items-center gap-3 border bg-white p-4 ${focusRing}`,
+                                option.isCorrect
+                                  ? "border-[#23845e] bg-[#f3faf6] text-[#176b4c]"
+                                  : "border-[#cfcfcf] text-[#555] hover:border-[#888]",
+                              )}
+                              key={option.id}
+                            >
+                              <input
+                                className="peer absolute size-px opacity-0"
+                                type="radio"
+                                name={`correct-${challenge.id}`}
+                                checked={option.isCorrect}
+                                onChange={() =>
+                                  updateGame({
+                                    challenges: game.challenges.map((item) =>
+                                      item.id === challenge.id
+                                        ? {
+                                            ...item,
+                                            options: item.options.map(
+                                              (candidate) => ({
+                                                ...candidate,
+                                                isCorrect: candidate.id === option.id,
+                                              }),
+                                            ),
+                                          }
+                                        : item,
+                                    ),
+                                  })
+                                }
+                              />
+                              <i className="grid size-7 place-items-center rounded-full border border-[#aaa] text-transparent peer-checked:border-[#23845e] peer-checked:bg-[#23845e] peer-checked:text-white">
+                                <Check size={15} />
+                              </i>
+                              <span className={`${barlow} text-[23px] font-bold uppercase`}>
+                                {option.text}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                       ) : (
                       <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
                         <p className="text-[9px] font-extrabold tracking-[0.12em] text-[#555]">

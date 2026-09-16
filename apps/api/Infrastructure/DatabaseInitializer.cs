@@ -112,6 +112,60 @@ public sealed class DatabaseInitializer(
             });
         }
 
+        if (!await db.Games.AnyAsync(game => game.Slug == "digital-sakerhet", cancellationToken))
+        {
+            static Challenge CreateTrueFalseQuestion(
+                string prompt,
+                int sortOrder,
+                bool correctAnswer) => new()
+            {
+                Prompt = prompt,
+                SortOrder = sortOrder,
+                TimeLimitSeconds = 15,
+                Options =
+                [
+                    new ChallengeOption
+                    {
+                        Text = "Sant",
+                        SortOrder = 1,
+                        IsCorrect = correctAnswer
+                    },
+                    new ChallengeOption
+                    {
+                        Text = "Falskt",
+                        SortOrder = 2,
+                        IsCorrect = !correctAnswer
+                    }
+                ]
+            };
+
+            db.Games.Add(new Game
+            {
+                Slug = "digital-sakerhet",
+                Title = "Digital Säkerhet",
+                Summary = "Avgör om påståendena om data, trafiksystem och digital säkerhet är sanna eller falska.",
+                Type = GameType.TrueFalse,
+                SortOrder = 3,
+                DefaultTimeLimitSeconds = 15,
+                SuccessMessage = "Rätt! Digitala system behöver både tillförlitlig information och ett aktivt säkerhetsarbete.",
+                Challenges =
+                [
+                    CreateTrueFalseQuestion(
+                        "Backup av data gör att system aldrig kan få problem.",
+                        1,
+                        false),
+                    CreateTrueFalseQuestion(
+                        "Trafikinformation som visas för allmänheten bygger ofta på realtidsdata.",
+                        2,
+                        true),
+                    CreateTrueFalseQuestion(
+                        "IT-problem kan få konsekvenser även om inga vägar är avstängda.",
+                        3,
+                        true)
+                ]
+            });
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 

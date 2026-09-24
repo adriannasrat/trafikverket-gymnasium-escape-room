@@ -30,7 +30,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.NotNull(challenge);
         Assert.DoesNotContain(challenge.Challenge.Options, option => option.IsCorrect is not null);
         Assert.Equal(1, challenge.Challenge.Number);
-        Assert.Equal(3, challenge.Challenge.Total);
+        Assert.Equal(4, challenge.Challenge.Total);
 
         Guid correctOptionId;
         using (var scope = factory.Services.CreateScope())
@@ -136,6 +136,45 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
             }
         }
 
+        var pixelHunt = await client.GetFromJsonAsync<ChallengeResponse>(
+            $"/api/sessions/{session.Id}/current-challenge");
+        Assert.NotNull(pixelHunt);
+        Assert.Equal("PixelHunt", pixelHunt.Game.Type);
+        Assert.Equal(4, pixelHunt.Challenge.Number);
+        Assert.Equal(3, pixelHunt.Challenge.QuestionTotal);
+        Assert.Equal(0, pixelHunt.Challenge.PixelRevealCount);
+
+        for (var question = 0; question < 3; question++)
+        {
+            Guid pixelOptionId;
+            await using (var scope = factory.Services.CreateAsyncScope())
+            {
+                pixelOptionId = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+                    .ChallengeOptions
+                    .Where(option => option.ChallengeId == pixelHunt.Challenge.Id && option.IsCorrect)
+                    .Select(option => option.Id)
+                    .SingleAsync();
+            }
+
+            var pixelAnswer = await client.PostAsJsonAsync(
+                $"/api/sessions/{session.Id}/answers",
+                new { challengeId = pixelHunt.Challenge.Id, optionId = pixelOptionId });
+            pixelAnswer.EnsureSuccessStatusCode();
+            var pixelResult = await pixelAnswer.Content.ReadFromJsonAsync<AnswerResponse>();
+            Assert.True(pixelResult?.Correct);
+            Assert.False(pixelResult?.Completed);
+
+            var advanceResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
+            Assert.Equal(HttpStatusCode.NoContent, advanceResponse.StatusCode);
+            if (question < 2)
+            {
+                pixelHunt = await client.GetFromJsonAsync<ChallengeResponse>(
+                    $"/api/sessions/{session.Id}/current-challenge");
+                Assert.NotNull(pixelHunt);
+                Assert.Equal(question + 2, pixelHunt.Challenge.QuestionNumber);
+            }
+        }
+
         var completedSession = await client.GetFromJsonAsync<SessionStatusResponse>(
             $"/api/sessions/{session.Id}");
         Assert.Equal("Completed", completedSession?.Status);
@@ -183,14 +222,104 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.Null(attempt.SelectedOptionId);
     }
 
+    [Fact]
+    public async Task PixelRevealsAddPermanentPenaltyAndResetAfterWrongAnswerAndTimeout()
+    {
+        var started = await client.PostAsJsonAsync("/api/sessions/", new { playerName = "Pixeltestaren" });
+        var session = await started.Content.ReadFromJsonAsync<SessionResponse>();
+        Assert.NotNull(session);
+
+        Guid pixelChallengeId;
+        Guid wrongOptionId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var pixelChallenge = await db.Challenges
+                .Include(challenge => challenge.Game)
+                .Include(challenge => challenge.Options)
+                .Where(challenge => challenge.Game.Type == EscapeRoom.Api.Domain.GameType.PixelHunt)
+                .OrderBy(challenge => challenge.SortOrder)
+                .FirstAsync();
+            pixelChallengeId = pixelChallenge.Id;
+            wrongOptionId = pixelChallenge.Options.Single(option => !option.IsCorrect && option.SortOrder == 1).Id;
+            var storedSession = await db.GameSessions.SingleAsync(candidate => candidate.Id == session.Id);
+            storedSession.CurrentChallengeId = pixelChallengeId;
+            storedSession.CurrentChallengeStartedAtUtc = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        var unrelatedReveal = await client.PostAsJsonAsync(
+            $"/api/sessions/{session.Id}/pixel-reveal",
+            new { challengeId = Guid.NewGuid() });
+        Assert.Equal(HttpStatusCode.BadRequest, unrelatedReveal.StatusCode);
+
+        for (var reveal = 1; reveal <= 5; reveal++)
+        {
+            var response = await client.PostAsJsonAsync(
+                $"/api/sessions/{session.Id}/pixel-reveal",
+                new { challengeId = pixelChallengeId });
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<PixelRevealResponse>();
+            Assert.Equal(reveal, result?.PixelRevealCount);
+            Assert.Equal(reveal * 5, result?.PenaltySeconds);
+            Assert.True(result?.ElapsedMilliseconds >= reveal * 5_000);
+        }
+
+        var sixthReveal = await client.PostAsJsonAsync(
+            $"/api/sessions/{session.Id}/pixel-reveal",
+            new { challengeId = pixelChallengeId });
+        Assert.Equal(HttpStatusCode.Conflict, sixthReveal.StatusCode);
+
+        var wrongAnswer = await client.PostAsJsonAsync(
+            $"/api/sessions/{session.Id}/answers",
+            new { challengeId = pixelChallengeId, optionId = wrongOptionId });
+        wrongAnswer.EnsureSuccessStatusCode();
+        Assert.False((await wrongAnswer.Content.ReadFromJsonAsync<AnswerResponse>())?.Correct);
+
+        var restarted = await client.GetFromJsonAsync<ChallengeResponse>(
+            $"/api/sessions/{session.Id}/current-challenge");
+        Assert.Equal(0, restarted?.Challenge.PixelRevealCount);
+        Assert.True(restarted?.ElapsedMilliseconds >= 25_000);
+
+        var oneMoreReveal = await client.PostAsJsonAsync(
+            $"/api/sessions/{session.Id}/pixel-reveal",
+            new { challengeId = pixelChallengeId });
+        oneMoreReveal.EnsureSuccessStatusCode();
+        Assert.Equal(30, (await oneMoreReveal.Content.ReadFromJsonAsync<PixelRevealResponse>())?.PenaltySeconds);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var storedSession = await db.GameSessions.SingleAsync(candidate => candidate.Id == session.Id);
+            storedSession.CurrentChallengeStartedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-5);
+            await db.SaveChangesAsync();
+        }
+
+        var timeout = await client.PostAsJsonAsync(
+            $"/api/sessions/{session.Id}/timeout",
+            new { challengeId = pixelChallengeId });
+        timeout.EnsureSuccessStatusCode();
+        Assert.True((await timeout.Content.ReadFromJsonAsync<TimeoutResponse>())?.Expired);
+
+        var afterTimeout = await client.GetFromJsonAsync<ChallengeResponse>(
+            $"/api/sessions/{session.Id}/current-challenge");
+        Assert.Equal(0, afterTimeout?.Challenge.PixelRevealCount);
+        await using var verificationScope = factory.Services.CreateAsyncScope();
+        var verifiedSession = await verificationScope.ServiceProvider.GetRequiredService<AppDbContext>()
+            .GameSessions.SingleAsync(candidate => candidate.Id == session.Id);
+        Assert.Equal(30_000, verifiedSession.TotalPenaltyMilliseconds);
+    }
+
     private sealed record SessionResponse(Guid Id);
-    private sealed record ChallengeResponse(GameBody Game, ChallengeBody Challenge, MatchingBody? Matching);
+    private sealed record ChallengeResponse(GameBody Game, ChallengeBody Challenge, MatchingBody? Matching, long ElapsedMilliseconds);
     private sealed record GameBody(string Type);
     private sealed record ChallengeBody(
         Guid Id,
         int Number,
         int Total,
         int QuestionNumber,
+        int QuestionTotal,
+        int PixelRevealCount,
         List<OptionBody> Options);
     private sealed record MatchingBody(List<MatchingScenarioBody> Scenarios, List<string> Destinations);
     private sealed record MatchingScenarioBody(Guid Id, string Prompt, List<OptionBody> Options);
@@ -200,5 +329,6 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
     private sealed record MatchingAnswerResponse(bool Correct, List<Guid> IncorrectChallengeIds);
     private sealed record SessionStatusResponse(string Status);
     private sealed record TimeoutResponse(bool Expired, string Message);
+    private sealed record PixelRevealResponse(int PixelRevealCount, int PenaltySeconds, long ElapsedMilliseconds);
     private sealed record LeaderboardResponse(int Rank, string PlayerName);
 }

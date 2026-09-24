@@ -1,7 +1,7 @@
 import { Check, Circle } from 'lucide-react'
 import { barlow, cx, eyebrow } from '../uiStyles'
 
-const labels = ['Digital trafikledning', 'Säkra vägar', 'Järnvägens signaler', 'Slutkontroll']
+const labels = ['Digital trafikledning', 'Säkra vägar', 'Digital säkerhet', 'Pixeljakten']
 
 export function MissionRoute({ current = 1, total = 4 }: { current?: number; total?: number }) {
   return (

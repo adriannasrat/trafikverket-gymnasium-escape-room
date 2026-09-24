@@ -6,6 +6,7 @@ import { ChallengeTimer } from "../components/ChallengeTimer";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { MatchingBoard } from "../components/MatchingBoard";
 import { MissionRoute } from "../components/MissionRoute";
+import { PixelRevealBoard } from "../components/PixelRevealBoard";
 import { api } from "../lib/api";
 import { formatElapsed } from "../lib/time";
 import type { Challenge } from "../types";
@@ -25,6 +26,8 @@ export function GamePage() {
   const [submitting, setSubmitting] = useState(false);
   const [timingOut, setTimingOut] = useState(false);
   const [awaitingNext, setAwaitingNext] = useState(false);
+  const [pixelRevealCount, setPixelRevealCount] = useState(0);
+  const [revealingPixel, setRevealingPixel] = useState(false);
   const [connections, setConnections] = useState<Record<string, string>>({});
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
   const [lockedScenarioIds, setLockedScenarioIds] = useState<Set<string>>(
@@ -44,6 +47,7 @@ export function GamePage() {
     setData(result);
     setElapsed(result.elapsedMilliseconds);
     setRemaining(result.challenge.secondsRemaining);
+    setPixelRevealCount(result.challenge.pixelRevealCount);
     setSelected("");
     setConnections({});
     setActiveScenarioId(null);
@@ -114,6 +118,7 @@ export function GamePage() {
         );
         if (result.expired) {
           setSelected("");
+          setPixelRevealCount(0);
           setConnections({});
           setActiveScenarioId(null);
           setLockedScenarioIds(new Set());
@@ -155,6 +160,7 @@ export function GamePage() {
         setAwaitingNext(true);
         setRemaining(0);
       } else if (result.challengeStartedAtUtc) {
+        setPixelRevealCount(0);
         setData({
           ...data,
           challenge: {
@@ -177,6 +183,35 @@ export function GamePage() {
       });
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function revealPixel() {
+    if (!data || awaitingNext || revealingPixel || submitting || timingOut || remaining <= 0) return;
+    setRevealingPixel(true);
+    try {
+      const result = await api.revealPixel(sessionId, data.challenge.id);
+      setElapsed(result.elapsedMilliseconds);
+      setPixelRevealCount(result.pixelRevealCount);
+      if (result.expired && result.challengeStartedAtUtc) {
+        setSelected("");
+        setData({
+          ...data,
+          challenge: {
+            ...data.challenge,
+            challengeStartedAtUtc: result.challengeStartedAtUtc,
+          },
+        });
+        setRemaining(result.timeLimitSeconds ?? data.challenge.timeLimitSeconds);
+        setFeedback({ correct: false, text: result.message ?? "Tiden tog slut. Försök igen." });
+      }
+    } catch (caught) {
+      setFeedback({
+        correct: false,
+        text: caught instanceof Error ? caught.message : "Bilden kunde inte skärpas.",
+      });
+    } finally {
+      setRevealingPixel(false);
     }
   }
 
@@ -346,6 +381,7 @@ export function GamePage() {
   if (!data) return <LoadingScreen />;
   const isMatching = data.game.type === "Matching" && data.matching !== null;
   const isTrueFalse = data.game.type === "TrueFalse";
+  const isPixelHunt = data.game.type === "PixelHunt";
   const allScenariosConnected = isMatching &&
     data.matching!.scenarios.every(scenario => Boolean(connections[scenario.id]));
   const isLastQuestion = data.challenge.questionNumber === data.challenge.questionTotal;
@@ -358,7 +394,9 @@ export function GamePage() {
       ? isLastGame
         ? "Slutför uppdraget"
         : "Nästa spel"
-      : "Nästa fråga";
+      : isPixelHunt
+        ? "Nästa bild"
+        : "Nästa fråga";
 
   return (
     <div className="min-h-screen bg-[#f5f5f5]">
@@ -375,7 +413,7 @@ export function GamePage() {
           <div className="flex justify-between gap-10 border-b border-[#dedede] pb-[25px] max-[720px]:gap-[10px]">
             <div>
               <p className={eyebrow}>
-                {isMatching ? "ETAPP" : "FRÅGA"} {(
+                {isMatching ? "ETAPP" : isPixelHunt ? "BILD" : "FRÅGA"} {(
                   isMatching ? data.challenge.number : data.challenge.questionNumber
                 ).toString().padStart(2, "0")} ·{" "}
                 {data.game.title.toUpperCase()}
@@ -391,7 +429,7 @@ export function GamePage() {
               ).toString().padStart(2, "0")}</span>
             </span>
           </div>
-          {!isMatching && data.challenge.imagePath && (
+          {!isMatching && !isPixelHunt && data.challenge.imagePath && (
             <img
               className="mt-[22px] block max-h-[360px] w-full bg-white object-contain p-3"
               src={data.challenge.imagePath}
@@ -404,6 +442,15 @@ export function GamePage() {
             complete={awaitingNext}
             completeLabel={isMatching ? "KOPPLINGARNA ÄR KLARA" : undefined}
           />
+          {isPixelHunt && (
+            <PixelRevealBoard
+              key={data.challenge.id}
+              imagePath={data.challenge.imagePath}
+              revealCount={awaitingNext ? 5 : pixelRevealCount}
+              disabled={awaitingNext || revealingPixel || submitting || timingOut || remaining <= 0}
+              onReveal={revealPixel}
+            />
+          )}
           {isMatching ? (
             <MatchingBoard
               scenarios={data.matching!.scenarios}
@@ -519,7 +566,7 @@ export function GamePage() {
                   ? submitting
                   : isMatching
                     ? !allScenariosConnected || submitting || timingOut
-                    : !selected || submitting || timingOut
+                    : !selected || submitting || timingOut || revealingPixel
               }
               onClick={awaitingNext ? goToNextChallenge : isMatching ? submitMatches : submit}
             >

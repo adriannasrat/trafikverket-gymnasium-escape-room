@@ -14,6 +14,7 @@ public static class SessionEndpoints
         group.MapGet("/{sessionId:guid}/current-challenge", GetCurrentChallengeAsync);
         group.MapPost("/{sessionId:guid}/answers", SubmitAnswerAsync);
         group.MapPost("/{sessionId:guid}/matches", SubmitMatchesAsync);
+        group.MapPost("/{sessionId:guid}/pixel-reveal", RevealPixelAsync);
         group.MapPost("/{sessionId:guid}/timeout", RegisterTimeoutAsync);
         group.MapPost("/{sessionId:guid}/next", MoveToNextChallengeAsync);
 
@@ -160,6 +161,7 @@ public static class SessionEndpoints
                 total = activeGameIds.Count,
                 questionNumber,
                 questionTotal = challengeIds.Count,
+                pixelRevealCount = challenge.Game.Type == GameType.PixelHunt ? session.PixelRevealCount : 0,
                 awaitingNext,
                 timeLimitSeconds = limit,
                 challengeStartedAtUtc = startedAt,
@@ -228,6 +230,7 @@ public static class SessionEndpoints
             WasExpired = true
         });
         session.CurrentChallengeStartedAtUtc = now;
+        session.PixelRevealCount = 0;
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Ok(new
@@ -287,6 +290,7 @@ public static class SessionEndpoints
 
         session.CurrentChallengeId = nextChallengeId;
         session.CurrentChallengeStartedAtUtc = nextChallengeId is null ? null : now;
+        session.PixelRevealCount = 0;
         if (nextChallengeId is null)
         {
             session.Status = SessionStatus.Completed;
@@ -432,6 +436,84 @@ public static class SessionEndpoints
         });
     }
 
+    private static async Task<IResult> RevealPixelAsync(
+        Guid sessionId,
+        PixelRevealRequest request,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var session = await db.GameSessions
+            .SingleOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken);
+        if (session is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (session.Status != SessionStatus.InProgress || session.CurrentChallengeId is null ||
+            session.CurrentChallengeStartedAtUtc is null)
+        {
+            return Results.Conflict(new { message = "Bilden kan inte skärpas när frågan är klar." });
+        }
+
+        if (session.CurrentChallengeId != request.ChallengeId)
+        {
+            return Results.BadRequest(new { message = "Bilden tillhör inte den aktuella frågan." });
+        }
+
+        var challenge = await db.Challenges
+            .Include(candidate => candidate.Game)
+            .SingleAsync(candidate => candidate.Id == request.ChallengeId, cancellationToken);
+        if (challenge.Game.Type != GameType.PixelHunt || string.IsNullOrWhiteSpace(challenge.ImagePath))
+        {
+            return Results.BadRequest(new { message = "Den aktuella frågan har ingen bild att skärpa." });
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var timeLimit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
+        if (now - session.CurrentChallengeStartedAtUtc.Value >= TimeSpan.FromSeconds(timeLimit))
+        {
+            db.ChallengeAttempts.Add(new ChallengeAttempt
+            {
+                GameSessionId = session.Id,
+                ChallengeId = challenge.Id,
+                SubmittedAtUtc = now,
+                IsCorrect = false,
+                WasExpired = true
+            });
+            session.CurrentChallengeStartedAtUtc = now;
+            session.PixelRevealCount = 0;
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Ok(new
+            {
+                expired = true,
+                message = "Tiden tog slut. Bilden har återställts – försök igen.",
+                pixelRevealCount = 0,
+                penaltySeconds = session.TotalPenaltyMilliseconds / 1000,
+                challengeStartedAtUtc = now,
+                timeLimitSeconds = timeLimit,
+                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+            });
+        }
+
+        const int maximumReveals = 5;
+        if (session.PixelRevealCount >= maximumReveals)
+        {
+            return Results.Conflict(new { message = "Bilden är redan helt skarp." });
+        }
+
+        session.PixelRevealCount++;
+        session.TotalPenaltyMilliseconds += 5_000;
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new
+        {
+            expired = false,
+            pixelRevealCount = session.PixelRevealCount,
+            penaltySeconds = session.TotalPenaltyMilliseconds / 1000,
+            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+        });
+    }
+
     private static async Task<IResult> SubmitAnswerAsync(
         Guid sessionId,
         SubmitAnswerRequest request,
@@ -489,6 +571,7 @@ public static class SessionEndpoints
         if (expired || !selectedOption.IsCorrect)
         {
             session.CurrentChallengeStartedAtUtc = now;
+            session.PixelRevealCount = 0;
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new
             {
@@ -572,7 +655,7 @@ public static class SessionEndpoints
         }
 
         var totalMilliseconds = (long)(end - session.StartedAtUtc).TotalMilliseconds;
-        return Math.Max(0, totalMilliseconds - pausedMilliseconds);
+        return Math.Max(0, totalMilliseconds - pausedMilliseconds + session.TotalPenaltyMilliseconds);
     }
 
     public sealed record StartSessionRequest(string PlayerName);
@@ -580,6 +663,7 @@ public static class SessionEndpoints
     public sealed record SubmitMatchesRequest(Guid ChallengeId, List<MatchSelectionRequest> Selections);
     public sealed record MatchSelectionRequest(Guid ChallengeId, Guid OptionId);
     public sealed record ChallengeTimeoutRequest(Guid ChallengeId);
+    public sealed record PixelRevealRequest(Guid ChallengeId);
     private sealed record MatchingScenarioResponse(
         Guid Id,
         string Prompt,

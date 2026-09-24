@@ -208,6 +208,39 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
             updatedGames!.Single(candidate => candidate.Id == trueFalseGame.Id).Challenges.Count);
     }
 
+    [Fact]
+    public async Task AdminCanAddAndRemoveAPixelImageQuestion()
+    {
+        await LoginAsync();
+        var games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        var pixelGame = games!.Single(candidate => candidate.Type == "PixelHunt");
+        var initialCount = pixelGame.Challenges.Count;
+
+        using var addRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/admin/games/{pixelGame.Id}/challenges");
+        await AddAntiforgeryTokenAsync(addRequest);
+        var addResponse = await client.SendAsync(addRequest);
+        Assert.Equal(HttpStatusCode.Created, addResponse.StatusCode);
+        var added = await addResponse.Content.ReadFromJsonAsync<AdminChallengeResponse>();
+        Assert.NotNull(added);
+        Assert.Equal(3, added.Options.Count);
+        Assert.Single(added.Options, option => option.IsCorrect);
+        Assert.NotNull(added.ImagePath);
+
+        using var deleteRequest = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/admin/challenges/{added.Id}");
+        await AddAntiforgeryTokenAsync(deleteRequest);
+        var deleteResponse = await client.SendAsync(deleteRequest);
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        var updatedGames = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        Assert.Equal(
+            initialCount,
+            updatedGames!.Single(candidate => candidate.Id == pixelGame.Id).Challenges.Count);
+    }
+
     private async Task LoginAsync()
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")

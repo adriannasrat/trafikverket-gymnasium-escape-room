@@ -8,6 +8,7 @@ import type {
   GameSummary,
   LeaderboardEntry,
   MatchingResult,
+  PixelRevealResult,
   Session,
   TimeoutResult,
 } from "../types";
@@ -87,6 +88,11 @@ export const api = {
     request<MatchingResult>(`/api/sessions/${sessionId}/matches`, {
       method: "POST",
       body: JSON.stringify({ challengeId, selections }),
+    }),
+  revealPixel: (sessionId: string, challengeId: string) =>
+    request<PixelRevealResult>(`/api/sessions/${sessionId}/pixel-reveal`, {
+      method: "POST",
+      body: JSON.stringify({ challengeId }),
     }),
   timeout: (sessionId: string, challengeId: string) =>
     request<TimeoutResult>(`/api/sessions/${sessionId}/timeout`, {

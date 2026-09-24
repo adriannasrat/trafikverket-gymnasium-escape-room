@@ -10,6 +10,7 @@ export type Challenge = {
   challenge: {
     id: string; prompt: string; imagePath: string | null; number: number; total: number; timeLimitSeconds: number
     questionNumber: number; questionTotal: number
+    pixelRevealCount: number
     awaitingNext: boolean
     challengeStartedAtUtc: string; secondsRemaining: number
     options: Array<{ id: string; text: string }>
@@ -30,6 +31,12 @@ export type AnswerResult = {
 
 export type MatchingResult = AnswerResult & {
   incorrectChallengeIds: string[]
+}
+
+export type PixelRevealResult = {
+  expired: boolean; pixelRevealCount: number; penaltySeconds: number
+  elapsedMilliseconds: number; message?: string
+  challengeStartedAtUtc?: string; timeLimitSeconds?: number
 }
 
 export type TimeoutResult = {

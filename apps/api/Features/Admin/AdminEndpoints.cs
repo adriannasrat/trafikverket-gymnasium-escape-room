@@ -251,8 +251,12 @@ public static class AdminEndpoints
             {
                 GameType.Matching => "Nytt riskscenario",
                 GameType.TrueFalse => "Nytt påstående",
+                GameType.PixelHunt => "Vad visar bilden?",
                 _ => "Ny fråga"
             },
+            ImagePath = game.Type == GameType.PixelHunt
+                ? game.Challenges.OrderBy(candidate => candidate.SortOrder).FirstOrDefault()?.ImagePath
+                : null,
             SortOrder = highestSortOrder + 1,
             Options = game.Type == GameType.Matching
                 ? matchingTemplateOptions
@@ -268,6 +272,13 @@ public static class AdminEndpoints
                     [
                         new ChallengeOption { Text = "Sant", SortOrder = 1, IsCorrect = true },
                         new ChallengeOption { Text = "Falskt", SortOrder = 2 }
+                    ]
+                : game.Type == GameType.PixelHunt
+                    ?
+                    [
+                        new ChallengeOption { Text = "Svarsalternativ A", SortOrder = 1, IsCorrect = true },
+                        new ChallengeOption { Text = "Svarsalternativ B", SortOrder = 2 },
+                        new ChallengeOption { Text = "Svarsalternativ C", SortOrder = 3 }
                     ]
                 :
                 [
@@ -606,6 +617,10 @@ public static class AdminEndpoints
         foreach (var update in request.Challenges)
         {
             var challenge = game.Challenges.Single(candidate => candidate.Id == update.Id);
+            if (game.Type == GameType.PixelHunt && string.IsNullOrWhiteSpace(challenge.ImagePath))
+            {
+                errors[$"challenges.{update.Id}.image"] = ["Ladda upp en bild till pixeljakten."];
+            }
             if (string.IsNullOrWhiteSpace(update.Prompt) || update.Prompt.Length > 1200)
             {
                 errors[$"challenges.{update.Id}.prompt"] = ["Instruktionen måste innehålla mellan 1 och 1200 tecken."];
@@ -744,7 +759,7 @@ public static class AdminEndpoints
     private static long CalculateElapsedMilliseconds(GameSession session)
     {
         var totalMilliseconds = (long)(session.CompletedAtUtc!.Value - session.StartedAtUtc).TotalMilliseconds;
-        return Math.Max(0, totalMilliseconds - session.TotalPausedMilliseconds);
+        return Math.Max(0, totalMilliseconds - session.TotalPausedMilliseconds + session.TotalPenaltyMilliseconds);
     }
 
     public sealed record UpdateGameRequest(

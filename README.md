@@ -6,7 +6,7 @@ The application is intended for event computers where teams complete configurabl
 
 ## Current status
 
-Three games are implemented, a configurable quiz, the one to one Risk & Safety matching board, and a Digital Safety true or false challenge. All use server timing and validation. The protected administration supports questions, statements, scenarios, risk zones, correct answers and mappings, optional images, activation, audit history and management of the ranked leaderboard without requiring source code changes.
+Four games are implemented: a configurable quiz, the one-to-one Risk & Safety matching board, a Digital Safety true-or-false challenge, and Pixel Hunt. In Pixel Hunt, each image starts pixelated; the player can sharpen it up to five times, adding five seconds to their total time per click. All games use server timing and validation. The protected administration supports questions, statements, scenarios, risk zones, image questions, correct answers and mappings, image uploads, activation, audit history and management of the ranked leaderboard without requiring source code changes.
 
 ## Technology
 

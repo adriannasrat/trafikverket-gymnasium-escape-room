@@ -12,5 +12,7 @@ public sealed class GameSession
     public DateTimeOffset? CurrentChallengeStartedAtUtc { get; set; }
     public DateTimeOffset? PausedAtUtc { get; set; }
     public long TotalPausedMilliseconds { get; set; }
+    public int PixelRevealCount { get; set; }
+    public long TotalPenaltyMilliseconds { get; set; }
     public List<ChallengeAttempt> Attempts { get; set; } = [];
 }

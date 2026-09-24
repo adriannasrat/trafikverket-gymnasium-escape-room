@@ -39,7 +39,8 @@ export function AdminPage() {
     games?.find((candidate) => candidate.id === selectedId) ?? games?.[0];
   const isMatching = game?.type === "Matching";
   const isTrueFalse = game?.type === "TrueFalse";
-  const canManageQuestions = game?.type === "Quiz" || isMatching || isTrueFalse;
+  const isPixelHunt = game?.type === "PixelHunt";
+  const canManageQuestions = game?.type === "Quiz" || isMatching || isTrueFalse || isPixelHunt;
 
   useEffect(() => {
     api
@@ -106,7 +107,7 @@ export function AdminPage() {
       const challenge = await api.createChallenge(game.id);
       updateGame({ challenges: [...game.challenges, challenge] });
       setOpenChallengeIds((current) => new Set(current).add(challenge.id));
-      setStatus(`${isMatching ? "Ett nytt scenario" : isTrueFalse ? "Ett nytt påstående" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
+      setStatus(`${isMatching ? "Ett nytt scenario" : isTrueFalse ? "Ett nytt påstående" : isPixelHunt ? "En ny bildfråga" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -122,7 +123,7 @@ export function AdminPage() {
     if (!game || !canManageQuestions || game.challenges.length <= 1) return;
     const challenge = game.challenges.find((item) => item.id === challengeId);
     if (!challenge) return;
-    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : "frågan"} ”${challenge.prompt}”?`)) return;
+    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : "frågan"} ”${challenge.prompt}”?`)) return;
 
     setMutating(challengeId);
     setStatus("");
@@ -138,7 +139,7 @@ export function AdminPage() {
         next.delete(challengeId);
         return next;
       });
-      setStatus(`${isMatching ? "Scenariot" : isTrueFalse ? "Påståendet" : "Frågan"} har tagits bort från spelet.`);
+      setStatus(`${isMatching ? "Scenariot" : isTrueFalse ? "Påståendet" : isPixelHunt ? "Bildfrågan" : "Frågan"} har tagits bort från spelet.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -378,7 +379,7 @@ export function AdminPage() {
                     />
                   </label>
                   <label className={fieldLabel}>
-                    {isMatching ? "TID FÖR MATCHNING (SEK)" : "TID PER UPPDRAG (SEK)"}
+                    {isMatching ? "TID FÖR MATCHNING (SEK)" : isPixelHunt ? "TID PER BILD (SEK)" : "TID PER UPPDRAG (SEK)"}
                     <input
                       className={field}
                       type="number"
@@ -508,6 +509,8 @@ export function AdminPage() {
                         ? "SCENARIER I SPELET"
                         : isTrueFalse
                           ? "PÅSTÅENDEN I SPELET"
+                          : isPixelHunt
+                            ? "BILDER I SPELET"
                           : "FRÅGOR I SPELET"}
                     </p>
                     <p className="m-0 text-[11px] text-[#686868]">
@@ -515,6 +518,8 @@ export function AdminPage() {
                         ? "Varje scenario kopplas till exakt en av riskzonerna ovan."
                         : isTrueFalse
                           ? "Deltagaren avgör om varje påstående är sant eller falskt."
+                          : isPixelHunt
+                            ? "Bilden visas pixlad. Varje klick gör den skarpare men lägger till 5 sekunder på totaltiden."
                           : "Lägg till textfrågor eller använd en bild som deltagaren ska tolka."}
                     </p>
                   </div>
@@ -537,7 +542,7 @@ export function AdminPage() {
                           : undefined
                       }
                     >
-                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : isTrueFalse ? "Lägg till påstående" : "Lägg till fråga"}
+                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : isTrueFalse ? "Lägg till påstående" : isPixelHunt ? "Lägg till bildfråga" : "Lägg till fråga"}
                     </button>
                   )}
                 </div>
@@ -568,7 +573,7 @@ export function AdminPage() {
                           </span>
                           <span className="grid min-w-0 flex-1 gap-0.5">
                             <small className="text-[8px] tracking-[0.14em] text-[#777]">
-                              {isMatching ? "SCENARIO" : isTrueFalse ? "PÅSTÅENDE" : "UPPDRAG"}
+                              {isMatching ? "SCENARIO" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "BILDFRÅGA" : "UPPDRAG"}
                             </small>
                             <strong className="overflow-hidden text-[12px] text-ellipsis whitespace-nowrap">
                               {challenge.prompt}
@@ -587,7 +592,7 @@ export function AdminPage() {
                             className={`mr-[10px] inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-[6px] border border-[#c9c9c9] bg-white px-[10px] text-[9px] font-bold tracking-[0.08em] text-[#8f2424] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
                             type="button"
                             aria-label={`Ta bort uppdrag ${challengeIndex + 1}`}
-                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : isTrueFalse ? "ett påstående" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : "frågan"}`}
+                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : isTrueFalse ? "ett påstående" : isPixelHunt ? "en bildfråga" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : "frågan"}`}
                             disabled={game.challenges.length <= 1 || mutating !== null || saving}
                             onClick={() => deleteChallenge(challenge.id)}
                           >
@@ -599,7 +604,7 @@ export function AdminPage() {
                       {isOpen && (
                       <div id={contentId}>
                       <label className={`${fieldLabel} px-5 pt-5`}>
-                        {isMatching ? "SCENARIO / HÄNDELSE" : isTrueFalse ? "PÅSTÅENDE" : "FRÅGA / INSTRUKTION"}
+                        {isMatching ? "SCENARIO / HÄNDELSE" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "FRÅGA OM BILDEN" : "FRÅGA / INSTRUKTION"}
                         <textarea
                           className={`${field} min-h-[88px] resize-y`}
                           value={challenge.prompt}
@@ -629,10 +634,10 @@ export function AdminPage() {
                         <div className="grid justify-items-start gap-2">
                           <div>
                             <p className="m-0 text-[9px] font-extrabold tracking-[0.12em] text-[#555]">
-                              BILD TILL {isMatching ? "SCENARIOT" : "FRÅGAN"} <span className="font-normal tracking-normal text-[#777]">(VALFRI)</span>
+                              BILD TILL {isMatching ? "SCENARIOT" : "FRÅGAN"} {!isPixelHunt && <span className="font-normal tracking-normal text-[#777]">(VALFRI)</span>}
                             </p>
                             <p className="mt-1 mb-0 text-[10px] leading-[1.5] text-[#777]">
-                              JPG, PNG eller WebP · högst 5 MB. Hela bilden visas utan beskärning.
+                              JPG, PNG eller WebP · högst 5 MB. {isPixelHunt ? "Förhandsvisningen är skarp; deltagaren ser den pixlad." : "Hela bilden visas utan beskärning."}
                             </p>
                           </div>
                           {canManageQuestions && (

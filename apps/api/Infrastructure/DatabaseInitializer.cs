@@ -166,6 +166,60 @@ public sealed class DatabaseInitializer(
             });
         }
 
+        if (!await db.Games.AnyAsync(game => game.Slug == "pixeljakten", cancellationToken))
+        {
+            static Challenge CreatePixelChallenge(
+                string prompt,
+                string imagePath,
+                int sortOrder,
+                string correctAnswer,
+                params string[] answers) => new()
+            {
+                Prompt = prompt,
+                ImagePath = imagePath,
+                SortOrder = sortOrder,
+                TimeLimitSeconds = 30,
+                Options = answers.Select((text, index) => new ChallengeOption
+                {
+                    Text = text,
+                    SortOrder = index + 1,
+                    IsCorrect = text == correctAnswer
+                }).ToList()
+            };
+
+            db.Games.Add(new Game
+            {
+                Slug = "pixeljakten",
+                Title = "Pixeljakten",
+                Summary = "Gissa vad bilden visar. Varje gång du gör den tydligare läggs fem sekunder på din totaltid.",
+                Type = GameType.PixelHunt,
+                SortOrder = 4,
+                DefaultTimeLimitSeconds = 30,
+                SuccessMessage = "Rätt! Du avslöjade vad som dolde sig i bilden.",
+                Challenges =
+                [
+                    CreatePixelChallenge(
+                        "Vad döljer sig bakom pixlarna?",
+                        "/assets/images/pixel/train.jpg",
+                        1,
+                        "Snabbtåg",
+                        "Godståg", "Snabbtåg", "Spårvagn"),
+                    CreatePixelChallenge(
+                        "Vilken teknisk utrustning ser du?",
+                        "/assets/images/pixel/camera.jpg",
+                        2,
+                        "Fartkamera",
+                        "Gatubelysning", "Fartkamera", "Trafikljus"),
+                    CreatePixelChallenge(
+                        "Vad är detta för objekt?",
+                        "/assets/images/pixel/cone.jpg",
+                        3,
+                        "Vägkon",
+                        "Vägkon", "Hinder", "Stolpe")
+                ]
+            });
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 

@@ -256,6 +256,9 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<int>("PixelRevealCount")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset?>("PausedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -266,6 +269,9 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<long>("TotalPausedMilliseconds")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("TotalPenaltyMilliseconds")
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");

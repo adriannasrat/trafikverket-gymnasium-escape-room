@@ -143,6 +143,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.Equal(4, pixelHunt.Challenge.Number);
         Assert.Equal(3, pixelHunt.Challenge.QuestionTotal);
         Assert.Equal(0, pixelHunt.Challenge.PixelRevealCount);
+        Assert.Equal(4, pixelHunt.Challenge.Options.Count);
 
         for (var question = 0; question < 3; question++)
         {
@@ -172,6 +173,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
                     $"/api/sessions/{session.Id}/current-challenge");
                 Assert.NotNull(pixelHunt);
                 Assert.Equal(question + 2, pixelHunt.Challenge.QuestionNumber);
+                Assert.Equal(4, pixelHunt.Challenge.Options.Count);
             }
         }
 

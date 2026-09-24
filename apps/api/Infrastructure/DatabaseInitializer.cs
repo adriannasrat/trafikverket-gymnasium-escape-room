@@ -166,7 +166,11 @@ public sealed class DatabaseInitializer(
             });
         }
 
-        if (!await db.Games.AnyAsync(game => game.Slug == "pixeljakten", cancellationToken))
+        var pixelHunt = await db.Games
+            .Include(game => game.Challenges.Where(challenge => challenge.IsActive))
+                .ThenInclude(challenge => challenge.Options)
+            .SingleOrDefaultAsync(game => game.Slug == "pixeljakten", cancellationToken);
+        if (pixelHunt is null)
         {
             static Challenge CreatePixelChallenge(
                 string prompt,
@@ -187,7 +191,7 @@ public sealed class DatabaseInitializer(
                 }).ToList()
             };
 
-            db.Games.Add(new Game
+            pixelHunt = new Game
             {
                 Slug = "pixeljakten",
                 Title = "Pixeljakten",
@@ -203,21 +207,46 @@ public sealed class DatabaseInitializer(
                         "/assets/images/pixel/train.jpg",
                         1,
                         "Snabbtåg",
-                        "Godståg", "Snabbtåg", "Spårvagn"),
+                        "Godståg", "Snabbtåg", "Spårvagn", "Pendeltåg"),
                     CreatePixelChallenge(
                         "Vilken teknisk utrustning ser du?",
                         "/assets/images/pixel/camera.jpg",
                         2,
                         "Fartkamera",
-                        "Gatubelysning", "Fartkamera", "Trafikljus"),
+                        "Gatubelysning", "Fartkamera", "Trafikljus", "Vägmätare"),
                     CreatePixelChallenge(
                         "Vad är detta för objekt?",
                         "/assets/images/pixel/cone.jpg",
                         3,
                         "Vägkon",
-                        "Vägkon", "Hinder", "Stolpe")
+                        "Vägkon", "Hinder", "Stolpe", "Vägbom")
                 ]
-            });
+            };
+            db.Games.Add(pixelHunt);
+        }
+
+        foreach (var challenge in pixelHunt.Challenges.Where(challenge => challenge.Options.Count < 4))
+        {
+            while (challenge.Options.Count < 4)
+            {
+                var sortOrder = Enumerable.Range(1, 4)
+                    .First(candidate => challenge.Options.All(option => option.SortOrder != candidate));
+                var text = (challenge.Prompt, sortOrder) switch
+                {
+                    ("Vad döljer sig bakom pixlarna?", 4) => "Pendeltåg",
+                    ("Vilken teknisk utrustning ser du?", 4) => "Vägmätare",
+                    ("Vad är detta för objekt?", 4) => "Vägbom",
+                    _ => $"Svarsalternativ {(char)('A' + sortOrder - 1)}"
+                };
+                var option = new ChallengeOption
+                {
+                    ChallengeId = challenge.Id,
+                    Text = text,
+                    SortOrder = sortOrder
+                };
+                challenge.Options.Add(option);
+                db.Entry(option).State = EntityState.Added;
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken);

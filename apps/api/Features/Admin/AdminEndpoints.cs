@@ -278,7 +278,8 @@ public static class AdminEndpoints
                     [
                         new ChallengeOption { Text = "Svarsalternativ A", SortOrder = 1, IsCorrect = true },
                         new ChallengeOption { Text = "Svarsalternativ B", SortOrder = 2 },
-                        new ChallengeOption { Text = "Svarsalternativ C", SortOrder = 3 }
+                        new ChallengeOption { Text = "Svarsalternativ C", SortOrder = 3 },
+                        new ChallengeOption { Text = "Svarsalternativ D", SortOrder = 4 }
                     ]
                 :
                 [

@@ -224,7 +224,7 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         Assert.Equal(HttpStatusCode.Created, addResponse.StatusCode);
         var added = await addResponse.Content.ReadFromJsonAsync<AdminChallengeResponse>();
         Assert.NotNull(added);
-        Assert.Equal(3, added.Options.Count);
+        Assert.Equal(4, added.Options.Count);
         Assert.Single(added.Options, option => option.IsCorrect);
         Assert.NotNull(added.ImagePath);
 

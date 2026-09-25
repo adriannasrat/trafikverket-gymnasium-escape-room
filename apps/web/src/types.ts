@@ -11,6 +11,7 @@ export type Challenge = {
     id: string; prompt: string; imagePath: string | null; number: number; total: number; timeLimitSeconds: number
     questionNumber: number; questionTotal: number
     pixelRevealCount: number
+    currentChallengePenaltyMilliseconds: number
     awaitingNext: boolean
     challengeStartedAtUtc: string; secondsRemaining: number
     options: Array<{ id: string; text: string }>
@@ -21,6 +22,10 @@ export type Challenge = {
       options: Array<{ id: string; text: string }>
     }>
     destinations: string[]
+  }
+  sorting: null | {
+    cards: Array<{ id: string; text: string }>
+    categories: string[]
   }
 }
 
@@ -39,9 +44,15 @@ export type PixelRevealResult = {
   challengeStartedAtUtc?: string; timeLimitSeconds?: number
 }
 
+export type SortingResult = AnswerResult & {
+  incorrectOptionIds: string[]
+  currentChallengePenaltyMilliseconds: number
+  secondsRemaining?: number
+}
+
 export type TimeoutResult = {
   expired: boolean; message?: string; challengeStartedAtUtc: string
-  timeLimitSeconds: number; secondsRemaining?: number
+  timeLimitSeconds: number; secondsRemaining?: number; currentChallengePenaltyMilliseconds?: number
 }
 
 export type LeaderboardEntry = {
@@ -52,7 +63,9 @@ export type AdminResult = LeaderboardEntry & {
   startedAtUtc: string
 }
 
-export type AdminOption = { id: string; text: string; sortOrder: number; isCorrect: boolean }
+export type AdminOption = {
+  id: string; text: string; sortOrder: number; isCorrect: boolean; sortingCategory: string | null
+}
 export type AddedMatchingOption = AdminOption & { challengeId: string }
 export type AdminChallenge = {
   id: string; prompt: string; imagePath: string | null; sortOrder: number

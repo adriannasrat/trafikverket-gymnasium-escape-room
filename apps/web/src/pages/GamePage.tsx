@@ -7,6 +7,7 @@ import { LoadingScreen } from "../components/LoadingScreen";
 import { MatchingBoard } from "../components/MatchingBoard";
 import { MissionRoute } from "../components/MissionRoute";
 import { PixelRevealBoard } from "../components/PixelRevealBoard";
+import { SortingBoard } from "../components/SortingBoard";
 import { api } from "../lib/api";
 import { formatElapsed } from "../lib/time";
 import type { Challenge } from "../types";
@@ -36,6 +37,9 @@ export function GamePage() {
   const [invalidScenarioIds, setInvalidScenarioIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [sortingPlacements, setSortingPlacements] = useState<Record<string, string | null>>({});
+  const [correctSortingIds, setCorrectSortingIds] = useState<Set<string>>(() => new Set());
+  const [incorrectSortingIds, setIncorrectSortingIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState("");
 
   const loadChallenge = useCallback(async () => {
@@ -53,6 +57,11 @@ export function GamePage() {
     setActiveScenarioId(null);
     setLockedScenarioIds(new Set());
     setInvalidScenarioIds(new Set());
+    setSortingPlacements(Object.fromEntries(
+      (result.sorting?.cards ?? []).map((card) => [card.id, null]),
+    ));
+    setCorrectSortingIds(new Set());
+    setIncorrectSortingIds(new Set());
     setAwaitingNext(result.challenge.awaitingNext);
     const isMatchingChallenge = result.game.type === "Matching";
     setFeedback(
@@ -61,7 +70,9 @@ export function GamePage() {
             correct: true,
             text: isMatchingChallenge
               ? "Alla kopplingar är klara. Gå vidare när du är redo."
-              : "Frågan är klar. Gå vidare när du är redo.",
+              : result.game.type === "Sorting"
+                ? "Alla kort är rätt sorterade. Gå vidare när du är redo."
+                : "Frågan är klar. Gå vidare när du är redo.",
           }
         : null,
     );
@@ -84,7 +95,7 @@ export function GamePage() {
       const challengeElapsed =
         (Date.now() -
           new Date(data.challenge.challengeStartedAtUtc).getTime()) /
-        1000;
+        1000 + data.challenge.currentChallengePenaltyMilliseconds / 1000;
       setRemaining(
         Math.max(0, data.challenge.timeLimitSeconds - challengeElapsed),
       );
@@ -109,6 +120,8 @@ export function GamePage() {
                 challenge: {
                   ...current.challenge,
                   challengeStartedAtUtc: result.challengeStartedAtUtc,
+                  currentChallengePenaltyMilliseconds:
+                    result.currentChallengePenaltyMilliseconds ?? 0,
                 },
               }
             : current,
@@ -123,6 +136,11 @@ export function GamePage() {
           setActiveScenarioId(null);
           setLockedScenarioIds(new Set());
           setInvalidScenarioIds(new Set());
+          setSortingPlacements(Object.fromEntries(
+            (data.sorting?.cards ?? []).map((card) => [card.id, null]),
+          ));
+          setCorrectSortingIds(new Set());
+          setIncorrectSortingIds(new Set());
           setFeedback({
             correct: false,
             text: result.message ?? "Tiden tog slut. Försök igen.",
@@ -139,7 +157,7 @@ export function GamePage() {
         });
       })
       .finally(() => setTimingOut(false));
-  }, [awaitingNext, completed, data?.challenge.id, remaining, sessionId, timingOut]);
+  }, [awaitingNext, completed, data?.challenge.id, data?.sorting?.cards, remaining, sessionId, timingOut]);
 
   async function submit() {
     if (!data || !selected || awaitingNext || timingOut) return;
@@ -313,6 +331,76 @@ export function GamePage() {
     }
   }
 
+  function moveSortingCard(cardId: string, category: string | null) {
+    if (correctSortingIds.has(cardId) || awaitingNext) return;
+    setSortingPlacements((current) => ({ ...current, [cardId]: category }));
+    setIncorrectSortingIds((current) => {
+      const next = new Set(current);
+      next.delete(cardId);
+      return next;
+    });
+    setFeedback(null);
+  }
+
+  async function submitSorting() {
+    if (!data?.sorting || awaitingNext || timingOut) return;
+    const placements = data.sorting.cards.map((card) => ({
+      optionId: card.id,
+      category: sortingPlacements[card.id] ?? null,
+    }));
+    setSubmitting(true);
+    setFeedback(null);
+    try {
+      const result = await api.submitSorting(sessionId, data.challenge.id, placements);
+      setFeedback({
+        correct: result.correct,
+        text: result.successMessage ?? result.message ?? "",
+      });
+      if (result.elapsedMilliseconds !== undefined) setElapsed(result.elapsedMilliseconds);
+
+      if (result.expired) {
+        setSortingPlacements(Object.fromEntries(data.sorting.cards.map((card) => [card.id, null])));
+        setCorrectSortingIds(new Set());
+        setIncorrectSortingIds(new Set());
+        setData({
+          ...data,
+          challenge: {
+            ...data.challenge,
+            challengeStartedAtUtc: result.challengeStartedAtUtc ?? data.challenge.challengeStartedAtUtc,
+            currentChallengePenaltyMilliseconds: 0,
+          },
+        });
+        setRemaining(result.secondsRemaining ?? result.timeLimitSeconds ?? data.challenge.timeLimitSeconds);
+      } else if (result.correct) {
+        setCorrectSortingIds(new Set(data.sorting.cards.map((card) => card.id)));
+        setIncorrectSortingIds(new Set());
+        setAwaitingNext(true);
+        setRemaining(0);
+      } else {
+        const incorrect = new Set(result.incorrectOptionIds);
+        setIncorrectSortingIds(incorrect);
+        setCorrectSortingIds(new Set(
+          data.sorting.cards.filter((card) => !incorrect.has(card.id)).map((card) => card.id),
+        ));
+        setData({
+          ...data,
+          challenge: {
+            ...data.challenge,
+            currentChallengePenaltyMilliseconds: result.currentChallengePenaltyMilliseconds,
+          },
+        });
+        if (result.secondsRemaining !== undefined) setRemaining(result.secondsRemaining);
+      }
+    } catch (caught) {
+      setFeedback({
+        correct: false,
+        text: caught instanceof Error ? caught.message : "Sorteringen kunde inte kontrolleras.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function goToNextChallenge() {
     if (!awaitingNext || submitting) return;
     setSubmitting(true);
@@ -382,6 +470,7 @@ export function GamePage() {
   const isMatching = data.game.type === "Matching" && data.matching !== null;
   const isTrueFalse = data.game.type === "TrueFalse";
   const isPixelHunt = data.game.type === "PixelHunt";
+  const isSorting = data.game.type === "Sorting" && data.sorting !== null;
   const allScenariosConnected = isMatching &&
     data.matching!.scenarios.every(scenario => Boolean(connections[scenario.id]));
   const isLastQuestion = data.challenge.questionNumber === data.challenge.questionTotal;
@@ -413,7 +502,7 @@ export function GamePage() {
           <div className="flex justify-between gap-10 border-b border-[#dedede] pb-[25px] max-[720px]:gap-[10px]">
             <div>
               <p className={eyebrow}>
-                {isMatching ? "ETAPP" : isPixelHunt ? "BILD" : "FRÅGA"} {(
+                {isMatching ? "ETAPP" : isPixelHunt ? "BILD" : isSorting ? "SORTERING" : "FRÅGA"} {(
                   isMatching ? data.challenge.number : data.challenge.questionNumber
                 ).toString().padStart(2, "0")} ·{" "}
                 {data.game.title.toUpperCase()}
@@ -440,7 +529,7 @@ export function GamePage() {
             remaining={remaining}
             total={data.challenge.timeLimitSeconds}
             complete={awaitingNext}
-            completeLabel={isMatching ? "KOPPLINGARNA ÄR KLARA" : undefined}
+            completeLabel={isMatching ? "KOPPLINGARNA ÄR KLARA" : isSorting ? "SORTERINGEN ÄR KLAR" : undefined}
           />
           {isPixelHunt && (
             <PixelRevealBoard
@@ -462,6 +551,17 @@ export function GamePage() {
               disabled={awaitingNext || submitting || timingOut}
               onSelectScenario={selectScenario}
               onSelectDestination={selectDestination}
+            />
+          ) : isSorting ? (
+            <SortingBoard
+              key={data.challenge.id}
+              cards={data.sorting!.cards}
+              categories={data.sorting!.categories}
+              placements={sortingPlacements}
+              correctIds={correctSortingIds}
+              incorrectIds={incorrectSortingIds}
+              disabled={awaitingNext || submitting || timingOut || remaining <= 0}
+              onMove={moveSortingCard}
             />
           ) : isTrueFalse ? (
             <fieldset className="m-0 grid grid-cols-2 gap-4 border-0 p-0 max-[520px]:grid-cols-1">
@@ -566,9 +666,11 @@ export function GamePage() {
                   ? submitting
                   : isMatching
                     ? !allScenariosConnected || submitting || timingOut
-                    : !selected || submitting || timingOut || revealingPixel
+                    : isSorting
+                      ? submitting || timingOut
+                      : !selected || submitting || timingOut || revealingPixel
               }
-              onClick={awaitingNext ? goToNextChallenge : isMatching ? submitMatches : submit}
+              onClick={awaitingNext ? goToNextChallenge : isMatching ? submitMatches : isSorting ? submitSorting : submit}
             >
               {submitting
                 ? awaitingNext
@@ -580,6 +682,8 @@ export function GamePage() {
                     ? "Tiden registreras…"
                     : isMatching
                       ? "Kontrollera kopplingar"
+                      : isSorting
+                        ? "Kontrollera sortering"
                       : "Bekräfta svar"}{" "}
               <ArrowRight size={18} />
             </button>

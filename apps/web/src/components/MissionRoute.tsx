@@ -1,9 +1,9 @@
 import { Check, Circle } from 'lucide-react'
 import { barlow, cx, eyebrow } from '../uiStyles'
 
-const labels = ['Digital trafikledning', 'Säkra vägar', 'Digital säkerhet', 'Pixeljakten']
+const labels = ['Digital trafikledning', 'Säkra vägar', 'Digital säkerhet', 'Pixeljakten', 'Sortera rätt']
 
-export function MissionRoute({ current = 1, total = 4 }: { current?: number; total?: number }) {
+export function MissionRoute({ current = 1, total = 5 }: { current?: number; total?: number }) {
   return (
     <aside className="border-r border-[#dedede] bg-white px-8 py-[43px] text-[#202020] max-[980px]:px-[22px] max-[980px]:py-[38px] max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:px-[18px] max-[720px]:py-[15px]" aria-label="Uppdragsrutt">
       <p className={`${eyebrow} max-[720px]:hidden`}>UPPDRAGSRUTT</p>

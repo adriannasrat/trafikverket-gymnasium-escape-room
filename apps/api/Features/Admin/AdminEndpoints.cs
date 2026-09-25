@@ -182,6 +182,11 @@ public static class AdminEndpoints
                 var option = challenge.Options.Single(candidate => candidate.Id == optionUpdate.Id);
                 option.Text = optionUpdate.Text.Trim();
                 option.IsCorrect = optionUpdate.IsCorrect;
+                option.SortingCategory = game.Type == GameType.Sorting
+                    ? string.IsNullOrWhiteSpace(optionUpdate.SortingCategory)
+                        ? null
+                        : optionUpdate.SortingCategory.Trim()
+                    : null;
             }
         }
 
@@ -252,6 +257,7 @@ public static class AdminEndpoints
                 GameType.Matching => "Nytt riskscenario",
                 GameType.TrueFalse => "Nytt påstående",
                 GameType.PixelHunt => "Vad visar bilden?",
+                GameType.Sorting => "Sortera korten till rätt område.",
                 _ => "Ny fråga"
             },
             ImagePath = game.Type == GameType.PixelHunt
@@ -278,7 +284,17 @@ public static class AdminEndpoints
                     [
                         new ChallengeOption { Text = "Svarsalternativ A", SortOrder = 1, IsCorrect = true },
                         new ChallengeOption { Text = "Svarsalternativ B", SortOrder = 2 },
-                        new ChallengeOption { Text = "Svarsalternativ C", SortOrder = 3 }
+                        new ChallengeOption { Text = "Svarsalternativ C", SortOrder = 3 },
+                        new ChallengeOption { Text = "Svarsalternativ D", SortOrder = 4 }
+                    ]
+                : game.Type == GameType.Sorting
+                    ?
+                    [
+                        new ChallengeOption { Text = "Kort 1", SortOrder = 1, SortingCategory = "Kategori A" },
+                        new ChallengeOption { Text = "Kort 2", SortOrder = 2, SortingCategory = "Kategori A" },
+                        new ChallengeOption { Text = "Kort 3", SortOrder = 3, SortingCategory = "Kategori B" },
+                        new ChallengeOption { Text = "Kort 4", SortOrder = 4, SortingCategory = "Kategori B" },
+                        new ChallengeOption { Text = "Bluffkort", SortOrder = 5 }
                     ]
                 :
                 [
@@ -638,7 +654,7 @@ public static class AdminEndpoints
                 continue;
             }
 
-            if (update.Options.Count(option => option.IsCorrect) != 1)
+            if (game.Type != GameType.Sorting && update.Options.Count(option => option.IsCorrect) != 1)
             {
                 errors[$"challenges.{update.Id}.correctAnswer"] = ["Exakt ett svar måste vara markerat som korrekt."];
             }
@@ -720,6 +736,30 @@ public static class AdminEndpoints
             }
         }
 
+        if (game.Type == GameType.Sorting)
+        {
+            foreach (var update in request.Challenges)
+            {
+                var categoryNames = update.Options
+                    .Select(option => option.SortingCategory?.Trim())
+                    .Where(category => !string.IsNullOrWhiteSpace(category))
+                    .Cast<string>()
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (categoryNames.Count < 2)
+                {
+                    errors[$"challenges.{update.Id}.sortingCategories"] =
+                        ["Sorteringen måste innehålla minst två kategorier."];
+                }
+
+                if (update.Options.Any(option => option.SortingCategory?.Trim().Length > 80))
+                {
+                    errors[$"challenges.{update.Id}.sortingCategories"] =
+                        ["Kategorinamn får innehålla högst 80 tecken."];
+                }
+            }
+        }
+
         return errors;
     }
 
@@ -752,7 +792,8 @@ public static class AdminEndpoints
             option.Id,
             option.Text,
             option.SortOrder,
-            option.IsCorrect
+            option.IsCorrect,
+            option.SortingCategory
         })
     };
 
@@ -776,5 +817,5 @@ public static class AdminEndpoints
         int? TimeLimitSeconds,
         List<UpdateOptionRequest> Options);
 
-    public sealed record UpdateOptionRequest(Guid Id, string Text, bool IsCorrect);
+    public sealed record UpdateOptionRequest(Guid Id, string Text, bool IsCorrect, string? SortingCategory);
 }

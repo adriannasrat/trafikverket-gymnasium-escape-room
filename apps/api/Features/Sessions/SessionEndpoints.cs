@@ -15,6 +15,7 @@ public static class SessionEndpoints
         group.MapPost("/{sessionId:guid}/answers", SubmitAnswerAsync);
         group.MapPost("/{sessionId:guid}/matches", SubmitMatchesAsync);
         group.MapPost("/{sessionId:guid}/pixel-reveal", RevealPixelAsync);
+        group.MapPost("/{sessionId:guid}/sorting", SubmitSortingAsync);
         group.MapPost("/{sessionId:guid}/timeout", RegisterTimeoutAsync);
         group.MapPost("/{sessionId:guid}/next", MoveToNextChallengeAsync);
 
@@ -101,6 +102,9 @@ public static class SessionEndpoints
         var awaitingNext = session.CurrentChallengeStartedAtUtc is null;
         var startedAt = session.CurrentChallengeStartedAtUtc ?? now;
         var elapsed = awaitingNext ? TimeSpan.Zero : now - startedAt;
+        var currentChallengePenaltyMilliseconds = challenge.Game.Type == GameType.Sorting
+            ? session.CurrentChallengePenaltyMilliseconds
+            : 0;
         var challengeIds = await db.Challenges.AsNoTracking()
             .Where(candidate => candidate.GameId == challenge.GameId && candidate.IsActive)
             .OrderBy(candidate => candidate.SortOrder)
@@ -136,6 +140,21 @@ public static class SessionEndpoints
             };
         }
 
+        object? sorting = null;
+        if (challenge.Game.Type == GameType.Sorting)
+        {
+            sorting = new
+            {
+                cards = challenge.Options
+                    .OrderBy(option => option.SortOrder)
+                    .Select(option => new { option.Id, option.Text }),
+                categories = challenge.Options
+                    .Where(option => option.SortingCategory != null)
+                    .Select(option => option.SortingCategory!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+            };
+        }
+
         return Results.Ok(new
         {
             completed = false,
@@ -162,15 +181,19 @@ public static class SessionEndpoints
                 questionNumber,
                 questionTotal = challengeIds.Count,
                 pixelRevealCount = challenge.Game.Type == GameType.PixelHunt ? session.PixelRevealCount : 0,
+                currentChallengePenaltyMilliseconds,
                 awaitingNext,
                 timeLimitSeconds = limit,
                 challengeStartedAtUtc = startedAt,
-                secondsRemaining = Math.Max(0, limit - elapsed.TotalSeconds),
+                secondsRemaining = Math.Max(
+                    0,
+                    limit - elapsed.TotalSeconds - currentChallengePenaltyMilliseconds / 1000d),
                 options = challenge.Options
                     .OrderBy(option => option.SortOrder)
                     .Select(option => new { option.Id, option.Text })
             },
-            matching
+            matching,
+            sorting
         });
     }
 
@@ -208,7 +231,8 @@ public static class SessionEndpoints
             .SingleAsync(candidate => candidate.Id == request.ChallengeId, cancellationToken);
         var now = timeProvider.GetUtcNow();
         var limit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
-        var elapsed = now - session.CurrentChallengeStartedAtUtc.Value;
+        var elapsed = now - session.CurrentChallengeStartedAtUtc.Value +
+            TimeSpan.FromMilliseconds(session.CurrentChallengePenaltyMilliseconds);
         var secondsRemaining = limit - elapsed.TotalSeconds;
         if (secondsRemaining > 0)
         {
@@ -231,6 +255,7 @@ public static class SessionEndpoints
         });
         session.CurrentChallengeStartedAtUtc = now;
         session.PixelRevealCount = 0;
+        session.CurrentChallengePenaltyMilliseconds = 0;
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Ok(new
@@ -239,6 +264,7 @@ public static class SessionEndpoints
             message = "Tiden tog slut. Försök igen.",
             challengeStartedAtUtc = now,
             timeLimitSeconds = limit,
+            currentChallengePenaltyMilliseconds = 0,
             secondsRemaining = (double)limit
         });
     }
@@ -291,6 +317,7 @@ public static class SessionEndpoints
         session.CurrentChallengeId = nextChallengeId;
         session.CurrentChallengeStartedAtUtc = nextChallengeId is null ? null : now;
         session.PixelRevealCount = 0;
+        session.CurrentChallengePenaltyMilliseconds = 0;
         if (nextChallengeId is null)
         {
             session.Status = SessionStatus.Completed;
@@ -432,6 +459,165 @@ public static class SessionEndpoints
             completed = false,
             currentChallenge.Game.SuccessMessage,
             incorrectChallengeIds,
+            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+        });
+    }
+
+    private static async Task<IResult> SubmitSortingAsync(
+        Guid sessionId,
+        SubmitSortingRequest request,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var session = await db.GameSessions
+            .SingleOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken);
+        if (session is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (session.Status != SessionStatus.InProgress || session.CurrentChallengeId is null)
+        {
+            return Results.Conflict(new { message = "Spelsessionen är redan avslutad." });
+        }
+
+        if (session.CurrentChallengeId != request.ChallengeId)
+        {
+            return Results.BadRequest(new { message = "Sorteringen tillhör inte det aktuella uppdraget." });
+        }
+
+        if (session.CurrentChallengeStartedAtUtc is null)
+        {
+            return Results.Conflict(new { message = "Sorteringen är redan klar. Gå vidare när du är redo." });
+        }
+
+        var challenge = await db.Challenges
+            .Include(candidate => candidate.Game)
+            .Include(candidate => candidate.Options)
+            .SingleAsync(candidate => candidate.Id == request.ChallengeId, cancellationToken);
+        if (challenge.Game.Type != GameType.Sorting)
+        {
+            return Results.BadRequest(new { message = "Det aktuella uppdraget är inte ett sorteringsspel." });
+        }
+
+        if (request.Placements.Count != challenge.Options.Count ||
+            request.Placements.Select(placement => placement.OptionId).Distinct().Count() != challenge.Options.Count ||
+            request.Placements.Any(placement => challenge.Options.All(option => option.Id != placement.OptionId)))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["placements"] = ["Varje kort måste finnas med exakt en gång i sorteringen."]
+            });
+        }
+
+        var categories = challenge.Options
+            .Where(option => option.SortingCategory != null)
+            .Select(option => option.SortingCategory!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (request.Placements.Any(placement =>
+                !string.IsNullOrWhiteSpace(placement.Category) &&
+                !categories.Contains(placement.Category.Trim())))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["placements"] = ["Ett kort har placerats i en kategori som inte finns."]
+            });
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var timeLimit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
+        var elapsed = now - session.CurrentChallengeStartedAtUtc.Value +
+            TimeSpan.FromMilliseconds(session.CurrentChallengePenaltyMilliseconds);
+        if (elapsed >= TimeSpan.FromSeconds(timeLimit))
+        {
+            db.ChallengeAttempts.Add(new ChallengeAttempt
+            {
+                GameSessionId = session.Id,
+                ChallengeId = challenge.Id,
+                SubmittedAtUtc = now,
+                IsCorrect = false,
+                WasExpired = true
+            });
+            session.CurrentChallengeStartedAtUtc = now;
+            session.CurrentChallengePenaltyMilliseconds = 0;
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Ok(new
+            {
+                correct = false,
+                expired = true,
+                message = "Tiden tog slut. Korten har återställts – försök igen.",
+                incorrectOptionIds = challenge.Options.Select(option => option.Id),
+                challengeStartedAtUtc = now,
+                timeLimitSeconds = timeLimit,
+                currentChallengePenaltyMilliseconds = 0,
+                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+            });
+        }
+
+        var placements = request.Placements.ToDictionary(
+            placement => placement.OptionId,
+            placement => string.IsNullOrWhiteSpace(placement.Category) ? null : placement.Category.Trim());
+        var incorrectOptionIds = challenge.Options
+            .Where(option => !string.Equals(
+                option.SortingCategory,
+                placements[option.Id],
+                StringComparison.OrdinalIgnoreCase))
+            .Select(option => option.Id)
+            .ToList();
+
+        db.ChallengeAttempts.Add(new ChallengeAttempt
+        {
+            GameSessionId = session.Id,
+            ChallengeId = challenge.Id,
+            SubmittedAtUtc = now,
+            IsCorrect = incorrectOptionIds.Count == 0,
+            WasExpired = false
+        });
+
+        if (incorrectOptionIds.Count > 0)
+        {
+            const long penaltyMilliseconds = 10_000;
+            session.TotalPenaltyMilliseconds += penaltyMilliseconds;
+            session.CurrentChallengePenaltyMilliseconds += penaltyMilliseconds;
+            var secondsRemaining = timeLimit -
+                (now - session.CurrentChallengeStartedAtUtc.Value).TotalSeconds -
+                session.CurrentChallengePenaltyMilliseconds / 1000d;
+            var penaltyExpired = secondsRemaining <= 0;
+            if (penaltyExpired)
+            {
+                session.CurrentChallengeStartedAtUtc = now;
+                session.CurrentChallengePenaltyMilliseconds = 0;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Ok(new
+            {
+                correct = false,
+                expired = penaltyExpired,
+                message = penaltyExpired
+                    ? "Tidsstraffet tog slut på tiden. Korten har återställts – försök igen."
+                    : "Några kort ligger fel. De gröna är låsta – rätta de röda. 10 sekunder har lagts till på totaltiden.",
+                incorrectOptionIds,
+                challengeStartedAtUtc = session.CurrentChallengeStartedAtUtc.Value,
+                timeLimitSeconds = timeLimit,
+                currentChallengePenaltyMilliseconds = session.CurrentChallengePenaltyMilliseconds,
+                secondsRemaining = penaltyExpired ? timeLimit : Math.Max(0, secondsRemaining),
+                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+            });
+        }
+
+        session.CurrentChallengeStartedAtUtc = null;
+        session.CurrentChallengePenaltyMilliseconds = 0;
+        session.PausedAtUtc = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new
+        {
+            correct = true,
+            completed = false,
+            challenge.Game.SuccessMessage,
+            incorrectOptionIds,
+            currentChallengePenaltyMilliseconds = 0,
             elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
         });
     }
@@ -662,6 +848,8 @@ public static class SessionEndpoints
     public sealed record SubmitAnswerRequest(Guid ChallengeId, Guid OptionId);
     public sealed record SubmitMatchesRequest(Guid ChallengeId, List<MatchSelectionRequest> Selections);
     public sealed record MatchSelectionRequest(Guid ChallengeId, Guid OptionId);
+    public sealed record SubmitSortingRequest(Guid ChallengeId, List<SortingPlacementRequest> Placements);
+    public sealed record SortingPlacementRequest(Guid OptionId, string? Category);
     public sealed record ChallengeTimeoutRequest(Guid ChallengeId);
     public sealed record PixelRevealRequest(Guid ChallengeId);
     private sealed record MatchingScenarioResponse(

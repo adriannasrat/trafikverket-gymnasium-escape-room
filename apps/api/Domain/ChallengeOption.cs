@@ -8,4 +8,5 @@ public sealed class ChallengeOption
     public required string Text { get; set; }
     public int SortOrder { get; set; }
     public bool IsCorrect { get; set; }
+    public string? SortingCategory { get; set; }
 }

@@ -167,6 +167,7 @@ public sealed class DatabaseInitializer(
         }
 
         var pixelHunt = await db.Games
+            .AsSplitQuery()
             .Include(game => game.Challenges.Where(challenge => challenge.IsActive))
                 .ThenInclude(challenge => challenge.Options)
             .SingleOrDefaultAsync(game => game.Slug == "pixeljakten", cancellationToken);
@@ -247,6 +248,51 @@ public sealed class DatabaseInitializer(
                 challenge.Options.Add(option);
                 db.Entry(option).State = EntityState.Added;
             }
+        }
+
+        if (!await db.Games.AnyAsync(game => game.Slug == "sortera-ratt", cancellationToken))
+        {
+            static ChallengeOption CreateSortingCard(string text, int sortOrder, string? category) => new()
+            {
+                Text = text,
+                SortOrder = sortOrder,
+                SortingCategory = category
+            };
+
+            db.Games.Add(new Game
+            {
+                Slug = "sortera-ratt",
+                Title = "Sortera rätt",
+                Summary = "Sortera Trafikverkets begrepp till rätt verksamhetsområde och lämna bluffkorten kvar.",
+                Type = GameType.Sorting,
+                SortOrder = 5,
+                DefaultTimeLimitSeconds = 60,
+                SuccessMessage = "Rätt sorterat! Trafikverkets olika kompetensområden samverkar för ett säkert och hållbart transportsystem.",
+                Challenges =
+                [
+                    new Challenge
+                    {
+                        Prompt = "Sortera begreppen till rätt område. Tre kort hör inte hemma någonstans och ska lämnas kvar.",
+                        SortOrder = 1,
+                        TimeLimitSeconds = 60,
+                        Options =
+                        [
+                            CreateSortingCard("Serverhall", 1, "IKT"),
+                            CreateSortingCard("Fiberkabel", 2, "IKT"),
+                            CreateSortingCard("Databas", 3, "IKT"),
+                            CreateSortingCard("Vägräcke", 4, "Trafik"),
+                            CreateSortingCard("Signalsystem", 5, "Trafik"),
+                            CreateSortingCard("Asfalt", 6, "Trafik"),
+                            CreateSortingCard("Viltstängsel", 7, "Miljö"),
+                            CreateSortingCard("Bullerplank", 8, "Miljö"),
+                            CreateSortingCard("Ecoduct", 9, "Miljö"),
+                            CreateSortingCard("Kaffemaskin", 10, null),
+                            CreateSortingCard("Semester", 11, null),
+                            CreateSortingCard("Hundvalp", 12, null)
+                        ]
+                    }
+                ]
+            });
         }
 
         await db.SaveChangesAsync(cancellationToken);

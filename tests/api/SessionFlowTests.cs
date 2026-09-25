@@ -30,7 +30,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.NotNull(challenge);
         Assert.DoesNotContain(challenge.Challenge.Options, option => option.IsCorrect is not null);
         Assert.Equal(1, challenge.Challenge.Number);
-        Assert.Equal(4, challenge.Challenge.Total);
+        Assert.Equal(5, challenge.Challenge.Total);
 
         Guid correctOptionId;
         using (var scope = factory.Services.CreateScope())
@@ -177,6 +177,51 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
             }
         }
 
+        var sorting = await client.GetFromJsonAsync<ChallengeResponse>(
+            $"/api/sessions/{session.Id}/current-challenge");
+        Assert.NotNull(sorting?.Sorting);
+        Assert.Equal("Sorting", sorting.Game.Type);
+        Assert.Equal(5, sorting.Challenge.Number);
+        Assert.Equal(12, sorting.Sorting.Cards.Count);
+        Assert.Equal(3, sorting.Sorting.Categories.Count);
+
+        var wrongSortingResponse = await client.PostAsJsonAsync(
+            $"/api/sessions/{session.Id}/sorting",
+            new
+            {
+                challengeId = sorting.Challenge.Id,
+                placements = sorting.Sorting.Cards.Select(card => new { optionId = card.Id, category = (string?)null })
+            });
+        wrongSortingResponse.EnsureSuccessStatusCode();
+        var wrongSortingResult = await wrongSortingResponse.Content.ReadFromJsonAsync<SortingAnswerResponse>();
+        Assert.False(wrongSortingResult?.Correct);
+        Assert.False(wrongSortingResult?.Expired);
+        Assert.Equal(9, wrongSortingResult?.IncorrectOptionIds.Count);
+        Assert.Equal(10_000, wrongSortingResult?.CurrentChallengePenaltyMilliseconds);
+        Assert.True(wrongSortingResult?.ElapsedMilliseconds >= 10_000);
+
+        List<SortingPlacementRequest> sortingPlacements;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            sortingPlacements = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+                .ChallengeOptions
+                .Where(option => option.ChallengeId == sorting.Challenge.Id)
+                .OrderBy(option => option.SortOrder)
+                .Select(option => new SortingPlacementRequest(option.Id, option.SortingCategory))
+                .ToListAsync();
+        }
+
+        var sortingResponse = await client.PostAsJsonAsync(
+            $"/api/sessions/{session.Id}/sorting",
+            new { challengeId = sorting.Challenge.Id, placements = sortingPlacements });
+        sortingResponse.EnsureSuccessStatusCode();
+        var sortingResult = await sortingResponse.Content.ReadFromJsonAsync<SortingAnswerResponse>();
+        Assert.True(sortingResult?.Correct);
+        Assert.Empty(sortingResult!.IncorrectOptionIds);
+
+        var completeResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
+        Assert.Equal(HttpStatusCode.NoContent, completeResponse.StatusCode);
+
         var completedSession = await client.GetFromJsonAsync<SessionStatusResponse>(
             $"/api/sessions/{session.Id}");
         Assert.Equal("Completed", completedSession?.Status);
@@ -313,7 +358,12 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
     }
 
     private sealed record SessionResponse(Guid Id);
-    private sealed record ChallengeResponse(GameBody Game, ChallengeBody Challenge, MatchingBody? Matching, long ElapsedMilliseconds);
+    private sealed record ChallengeResponse(
+        GameBody Game,
+        ChallengeBody Challenge,
+        MatchingBody? Matching,
+        SortingBody? Sorting,
+        long ElapsedMilliseconds);
     private sealed record GameBody(string Type);
     private sealed record ChallengeBody(
         Guid Id,
@@ -325,10 +375,18 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         List<OptionBody> Options);
     private sealed record MatchingBody(List<MatchingScenarioBody> Scenarios, List<string> Destinations);
     private sealed record MatchingScenarioBody(Guid Id, string Prompt, List<OptionBody> Options);
+    private sealed record SortingBody(List<OptionBody> Cards, List<string> Categories);
     private sealed record MatchSelectionRequest(Guid ChallengeId, Guid OptionId);
+    private sealed record SortingPlacementRequest(Guid OptionId, string? Category);
     private sealed record OptionBody(Guid Id, string Text, bool? IsCorrect);
     private sealed record AnswerResponse(bool Correct, bool Completed);
     private sealed record MatchingAnswerResponse(bool Correct, List<Guid> IncorrectChallengeIds);
+    private sealed record SortingAnswerResponse(
+        bool Correct,
+        bool Expired,
+        List<Guid> IncorrectOptionIds,
+        long CurrentChallengePenaltyMilliseconds,
+        long ElapsedMilliseconds);
     private sealed record SessionStatusResponse(string Status);
     private sealed record TimeoutResponse(bool Expired, string Message);
     private sealed record PixelRevealResponse(int PixelRevealCount, int PenaltySeconds, long ElapsedMilliseconds);

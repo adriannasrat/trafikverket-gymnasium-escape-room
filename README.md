@@ -6,7 +6,13 @@ The application is intended for event computers where teams complete configurabl
 
 ## Current status
 
-Four games are implemented: a configurable quiz, the one-to-one Risk & Safety matching board, a Digital Safety true-or-false challenge, and Pixel Hunt. In Pixel Hunt, each image starts pixelated; the player can sharpen it up to five times, adding five seconds to their total time per click. All games use server timing and validation. The protected administration supports questions, statements, scenarios, risk zones, image questions, correct answers and mappings, image uploads, activation, audit history and management of the ranked leaderboard without requiring source code changes.
+Five games are implemented. A configurable quiz, a Risk & Safety matching board, a Digital Safety true or false challenge, Pixel Hunt, and a card sorting challenge.
+
+In Pixel Hunt, each image starts pixelated, the player can then sharpen it up to five times, adding five seconds to their total time per click.
+
+In the sorting challenge, cards are dragged or tapped into Trafikverket areas while distractor cards remain in the pool, an incorrect check adds a ten second penalty.
+
+All games use server timing and validation. The protected administration supports questions, statements, scenarios, risk zones, image questions, sorting cards and categories, correct answers and mappings, image uploads, activation, audit history and management of the ranked leaderboard without requiring source code changes.
 
 ## Technology
 

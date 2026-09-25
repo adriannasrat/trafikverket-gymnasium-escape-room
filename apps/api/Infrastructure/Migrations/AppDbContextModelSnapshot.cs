@@ -178,6 +178,10 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SortingCategory")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<string>("Text")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -247,6 +251,9 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
 
                     b.Property<Guid?>("CurrentChallengeId")
                         .HasColumnType("uuid");
+
+                    b.Property<long>("CurrentChallengePenaltyMilliseconds")
+                        .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset?>("CurrentChallengeStartedAtUtc")
                         .HasColumnType("timestamp with time zone");

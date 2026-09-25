@@ -39,7 +39,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         });
 
         modelBuilder.Entity<ChallengeOption>(entity =>
-            entity.Property(option => option.Text).HasMaxLength(500));
+        {
+            entity.Property(option => option.Text).HasMaxLength(500);
+            entity.Property(option => option.SortingCategory).HasMaxLength(80);
+        });
 
         modelBuilder.Entity<GameSession>(entity =>
         {

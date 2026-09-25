@@ -241,6 +241,50 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
             updatedGames!.Single(candidate => candidate.Id == pixelGame.Id).Challenges.Count);
     }
 
+    [Fact]
+    public async Task AdminCanAddAndRemoveASortingRound()
+    {
+        await LoginAsync();
+        var games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        var sortingGame = games!.Single(candidate => candidate.Type == "Sorting");
+        var initialCount = sortingGame.Challenges.Count;
+        var seededRound = Assert.Single(sortingGame.Challenges);
+        Assert.Equal(12, seededRound.Options.Count);
+        Assert.Equal(3, seededRound.Options.Count(option => option.SortingCategory is null));
+        Assert.Equal(3, seededRound.Options
+            .Select(option => option.SortingCategory)
+            .Where(category => category is not null)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count());
+
+        using var addRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/admin/games/{sortingGame.Id}/challenges");
+        await AddAntiforgeryTokenAsync(addRequest);
+        var addResponse = await client.SendAsync(addRequest);
+        Assert.Equal(HttpStatusCode.Created, addResponse.StatusCode);
+        var added = await addResponse.Content.ReadFromJsonAsync<AdminChallengeResponse>();
+        Assert.NotNull(added);
+        Assert.Equal(5, added.Options.Count);
+        Assert.Equal(2, added.Options
+            .Select(option => option.SortingCategory)
+            .Where(category => category is not null)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count());
+
+        using var deleteRequest = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/admin/challenges/{added.Id}");
+        await AddAntiforgeryTokenAsync(deleteRequest);
+        var deleteResponse = await client.SendAsync(deleteRequest);
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        var updatedGames = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        Assert.Equal(
+            initialCount,
+            updatedGames!.Single(candidate => candidate.Id == sortingGame.Id).Challenges.Count);
+    }
+
     private async Task LoginAsync()
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
@@ -279,5 +323,10 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         int SortOrder,
         int? TimeLimitSeconds,
         List<AdminOptionResponse> Options);
-    private sealed record AdminOptionResponse(Guid Id, string Text, int SortOrder, bool IsCorrect);
+    private sealed record AdminOptionResponse(
+        Guid Id,
+        string Text,
+        int SortOrder,
+        bool IsCorrect,
+        string? SortingCategory);
 }

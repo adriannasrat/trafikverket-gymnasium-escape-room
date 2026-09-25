@@ -40,7 +40,8 @@ export function AdminPage() {
   const isMatching = game?.type === "Matching";
   const isTrueFalse = game?.type === "TrueFalse";
   const isPixelHunt = game?.type === "PixelHunt";
-  const canManageQuestions = game?.type === "Quiz" || isMatching || isTrueFalse || isPixelHunt;
+  const isSorting = game?.type === "Sorting";
+  const canManageQuestions = game?.type === "Quiz" || isMatching || isTrueFalse || isPixelHunt || isSorting;
 
   useEffect(() => {
     api
@@ -107,7 +108,7 @@ export function AdminPage() {
       const challenge = await api.createChallenge(game.id);
       updateGame({ challenges: [...game.challenges, challenge] });
       setOpenChallengeIds((current) => new Set(current).add(challenge.id));
-      setStatus(`${isMatching ? "Ett nytt scenario" : isTrueFalse ? "Ett nytt påstående" : isPixelHunt ? "En ny bildfråga" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
+      setStatus(`${isMatching ? "Ett nytt scenario" : isTrueFalse ? "Ett nytt påstående" : isPixelHunt ? "En ny bildfråga" : isSorting ? "En ny sorteringsrunda" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -123,7 +124,7 @@ export function AdminPage() {
     if (!game || !canManageQuestions || game.challenges.length <= 1) return;
     const challenge = game.challenges.find((item) => item.id === challengeId);
     if (!challenge) return;
-    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : "frågan"} ”${challenge.prompt}”?`)) return;
+    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : "frågan"} ”${challenge.prompt}”?`)) return;
 
     setMutating(challengeId);
     setStatus("");
@@ -139,7 +140,7 @@ export function AdminPage() {
         next.delete(challengeId);
         return next;
       });
-      setStatus(`${isMatching ? "Scenariot" : isTrueFalse ? "Påståendet" : isPixelHunt ? "Bildfrågan" : "Frågan"} har tagits bort från spelet.`);
+      setStatus(`${isMatching ? "Scenariot" : isTrueFalse ? "Påståendet" : isPixelHunt ? "Bildfrågan" : isSorting ? "Sorteringsrundan" : "Frågan"} har tagits bort från spelet.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -379,7 +380,7 @@ export function AdminPage() {
                     />
                   </label>
                   <label className={fieldLabel}>
-                    {isMatching ? "TID FÖR MATCHNING (SEK)" : isPixelHunt ? "TID PER BILD (SEK)" : "TID PER UPPDRAG (SEK)"}
+                    {isMatching ? "TID FÖR MATCHNING (SEK)" : isPixelHunt ? "TID PER BILD (SEK)" : isSorting ? "TID PER SORTERING (SEK)" : "TID PER UPPDRAG (SEK)"}
                     <input
                       className={field}
                       type="number"
@@ -511,6 +512,8 @@ export function AdminPage() {
                           ? "PÅSTÅENDEN I SPELET"
                           : isPixelHunt
                             ? "BILDER I SPELET"
+                            : isSorting
+                              ? "SORTERINGSRUNDOR I SPELET"
                           : "FRÅGOR I SPELET"}
                     </p>
                     <p className="m-0 text-[11px] text-[#686868]">
@@ -520,6 +523,8 @@ export function AdminPage() {
                           ? "Deltagaren avgör om varje påstående är sant eller falskt."
                           : isPixelHunt
                             ? "Bilden visas pixlad. Varje klick gör den skarpare men lägger till 5 sekunder på totaltiden."
+                            : isSorting
+                              ? "Varje kort kopplas till ett område. Kort utan målkategori ska lämnas kvar som bluffkort."
                           : "Lägg till textfrågor eller använd en bild som deltagaren ska tolka."}
                     </p>
                   </div>
@@ -542,7 +547,7 @@ export function AdminPage() {
                           : undefined
                       }
                     >
-                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : isTrueFalse ? "Lägg till påstående" : isPixelHunt ? "Lägg till bildfråga" : "Lägg till fråga"}
+                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : isTrueFalse ? "Lägg till påstående" : isPixelHunt ? "Lägg till bildfråga" : isSorting ? "Lägg till sortering" : "Lägg till fråga"}
                     </button>
                   )}
                 </div>
@@ -573,7 +578,7 @@ export function AdminPage() {
                           </span>
                           <span className="grid min-w-0 flex-1 gap-0.5">
                             <small className="text-[8px] tracking-[0.14em] text-[#777]">
-                              {isMatching ? "SCENARIO" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "BILDFRÅGA" : "UPPDRAG"}
+                              {isMatching ? "SCENARIO" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "BILDFRÅGA" : isSorting ? "SORTERING" : "UPPDRAG"}
                             </small>
                             <strong className="overflow-hidden text-[12px] text-ellipsis whitespace-nowrap">
                               {challenge.prompt}
@@ -592,7 +597,7 @@ export function AdminPage() {
                             className={`mr-[10px] inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-[6px] border border-[#c9c9c9] bg-white px-[10px] text-[9px] font-bold tracking-[0.08em] text-[#8f2424] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
                             type="button"
                             aria-label={`Ta bort uppdrag ${challengeIndex + 1}`}
-                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : isTrueFalse ? "ett påstående" : isPixelHunt ? "en bildfråga" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : "frågan"}`}
+                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : isTrueFalse ? "ett påstående" : isPixelHunt ? "en bildfråga" : isSorting ? "en sorteringsrunda" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : "frågan"}`}
                             disabled={game.challenges.length <= 1 || mutating !== null || saving}
                             onClick={() => deleteChallenge(challenge.id)}
                           >
@@ -604,7 +609,7 @@ export function AdminPage() {
                       {isOpen && (
                       <div id={contentId}>
                       <label className={`${fieldLabel} px-5 pt-5`}>
-                        {isMatching ? "SCENARIO / HÄNDELSE" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "FRÅGA OM BILDEN" : "FRÅGA / INSTRUKTION"}
+                        {isMatching ? "SCENARIO / HÄNDELSE" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "FRÅGA OM BILDEN" : isSorting ? "INSTRUKTION TILL SORTERINGEN" : "FRÅGA / INSTRUKTION"}
                         <textarea
                           className={`${field} min-h-[88px] resize-y`}
                           value={challenge.prompt}
@@ -663,7 +668,87 @@ export function AdminPage() {
                           )}
                         </div>
                       </section>
-                      {isMatching ? (
+                      {isSorting ? (
+                        <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
+                          <div className="mb-4 border-l-[3px] border-[#d70000] bg-[#fffafa] px-4 py-3">
+                            <p className="m-0 text-[9px] font-extrabold tracking-[0.12em] text-[#a32620] uppercase">
+                              KORT OCH MÅLOMRÅDEN
+                            </p>
+                            <p className="mt-1 mb-0 text-[10px] leading-[1.5] text-[#666]">
+                              Skriv samma områdesnamn på kort som hör ihop. Lämna målet tomt för bluffkort som ska ligga kvar på startytan.
+                            </p>
+                          </div>
+                          <datalist id={`sorting-categories-${challenge.id}`}>
+                            {[...new Set(challenge.options
+                              .map((option) => option.sortingCategory)
+                              .filter((category): category is string => Boolean(category)))]
+                              .map((category) => <option key={category} value={category} />)}
+                          </datalist>
+                          <div className="grid gap-3">
+                            {challenge.options.map((option, optionIndex) => (
+                              <div
+                                className="grid grid-cols-[54px_minmax(0,1fr)_minmax(150px,0.65fr)] items-end gap-3 border border-[#dedede] bg-[#fafafa] p-3 max-[720px]:grid-cols-[42px_minmax(0,1fr)]"
+                                key={option.id}
+                              >
+                                <span className={`${barlow} grid min-h-[58px] place-items-center bg-[#ededed] text-[19px] font-bold text-[#555]`}>
+                                  {(optionIndex + 1).toString().padStart(2, "0")}
+                                </span>
+                                <label className={fieldLabel}>
+                                  KORTTEXT
+                                  <input
+                                    className={field}
+                                    value={option.text}
+                                    onChange={(event) =>
+                                      updateGame({
+                                        challenges: game.challenges.map((item) =>
+                                          item.id === challenge.id
+                                            ? {
+                                                ...item,
+                                                options: item.options.map((candidate) =>
+                                                  candidate.id === option.id
+                                                    ? { ...candidate, text: event.target.value }
+                                                    : candidate,
+                                                ),
+                                              }
+                                            : item,
+                                        ),
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label className={`${fieldLabel} max-[720px]:col-start-2`}>
+                                  MÅLOMRÅDE
+                                  <input
+                                    className={field}
+                                    list={`sorting-categories-${challenge.id}`}
+                                    value={option.sortingCategory ?? ""}
+                                    placeholder="Lämnas kvar"
+                                    onChange={(event) =>
+                                      updateGame({
+                                        challenges: game.challenges.map((item) =>
+                                          item.id === challenge.id
+                                            ? {
+                                                ...item,
+                                                options: item.options.map((candidate) =>
+                                                  candidate.id === option.id
+                                                    ? {
+                                                        ...candidate,
+                                                        sortingCategory: event.target.value || null,
+                                                      }
+                                                    : candidate,
+                                                ),
+                                              }
+                                            : item,
+                                        ),
+                                      })
+                                    }
+                                  />
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : isMatching ? (
                         <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
                           <label className={fieldLabel}>
                             RÄTT RISKZON

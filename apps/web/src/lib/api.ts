@@ -10,6 +10,7 @@ import type {
   MatchingResult,
   PixelRevealResult,
   Session,
+  SortingResult,
   TimeoutResult,
 } from "../types";
 
@@ -88,6 +89,15 @@ export const api = {
     request<MatchingResult>(`/api/sessions/${sessionId}/matches`, {
       method: "POST",
       body: JSON.stringify({ challengeId, selections }),
+    }),
+  submitSorting: (
+    sessionId: string,
+    challengeId: string,
+    placements: Array<{ optionId: string; category: string | null }>,
+  ) =>
+    request<SortingResult>(`/api/sessions/${sessionId}/sorting`, {
+      method: "POST",
+      body: JSON.stringify({ challengeId, placements }),
     }),
   revealPixel: (sessionId: string, challengeId: string) =>
     request<PixelRevealResult>(`/api/sessions/${sessionId}/pixel-reveal`, {

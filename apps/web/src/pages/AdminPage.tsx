@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BrandHeader } from "../components/BrandHeader";
 import { AdminResultsPanel } from "../components/AdminResultsPanel";
+import { AdminSortingBoard } from "../components/AdminSortingBoard";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { ApiError, api } from "../lib/api";
 import type { AdminGame } from "../types";
@@ -204,6 +205,57 @@ export function AdminPage() {
       setStatus("Riskzonen har tagits bort.");
     } catch (caught) {
       setStatus(caught instanceof Error ? caught.message : "Riskzonen kunde inte tas bort.");
+    } finally {
+      setMutating(null);
+    }
+  }
+
+  async function addSortingCard(challengeId: string) {
+    if (!game || !isSorting) return;
+    setMutating(`sorting-card-add-${challengeId}`);
+    setStatus("");
+    try {
+      const option = await api.addSortingCard(challengeId);
+      updateGame({
+        challenges: game.challenges.map((challenge) =>
+          challenge.id === challengeId
+            ? { ...challenge, options: [...challenge.options, option] }
+            : challenge,
+        ),
+      });
+      setStatus("Ett nytt kort har lagts till. Ändra korttext eller målområde och spara ändringarna.");
+    } catch (caught) {
+      setStatus(caught instanceof Error ? caught.message : "Kortet kunde inte läggas till.");
+    } finally {
+      setMutating(null);
+    }
+  }
+
+  async function deleteSortingCard(challengeId: string, optionId: string) {
+    if (!game || !isSorting) return;
+    const challenge = game.challenges.find((candidate) => candidate.id === challengeId);
+    const option = challenge?.options.find((candidate) => candidate.id === optionId);
+    if (!challenge || !option || !window.confirm(`Ta bort kortet ”${option.text}”?`)) return;
+
+    setMutating(`sorting-card-delete-${optionId}`);
+    setStatus("");
+    try {
+      await api.deleteSortingCard(challengeId, optionId);
+      updateGame({
+        challenges: game.challenges.map((candidate) =>
+          candidate.id === challengeId
+            ? {
+                ...candidate,
+                options: candidate.options
+                  .filter((item) => item.id !== optionId)
+                  .map((item, index) => ({ ...item, sortOrder: index + 1 })),
+              }
+            : candidate,
+        ),
+      });
+      setStatus("Kortet har tagits bort från sorteringen.");
+    } catch (caught) {
+      setStatus(caught instanceof Error ? caught.message : "Kortet kunde inte tas bort.");
     } finally {
       setMutating(null);
     }
@@ -670,83 +722,76 @@ export function AdminPage() {
                       </section>
                       {isSorting ? (
                         <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
-                          <div className="mb-4 border-l-[3px] border-[#d70000] bg-[#fffafa] px-4 py-3">
-                            <p className="m-0 text-[9px] font-extrabold tracking-[0.12em] text-[#a32620] uppercase">
-                              KORT OCH MÅLOMRÅDEN
-                            </p>
-                            <p className="mt-1 mb-0 text-[10px] leading-[1.5] text-[#666]">
-                              Skriv samma områdesnamn på kort som hör ihop. Lämna målet tomt för bluffkort som ska ligga kvar på startytan.
-                            </p>
+                          <div className="mb-4 flex items-center justify-between gap-4 border-l-[3px] border-[#d70000] bg-[#fffafa] px-4 py-3 max-[560px]:items-start">
+                            <div>
+                              <p className="m-0 text-[9px] font-extrabold tracking-[0.12em] text-[#a32620] uppercase">
+                                KORT OCH MÅLOMRÅDEN
+                              </p>
+                              <p className="mt-1 mb-0 text-[10px] leading-[1.5] text-[#666]">
+                                Dra korten mellan målområdena. Kort på startytan blir bluffkort som deltagaren ska lämna kvar. Klicka på ett områdesnamn för att ändra det.
+                              </p>
+                            </div>
+                            <button
+                              className="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 border border-[#d70000] bg-white px-3 text-[9px] font-extrabold tracking-[0.07em] text-[#b00000] uppercase disabled:cursor-not-allowed disabled:opacity-50"
+                              type="button"
+                              disabled={mutating !== null || saving}
+                              onClick={() => void addSortingCard(challenge.id)}
+                            >
+                              <Plus size={14} />
+                              {mutating === `sorting-card-add-${challenge.id}` ? "Lägger till…" : "Lägg till kort"}
+                            </button>
                           </div>
-                          <datalist id={`sorting-categories-${challenge.id}`}>
-                            {[...new Set(challenge.options
-                              .map((option) => option.sortingCategory)
-                              .filter((category): category is string => Boolean(category)))]
-                              .map((category) => <option key={category} value={category} />)}
-                          </datalist>
-                          <div className="grid gap-3">
-                            {challenge.options.map((option, optionIndex) => (
-                              <div
-                                className="grid grid-cols-[54px_minmax(0,1fr)_minmax(150px,0.65fr)] items-end gap-3 border border-[#dedede] bg-[#fafafa] p-3 max-[720px]:grid-cols-[42px_minmax(0,1fr)]"
-                                key={option.id}
-                              >
-                                <span className={`${barlow} grid min-h-[58px] place-items-center bg-[#ededed] text-[19px] font-bold text-[#555]`}>
-                                  {(optionIndex + 1).toString().padStart(2, "0")}
-                                </span>
-                                <label className={fieldLabel}>
-                                  KORTTEXT
-                                  <input
-                                    className={field}
-                                    value={option.text}
-                                    onChange={(event) =>
-                                      updateGame({
-                                        challenges: game.challenges.map((item) =>
-                                          item.id === challenge.id
-                                            ? {
-                                                ...item,
-                                                options: item.options.map((candidate) =>
-                                                  candidate.id === option.id
-                                                    ? { ...candidate, text: event.target.value }
-                                                    : candidate,
-                                                ),
-                                              }
-                                            : item,
+                          <AdminSortingBoard
+                            options={challenge.options}
+                            disabled={mutating !== null || saving}
+                            onChangeText={(optionId, text) =>
+                              updateGame({
+                                challenges: game.challenges.map((item) =>
+                                  item.id === challenge.id
+                                    ? {
+                                        ...item,
+                                        options: item.options.map((option) =>
+                                          option.id === optionId ? { ...option, text } : option,
                                         ),
-                                      })
-                                    }
-                                  />
-                                </label>
-                                <label className={`${fieldLabel} max-[720px]:col-start-2`}>
-                                  MÅLOMRÅDE
-                                  <input
-                                    className={field}
-                                    list={`sorting-categories-${challenge.id}`}
-                                    value={option.sortingCategory ?? ""}
-                                    placeholder="Lämnas kvar"
-                                    onChange={(event) =>
-                                      updateGame({
-                                        challenges: game.challenges.map((item) =>
-                                          item.id === challenge.id
-                                            ? {
-                                                ...item,
-                                                options: item.options.map((candidate) =>
-                                                  candidate.id === option.id
-                                                    ? {
-                                                        ...candidate,
-                                                        sortingCategory: event.target.value || null,
-                                                      }
-                                                    : candidate,
-                                                ),
-                                              }
-                                            : item,
+                                      }
+                                    : item,
+                                ),
+                              })
+                            }
+                            onMove={(optionId, sortingCategory) =>
+                              updateGame({
+                                challenges: game.challenges.map((item) =>
+                                  item.id === challenge.id
+                                    ? {
+                                        ...item,
+                                        options: item.options.map((option) =>
+                                          option.id === optionId
+                                            ? { ...option, sortingCategory }
+                                            : option,
                                         ),
-                                      })
-                                    }
-                                  />
-                                </label>
-                              </div>
-                            ))}
-                          </div>
+                                      }
+                                    : item,
+                                ),
+                              })
+                            }
+                            onRenameCategory={(category, nextCategory) =>
+                              updateGame({
+                                challenges: game.challenges.map((item) =>
+                                  item.id === challenge.id
+                                    ? {
+                                        ...item,
+                                        options: item.options.map((option) =>
+                                          option.sortingCategory === category
+                                            ? { ...option, sortingCategory: nextCategory }
+                                            : option,
+                                        ),
+                                      }
+                                    : item,
+                                ),
+                              })
+                            }
+                            onDelete={(optionId) => void deleteSortingCard(challenge.id, optionId)}
+                          />
                         </div>
                       ) : isMatching ? (
                         <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">

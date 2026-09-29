@@ -149,6 +149,16 @@ export const api = {
       `/api/admin/games/${gameId}/matching-destinations/${sortOrder}`,
       { method: "DELETE" },
     ),
+  addSortingCard: (challengeId: string) =>
+    protectedRequest<AdminChallenge["options"][number]>(
+      `/api/admin/challenges/${challengeId}/sorting-cards`,
+      { method: "POST" },
+    ),
+  deleteSortingCard: (challengeId: string, optionId: string) =>
+    protectedRequest<void>(
+      `/api/admin/challenges/${challengeId}/sorting-cards/${optionId}`,
+      { method: "DELETE" },
+    ),
   deleteChallenge: (challengeId: string) =>
     protectedRequest<void>(`/api/admin/challenges/${challengeId}`, {
       method: "DELETE",

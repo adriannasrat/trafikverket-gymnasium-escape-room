@@ -285,6 +285,48 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
             updatedGames!.Single(candidate => candidate.Id == sortingGame.Id).Challenges.Count);
     }
 
+    [Fact]
+    public async Task AdminCanAddAndRemoveAnIndividualSortingCard()
+    {
+        await LoginAsync();
+        var games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        var sortingRound = Assert.Single(
+            games!.Single(candidate => candidate.Type == "Sorting").Challenges);
+        var initialCount = sortingRound.Options.Count;
+
+        using var addRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/admin/challenges/{sortingRound.Id}/sorting-cards");
+        await AddAntiforgeryTokenAsync(addRequest);
+        var addResponse = await client.SendAsync(addRequest);
+        Assert.Equal(HttpStatusCode.Created, addResponse.StatusCode);
+        var added = await addResponse.Content.ReadFromJsonAsync<AdminOptionResponse>();
+        Assert.NotNull(added);
+        Assert.Equal("Nytt kort", added.Text);
+        Assert.Equal(initialCount + 1, added.SortOrder);
+        Assert.Null(added.SortingCategory);
+
+        var gamesAfterAdd = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        var roundAfterAdd = Assert.Single(
+            gamesAfterAdd!.Single(candidate => candidate.Type == "Sorting").Challenges);
+        Assert.Equal(initialCount + 1, roundAfterAdd.Options.Count);
+
+        using var deleteRequest = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/admin/challenges/{sortingRound.Id}/sorting-cards/{added.Id}");
+        await AddAntiforgeryTokenAsync(deleteRequest);
+        var deleteResponse = await client.SendAsync(deleteRequest);
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        var gamesAfterDelete = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        var roundAfterDelete = Assert.Single(
+            gamesAfterDelete!.Single(candidate => candidate.Type == "Sorting").Challenges);
+        Assert.Equal(initialCount, roundAfterDelete.Options.Count);
+        Assert.Equal(
+            Enumerable.Range(1, initialCount),
+            roundAfterDelete.Options.OrderBy(option => option.SortOrder).Select(option => option.SortOrder));
+    }
+
     private async Task LoginAsync()
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")

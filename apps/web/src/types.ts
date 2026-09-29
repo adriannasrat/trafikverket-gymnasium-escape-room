@@ -21,7 +21,7 @@ export type Challenge = {
       id: string; prompt: string; imagePath: string | null
       options: Array<{ id: string; text: string }>
     }>
-    destinations: string[]
+    destinations: Array<{ text: string; iconKey: string }>
   }
   sorting: null | {
     cards: Array<{ id: string; text: string }>
@@ -65,6 +65,7 @@ export type AdminResult = LeaderboardEntry & {
 
 export type AdminOption = {
   id: string; text: string; sortOrder: number; isCorrect: boolean; sortingCategory: string | null
+  matchingIconKey: string | null
 }
 export type AddedMatchingOption = AdminOption & { challengeId: string }
 export type AdminChallenge = {

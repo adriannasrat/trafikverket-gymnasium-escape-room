@@ -1,13 +1,7 @@
-import {
-  CloudRain,
-  Link2,
-  MapPin,
-  School,
-  ShieldCheck,
-  TrainFront,
-} from "lucide-react";
+import { Link2, ShieldCheck } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { barlow, cx, focusRing } from "../uiStyles";
+import { getMatchingIcon } from "./matchingIcons";
 
 type Scenario = {
   id: string;
@@ -26,7 +20,7 @@ type Line = {
 
 type MatchingBoardProps = {
   scenarios: Scenario[];
-  destinations: string[];
+  destinations: Array<{ text: string; iconKey: string }>;
   connections: Record<string, string>;
   activeScenarioId: string | null;
   lockedIds: Set<string>;
@@ -35,8 +29,6 @@ type MatchingBoardProps = {
   onSelectScenario: (scenarioId: string) => void;
   onSelectDestination: (destination: string) => void;
 };
-
-const destinationIcons = [TrainFront, CloudRain, School, MapPin, ShieldCheck];
 
 export function MatchingBoard({
   scenarios,
@@ -193,10 +185,10 @@ export function MatchingBoard({
           2 · Koppla till rätt riskzon
         </p>
         <div className="grid gap-3">
-          {destinations.map((destination, index) => {
-            const Icon = destinationIcons[index % destinationIcons.length];
+          {destinations.map((destination) => {
+            const Icon = getMatchingIcon(destination.iconKey);
             const connectedScenarioId = Object.entries(connections)
-              .find(([, target]) => target === destination)?.[0];
+              .find(([, target]) => target === destination.text)?.[0];
             const locked = connectedScenarioId
               ? lockedIds.has(connectedScenarioId)
               : false;
@@ -204,10 +196,10 @@ export function MatchingBoard({
             return (
               <button
                 ref={(node) => {
-                  if (node) destinationRefs.current.set(destination, node);
-                  else destinationRefs.current.delete(destination);
+                  if (node) destinationRefs.current.set(destination.text, node);
+                  else destinationRefs.current.delete(destination.text);
                 }}
-                key={destination}
+                key={destination.text}
                 type="button"
                 className={cx(
                   `grid min-h-[108px] grid-cols-[42px_minmax(0,1fr)] items-center gap-3 border border-[#cfcfcf] bg-white p-4 text-left text-[#202020] ${focusRing}`,
@@ -217,7 +209,7 @@ export function MatchingBoard({
                   !selectable && !connectedScenarioId && "cursor-default",
                 )}
                 disabled={!selectable}
-                onClick={() => onSelectDestination(destination)}
+                onClick={() => onSelectDestination(destination.text)}
               >
                 <span className={cx(
                   "grid size-[42px] place-items-center bg-[#f9eeee] text-[#d70000]",
@@ -227,7 +219,7 @@ export function MatchingBoard({
                 </span>
                 <span className="grid gap-1">
                   <strong className={`${barlow} text-[20px] leading-none uppercase`}>
-                    {destination}
+                    {destination.text}
                   </strong>
                   <small className="text-[9px] leading-[1.4] text-[#777]">
                     {locked ? "Korrekt koppling" : connectedScenarioId ? "Kopplad" : "Väntar på händelse"}

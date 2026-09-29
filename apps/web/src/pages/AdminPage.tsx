@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BrandHeader } from "../components/BrandHeader";
+import { AdminMatchingBoard } from "../components/AdminMatchingBoard";
 import { AdminResultsPanel } from "../components/AdminResultsPanel";
 import { AdminSortingBoard } from "../components/AdminSortingBoard";
 import { LoadingScreen } from "../components/LoadingScreen";
@@ -472,90 +473,138 @@ export function AdminPage() {
                   </label>
                 </div>
                 {isMatching && game.challenges[0] && (
-                  <section className="mb-[30px] border border-[#dedede] bg-[#fafafa] p-5 max-[720px]:p-4">
-                    <div className="mb-4 flex items-end justify-between gap-5 max-[720px]:items-stretch">
-                      <div>
-                        <p className={`${eyebrow} mb-[5px]`}>RISKZONER</p>
-                        <p className="m-0 text-[11px] text-[#686868]">
-                          Dessa platser visas på matchningsbrädets högra sida.
-                        </p>
-                      </div>
-                      <button
-                        className={`${secondaryButton} shrink-0 max-[720px]:px-3`}
-                        type="button"
-                        onClick={addMatchingDestination}
-                        disabled={
-                          mutating !== null ||
-                          saving ||
-                          game.challenges[0].options.length >= 6
-                        }
-                      >
-                        <Plus size={17} /> Lägg till riskzon
-                      </button>
-                    </div>
-                    <div className="grid gap-2">
-                      {game.challenges[0].options.map((destination, index) => {
-                        const isCorrectForScenario = game.challenges.some(
-                          (challenge) => challenge.options.some(
-                            (option) => option.sortOrder === destination.sortOrder && option.isCorrect,
+                  <AdminMatchingBoard
+                    challenges={game.challenges}
+                    disabled={mutating !== null || saving}
+                    mutating={mutating}
+                    onAddDestination={() => void addMatchingDestination()}
+                    onAddScenario={() => void addChallenge()}
+                    onRenameDestination={(sortOrder, text) =>
+                      updateGame({
+                        challenges: game.challenges.map((challenge) => ({
+                          ...challenge,
+                          options: challenge.options.map((option) =>
+                            option.sortOrder === sortOrder ? { ...option, text } : option,
                           ),
-                        );
-                        return (
-                          <div
-                            className="grid grid-cols-[34px_minmax(0,1fr)_42px] items-center gap-2"
-                            key={destination.id}
-                          >
-                            <span className={`${barlow} grid size-[34px] place-items-center bg-[#f9eeee] text-[17px] font-bold text-[#d70000]`}>
-                              {index + 1}
-                            </span>
-                            <input
-                              className={field}
-                              aria-label={`Riskzon ${index + 1}`}
-                              value={destination.text}
-                              onChange={(event) =>
-                                updateGame({
-                                  challenges: game.challenges.map((challenge) => ({
-                                    ...challenge,
-                                    options: challenge.options.map((option) =>
-                                      option.sortOrder === destination.sortOrder
-                                        ? { ...option, text: event.target.value }
-                                        : option,
-                                    ),
-                                  })),
-                                })
+                        })),
+                      })
+                    }
+                    onChangeDestinationIcon={(sortOrder, matchingIconKey) =>
+                      updateGame({
+                        challenges: game.challenges.map((challenge) => ({
+                          ...challenge,
+                          options: challenge.options.map((option) =>
+                            option.sortOrder === sortOrder
+                              ? { ...option, matchingIconKey }
+                              : option,
+                          ),
+                        })),
+                      })
+                    }
+                    onMoveDestination={(sortOrder, direction) => {
+                      const adjacentSortOrder = sortOrder + direction;
+                      updateGame({
+                        challenges: game.challenges.map((challenge) => {
+                          const current = challenge.options.find(
+                            (option) => option.sortOrder === sortOrder,
+                          );
+                          const adjacent = challenge.options.find(
+                            (option) => option.sortOrder === adjacentSortOrder,
+                          );
+                          if (!current || !adjacent) return challenge;
+
+                          return {
+                            ...challenge,
+                            options: challenge.options.map((option) => {
+                              if (option.sortOrder === sortOrder) {
+                                return {
+                                  ...option,
+                                  text: adjacent.text,
+                                  matchingIconKey: adjacent.matchingIconKey,
+                                  isCorrect: adjacent.isCorrect,
+                                };
                               }
-                            />
-                            <button
-                              className={`grid size-[42px] place-items-center border border-[#c9c9c9] bg-white text-[#8f2424] disabled:cursor-not-allowed disabled:opacity-35 ${focusRing}`}
-                              type="button"
-                              aria-label={`Ta bort riskzonen ${destination.text}`}
-                              title={
-                                game.challenges[0].options.length <= 2
-                                  ? "Spelet måste ha minst två riskzoner"
-                                  : game.challenges[0].options.length <= game.challenges.length
-                                    ? "Spelet behöver minst lika många riskzoner som scenarier"
-                                  : isCorrectForScenario
-                                    ? "Byt rätt riskzon för berörda scenarier först"
-                                    : "Ta bort riskzonen"
+                              if (option.sortOrder === adjacentSortOrder) {
+                                return {
+                                  ...option,
+                                  text: current.text,
+                                  matchingIconKey: current.matchingIconKey,
+                                  isCorrect: current.isCorrect,
+                                };
                               }
-                              disabled={
-                                game.challenges[0].options.length <= 2 ||
-                                game.challenges[0].options.length <= game.challenges.length ||
-                                isCorrectForScenario ||
-                                mutating !== null ||
-                                saving
-                              }
-                              onClick={() => deleteMatchingDestination(destination.sortOrder)}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
+                              return option;
+                            }),
+                          };
+                        }),
+                      });
+                    }}
+                    onMoveScenario={(challengeId, direction) => {
+                      const current = game.challenges.find(
+                        (challenge) => challenge.id === challengeId,
+                      );
+                      if (!current) return;
+                      const adjacentSortOrder = current.sortOrder + direction;
+                      const adjacent = game.challenges.find(
+                        (challenge) => challenge.sortOrder === adjacentSortOrder,
+                      );
+                      if (!adjacent) return;
+
+                      updateGame({
+                        challenges: game.challenges.map((challenge) => {
+                          if (challenge.id === current.id) {
+                            return { ...challenge, sortOrder: adjacent.sortOrder };
+                          }
+                          if (challenge.id === adjacent.id) {
+                            return { ...challenge, sortOrder: current.sortOrder };
+                          }
+                          return challenge;
+                        }),
+                      });
+                    }}
+                    onAssignScenario={(challengeId, destinationSortOrder) => {
+                      const movedChallenge = game.challenges.find((item) => item.id === challengeId);
+                      const previousSortOrder = movedChallenge?.options.find((option) => option.isCorrect)?.sortOrder;
+                      if (!movedChallenge || previousSortOrder === undefined || previousSortOrder === destinationSortOrder) return;
+                      const displacedChallenge = game.challenges.find((item) =>
+                        item.id !== challengeId && item.options.some(
+                          (option) => option.sortOrder === destinationSortOrder && option.isCorrect,
+                        ),
+                      );
+                      updateGame({
+                        challenges: game.challenges.map((item) => {
+                          const assignedSortOrder = item.id === challengeId
+                            ? destinationSortOrder
+                            : item.id === displacedChallenge?.id
+                              ? previousSortOrder
+                              : undefined;
+                          return assignedSortOrder === undefined
+                            ? item
+                            : {
+                                ...item,
+                                options: item.options.map((option) => ({
+                                  ...option,
+                                  isCorrect: option.sortOrder === assignedSortOrder,
+                                })),
+                              };
+                        }),
+                      });
+                    }}
+                    onChangePrompt={(challengeId, prompt) =>
+                      updateGame({
+                        challenges: game.challenges.map((challenge) =>
+                          challenge.id === challengeId ? { ...challenge, prompt } : challenge,
+                        ),
+                      })
+                    }
+                    onUploadImage={(challengeId, image) => void uploadImage(challengeId, image)}
+                    onDeleteScenario={(challengeId) => void deleteChallenge(challengeId)}
+                    onDeleteDestination={(sortOrder) => void deleteMatchingDestination(sortOrder)}
+                  />
                 )}
-                <div className="mb-[18px] flex items-end justify-between gap-5 border-b border-[#dedede] pb-[17px] max-[720px]:items-stretch">
+                <div className={cx(
+                  "mb-[18px] flex items-end justify-between gap-5 border-b border-[#dedede] pb-[17px] max-[720px]:items-stretch",
+                  isMatching && "hidden",
+                )}>
                   <div>
                     <p className={`${eyebrow} mb-[5px]`}>
                       {isMatching
@@ -608,7 +657,7 @@ export function AdminPage() {
                     Den här speltypen får stöd för eget innehåll i en kommande etapp.
                   </p>
                 )}
-                <div className="grid gap-[22px]">
+                <div className={cx("grid gap-[22px]", isMatching && "hidden")}>
                   {game.challenges.map((challenge, challengeIndex) => {
                     const isOpen = openChallengeIds.has(challenge.id);
                     const contentId = `challenge-content-${challenge.id}`;

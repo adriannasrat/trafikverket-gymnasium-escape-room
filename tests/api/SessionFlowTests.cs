@@ -57,13 +57,14 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.NotNull(matching?.Matching);
         Assert.Equal("Matching", matching.Game.Type);
         Assert.Equal(3, matching.Matching.Scenarios.Count);
+        Assert.All(matching.Matching.Destinations, destination => Assert.False(string.IsNullOrWhiteSpace(destination.IconKey)));
 
         var wrongSelections = matching.Matching.Scenarios
             .Select((scenario, index) =>
             {
                 var wrongDestination = matching.Matching.Destinations[
                     (index + 1) % matching.Matching.Destinations.Count];
-                var option = scenario.Options.Single(candidate => candidate.Text == wrongDestination);
+                var option = scenario.Options.Single(candidate => candidate.Text == wrongDestination.Text);
                 return new MatchSelectionRequest(scenario.Id, option.Id);
             })
             .ToList();
@@ -373,7 +374,10 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         int QuestionTotal,
         int PixelRevealCount,
         List<OptionBody> Options);
-    private sealed record MatchingBody(List<MatchingScenarioBody> Scenarios, List<string> Destinations);
+    private sealed record MatchingBody(
+        List<MatchingScenarioBody> Scenarios,
+        List<MatchingDestinationBody> Destinations);
+    private sealed record MatchingDestinationBody(string Text, string IconKey);
     private sealed record MatchingScenarioBody(Guid Id, string Prompt, List<OptionBody> Options);
     private sealed record SortingBody(List<OptionBody> Cards, List<string> Categories);
     private sealed record MatchSelectionRequest(Guid ChallengeId, Guid OptionId);

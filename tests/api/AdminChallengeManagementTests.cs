@@ -142,6 +142,7 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         Assert.NotNull(added);
         Assert.Equal(matchingGame.Challenges.Count, added.Options.Count);
         Assert.All(added.Options, option => Assert.False(option.IsCorrect));
+        Assert.All(added.Options, option => Assert.Equal("map-pin", option.MatchingIconKey));
 
         var sortOrder = Assert.Single(added.Options.Select(option => option.SortOrder).Distinct());
         using var addScenarioRequest = new HttpRequestMessage(
@@ -173,6 +174,51 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         Assert.All(
             updatedMatchingGame.Challenges,
             challenge => Assert.Equal(originalDestinationCount, challenge.Options.Count));
+    }
+
+    [Fact]
+    public async Task AdminCanReorderMatchingScenarios()
+    {
+        await LoginAsync();
+        var games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        var matchingGame = games!.Single(candidate => candidate.Type == "Matching");
+        var ordered = matchingGame.Challenges.OrderBy(challenge => challenge.SortOrder).ToList();
+        var first = ordered[0];
+        var second = ordered[1];
+
+        using var updateRequest = new HttpRequestMessage(
+            HttpMethod.Put,
+            $"/api/admin/games/{matchingGame.Id}")
+        {
+            Content = JsonContent.Create(new
+            {
+                matchingGame.Title,
+                matchingGame.Summary,
+                matchingGame.IsActive,
+                matchingGame.DefaultTimeLimitSeconds,
+                matchingGame.SuccessMessage,
+                challenges = matchingGame.Challenges.Select(challenge => new
+                {
+                    challenge.Id,
+                    challenge.Prompt,
+                    sortOrder = challenge.Id == first.Id
+                        ? second.SortOrder
+                        : challenge.Id == second.Id
+                            ? first.SortOrder
+                            : challenge.SortOrder,
+                    challenge.TimeLimitSeconds,
+                    challenge.Options
+                })
+            })
+        };
+        await AddAntiforgeryTokenAsync(updateRequest);
+        var updateResponse = await client.SendAsync(updateRequest);
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+
+        var updatedGames = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        var updatedMatchingGame = updatedGames!.Single(candidate => candidate.Id == matchingGame.Id);
+        Assert.Equal(second.Id, updatedMatchingGame.Challenges.OrderBy(challenge => challenge.SortOrder).First().Id);
+        Assert.Equal(first.Id, updatedMatchingGame.Challenges.OrderBy(challenge => challenge.SortOrder).Skip(1).First().Id);
     }
 
     [Fact]
@@ -354,10 +400,24 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
     private sealed record SessionResponse(Guid Id);
     private sealed record SessionStatusResponse(string Status, long ElapsedMilliseconds);
     private sealed record AddedOptionsResponse(List<AddedOptionResponse> Options);
-    private sealed record AddedOptionResponse(Guid ChallengeId, Guid Id, string Text, int SortOrder, bool IsCorrect);
+    private sealed record AddedOptionResponse(
+        Guid ChallengeId,
+        Guid Id,
+        string Text,
+        int SortOrder,
+        bool IsCorrect,
+        string? MatchingIconKey);
     private sealed record ChallengeEnvelope(AdminChallengeBody Challenge);
     private sealed record AdminChallengeBody(Guid Id, string? ImagePath);
-    private sealed record AdminGameResponse(Guid Id, string Type, List<AdminChallengeResponse> Challenges);
+    private sealed record AdminGameResponse(
+        Guid Id,
+        string Type,
+        string Title,
+        string Summary,
+        bool IsActive,
+        int DefaultTimeLimitSeconds,
+        string SuccessMessage,
+        List<AdminChallengeResponse> Challenges);
     private sealed record AdminChallengeResponse(
         Guid Id,
         string Prompt,
@@ -370,5 +430,6 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         string Text,
         int SortOrder,
         bool IsCorrect,
-        string? SortingCategory);
+        string? SortingCategory,
+        string? MatchingIconKey);
 }

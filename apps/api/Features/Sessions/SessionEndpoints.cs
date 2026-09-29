@@ -130,13 +130,18 @@ public static class SessionEndpoints
                     candidate.ImagePath,
                     candidate.Options
                         .OrderBy(option => option.SortOrder)
-                        .Select(option => new MatchingOptionResponse(option.Id, option.Text))
+                        .Select(option => new MatchingOptionResponse(
+                            option.Id,
+                            option.Text,
+                            option.MatchingIconKey ?? "map-pin"))
                         .ToList()))
                 .ToListAsync(cancellationToken);
             matching = new
             {
                 scenarios,
-                destinations = scenarios.FirstOrDefault()?.Options.Select(option => option.Text).ToList() ?? []
+                destinations = scenarios.FirstOrDefault()?.Options
+                    .Select(option => new { text = option.Text, iconKey = option.MatchingIconKey })
+                    .ToList() ?? []
             };
         }
 
@@ -857,5 +862,5 @@ public static class SessionEndpoints
         string Prompt,
         string? ImagePath,
         List<MatchingOptionResponse> Options);
-    private sealed record MatchingOptionResponse(Guid Id, string Text);
+    private sealed record MatchingOptionResponse(Guid Id, string Text, string MatchingIconKey);
 }

@@ -12,6 +12,8 @@ public sealed class DatabaseInitializer(
 {
     private static readonly string[] MatchingDestinationNames =
         ["Järnvägskorsning", "Halt väglag", "Skolområde"];
+    private static readonly string[] MatchingDestinationIconKeys =
+        ["train", "weather", "school"];
 
     private static readonly Action<ILogger, Exception?> AdminCredentialsMissing =
         LoggerMessage.Define(
@@ -73,7 +75,8 @@ public sealed class DatabaseInitializer(
                     {
                         Text = text,
                         SortOrder = index + 1,
-                        IsCorrect = index == correctOption
+                        IsCorrect = index == correctOption,
+                        MatchingIconKey = MatchingDestinationIconKeys[index]
                     })
                     .ToList();
 
@@ -110,6 +113,24 @@ public sealed class DatabaseInitializer(
                         2)
                 ]
             });
+        }
+
+        var matchingGame = await db.Games
+            .AsSplitQuery()
+            .Include(game => game.Challenges.Where(challenge => challenge.IsActive))
+                .ThenInclude(challenge => challenge.Options)
+            .SingleOrDefaultAsync(game => game.Slug == "risk-och-sakerhet", cancellationToken);
+        if (matchingGame is not null)
+        {
+            foreach (var option in matchingGame.Challenges.SelectMany(challenge => challenge.Options))
+            {
+                if (!string.IsNullOrWhiteSpace(option.MatchingIconKey))
+                {
+                    continue;
+                }
+
+                option.MatchingIconKey = InferLegacyMatchingIcon(option.Text, option.SortOrder);
+            }
         }
 
         if (!await db.Games.AnyAsync(game => game.Slug == "digital-sakerhet", cancellationToken))
@@ -296,6 +317,19 @@ public sealed class DatabaseInitializer(
         }
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string InferLegacyMatchingIcon(string destinationName, int sortOrder)
+    {
+        if (destinationName.Contains("järnväg", StringComparison.OrdinalIgnoreCase)) return "train";
+        if (destinationName.Contains("halt", StringComparison.OrdinalIgnoreCase) ||
+            destinationName.Contains("väglag", StringComparison.OrdinalIgnoreCase)) return "weather";
+        if (destinationName.Contains("skol", StringComparison.OrdinalIgnoreCase)) return "school";
+
+        var iconIndex = sortOrder - 1;
+        return iconIndex >= 0 && iconIndex < MatchingDestinationIconKeys.Length
+            ? MatchingDestinationIconKeys[iconIndex]
+            : "map-pin";
     }
 
     private async Task SeedAdminAsync(CancellationToken cancellationToken)

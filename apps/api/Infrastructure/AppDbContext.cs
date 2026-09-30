@@ -42,6 +42,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.Property(option => option.Text).HasMaxLength(500);
             entity.Property(option => option.SortingCategory).HasMaxLength(80);
+            entity.Property(option => option.MatchingIconKey).HasMaxLength(40);
         });
 
         modelBuilder.Entity<GameSession>(entity =>

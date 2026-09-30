@@ -9,4 +9,5 @@ public sealed class ChallengeOption
     public int SortOrder { get; set; }
     public bool IsCorrect { get; set; }
     public string? SortingCategory { get; set; }
+    public string? MatchingIconKey { get; set; }
 }

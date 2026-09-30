@@ -8,6 +8,11 @@ namespace EscapeRoom.Api.Features.Admin;
 
 public static class AdminEndpoints
 {
+    private static readonly HashSet<string> MatchingIconKeys = new(StringComparer.Ordinal)
+    {
+        "train", "weather", "school", "map-pin", "shield", "car", "construction", "environment", "warning"
+    };
+
     public static IEndpointRouteBuilder MapAdminEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/admin")
@@ -180,6 +185,7 @@ public static class AdminEndpoints
         {
             var challenge = game.Challenges.Single(candidate => candidate.Id == challengeUpdate.Id);
             challenge.Prompt = challengeUpdate.Prompt.Trim();
+            challenge.SortOrder = challengeUpdate.SortOrder;
             challenge.TimeLimitSeconds = challengeUpdate.TimeLimitSeconds;
             foreach (var optionUpdate in challengeUpdate.Options)
             {
@@ -190,6 +196,9 @@ public static class AdminEndpoints
                     ? string.IsNullOrWhiteSpace(optionUpdate.SortingCategory)
                         ? null
                         : optionUpdate.SortingCategory.Trim()
+                    : null;
+                option.MatchingIconKey = game.Type == GameType.Matching
+                    ? optionUpdate.MatchingIconKey?.Trim() ?? "map-pin"
                     : null;
             }
         }
@@ -274,7 +283,8 @@ public static class AdminEndpoints
                     {
                         Text = option.Text,
                         SortOrder = option.SortOrder,
-                        IsCorrect = option.SortOrder == nextCorrectSortOrder
+                        IsCorrect = option.SortOrder == nextCorrectSortOrder,
+                        MatchingIconKey = option.MatchingIconKey
                     })
                     .ToList()
                 : game.Type == GameType.TrueFalse
@@ -360,7 +370,8 @@ public static class AdminEndpoints
         {
             ChallengeId = challenge.Id,
             Text = "Ny riskzon",
-            SortOrder = sortOrder
+            SortOrder = sortOrder,
+            MatchingIconKey = "map-pin"
         }).ToList();
         db.ChallengeOptions.AddRange(addedOptions);
         db.AuditEntries.Add(new AuditEntry
@@ -382,7 +393,8 @@ public static class AdminEndpoints
                 option.Id,
                 option.Text,
                 option.SortOrder,
-                option.IsCorrect
+                option.IsCorrect,
+                option.MatchingIconKey
             })
         });
     }
@@ -749,6 +761,16 @@ public static class AdminEndpoints
             return errors;
         }
 
+        var expectedChallengeSortOrders = Enumerable.Range(1, request.Challenges.Count);
+        var requestedChallengeSortOrders = request.Challenges
+            .Select(challenge => challenge.SortOrder)
+            .Order()
+            .ToArray();
+        if (!requestedChallengeSortOrders.SequenceEqual(expectedChallengeSortOrders))
+        {
+            errors["challengeOrder"] = ["Händelsernas ordning måste vara sammanhängande och utan dubbletter."];
+        }
+
         foreach (var update in request.Challenges)
         {
             var challenge = game.Challenges.Single(candidate => candidate.Id == update.Id);
@@ -796,10 +818,10 @@ public static class AdminEndpoints
                     .Select(option => new
                     {
                         SortOrder = challenge.Options.Single(existing => existing.Id == option.Id).SortOrder,
-                        Text = option.Text.Trim()
+                        Text = option.Text.Trim(),
+                        IconKey = option.MatchingIconKey?.Trim() ?? "map-pin"
                     })
                     .OrderBy(option => option.SortOrder)
-                    .Select(option => option.Text)
                     .ToArray();
             }).ToList();
             if (destinationSets.Skip(1).Any(set => !set.SequenceEqual(destinationSets[0])))
@@ -808,9 +830,15 @@ public static class AdminEndpoints
             }
 
             if (destinationSets[0].Length < 2 ||
-                destinationSets[0].Distinct(StringComparer.OrdinalIgnoreCase).Count() != destinationSets[0].Length)
+                destinationSets[0].Select(destination => destination.Text)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count() != destinationSets[0].Length)
             {
                 errors["destinations"] = ["Ange minst två riskzoner med unika namn."];
+            }
+
+            if (destinationSets[0].Any(destination => !MatchingIconKeys.Contains(destination.IconKey)))
+            {
+                errors["destinationIcons"] = ["Välj en giltig ikon för varje riskzon."];
             }
 
             if (destinationSets[0].Length < request.Challenges.Count)
@@ -915,7 +943,8 @@ public static class AdminEndpoints
         option.Text,
         option.SortOrder,
         option.IsCorrect,
-        option.SortingCategory
+        option.SortingCategory,
+        option.MatchingIconKey
     };
 
     private static long CalculateElapsedMilliseconds(GameSession session)
@@ -935,8 +964,14 @@ public static class AdminEndpoints
     public sealed record UpdateChallengeRequest(
         Guid Id,
         string Prompt,
+        int SortOrder,
         int? TimeLimitSeconds,
         List<UpdateOptionRequest> Options);
 
-    public sealed record UpdateOptionRequest(Guid Id, string Text, bool IsCorrect, string? SortingCategory);
+    public sealed record UpdateOptionRequest(
+        Guid Id,
+        string Text,
+        bool IsCorrect,
+        string? SortingCategory,
+        string? MatchingIconKey);
 }

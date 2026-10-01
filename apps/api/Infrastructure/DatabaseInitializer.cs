@@ -316,6 +316,39 @@ public sealed class DatabaseInitializer(
             });
         }
 
+        if (!await db.Games.AnyAsync(game => game.Slug == "bilda-ordet", cancellationToken))
+        {
+            static Challenge CreateWordChallenge(int sortOrder, params string[] parts) => new()
+            {
+                Prompt = "Dra orddelarna så att de bildar ett korrekt sammansatt ord.",
+                SortOrder = sortOrder,
+                TimeLimitSeconds = 30,
+                Options = parts.Select((text, index) => new ChallengeOption
+                {
+                    Text = text,
+                    SortOrder = index + 1
+                }).ToList()
+            };
+
+            db.Games.Add(new Game
+            {
+                Slug = "bilda-ordet",
+                Title = "Bilda ordet",
+                Summary = "Ordna delarna så att de tillsammans bildar ett begrepp från Trafikverkets verksamhet.",
+                Type = GameType.WordAssembly,
+                SortOrder = 6,
+                DefaultTimeLimitSeconds = 30,
+                SuccessMessage = "Rätt ordning! Delarna bildar ett begrepp som används i arbetet med Sveriges transportsystem.",
+                Challenges =
+                [
+                    CreateWordChallenge(1, "Trafik", "Informations", "System"),
+                    CreateWordChallenge(2, "Utsläpps", "Minsknings", "Strategi"),
+                    CreateWordChallenge(3, "Effektiv", "Kostnads", "Planering"),
+                    CreateWordChallenge(4, "IT", "Säkerhets", "Hantering")
+                ]
+            });
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 

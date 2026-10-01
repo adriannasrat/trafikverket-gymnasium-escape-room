@@ -6,13 +6,15 @@ The application is intended for event computers where teams complete configurabl
 
 ## Current status
 
-Five games are implemented. A configurable quiz, a Risk & Safety matching board, a Digital Safety true or false challenge, Pixel Hunt, and a card sorting challenge.
+Six games are implemented. A configurable quiz, a Risk & Safety matching board, a Digital Safety true or false challenge, Pixel Hunt, a card sorting challenge and a word assembly challenge.
 
 In Pixel Hunt, each image starts pixelated, the player can then sharpen it up to five times, adding five seconds to their total time per click.
 
 In the sorting challenge, cards are dragged or tapped into Trafikverket areas while distractor cards remain in the pool, an incorrect check adds a ten second penalty.
 
-All games use server timing and validation. The protected administration supports questions, statements, scenarios, risk zones, image questions, sorting cards and categories, correct answers and mappings, image uploads, activation, audit history and management of the ranked leaderboard without requiring source code changes.
+In the word assembly challenge, players drag or move word parts into the correct order to build Trafikverket related compound words.
+
+All games use server timing and validation. The protected administration supports questions, statements, scenarios, risk zones, image questions, sorting cards and categories, word parts and their correct order, correct answers and mappings, image uploads, activation, audit history and management of the ranked leaderboard without requiring source code changes.
 
 ## Technology
 

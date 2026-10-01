@@ -37,6 +37,10 @@ public static class AdminEndpoints
             .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapDelete("/challenges/{challengeId:guid}/sorting-cards/{optionId:guid}", DeleteSortingCardAsync)
             .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
+        group.MapPost("/challenges/{challengeId:guid}/word-parts", AddWordPartAsync)
+            .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
+        group.MapDelete("/challenges/{challengeId:guid}/word-parts/{optionId:guid}", DeleteWordPartAsync)
+            .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapDelete("/challenges/{challengeId:guid}", DeleteChallengeAsync)
             .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapPost("/challenges/{challengeId:guid}/image", UploadChallengeImageAsync)
@@ -191,6 +195,7 @@ public static class AdminEndpoints
             {
                 var option = challenge.Options.Single(candidate => candidate.Id == optionUpdate.Id);
                 option.Text = optionUpdate.Text.Trim();
+                option.SortOrder = optionUpdate.SortOrder;
                 option.IsCorrect = optionUpdate.IsCorrect;
                 option.SortingCategory = game.Type == GameType.Sorting
                     ? string.IsNullOrWhiteSpace(optionUpdate.SortingCategory)
@@ -271,6 +276,7 @@ public static class AdminEndpoints
                 GameType.TrueFalse => "Nytt påstående",
                 GameType.PixelHunt => "Vad visar bilden?",
                 GameType.Sorting => "Sortera korten till rätt område.",
+                GameType.WordAssembly => "Dra orddelarna så att de bildar ett korrekt sammansatt ord.",
                 _ => "Ny fråga"
             },
             ImagePath = game.Type == GameType.PixelHunt
@@ -309,6 +315,13 @@ public static class AdminEndpoints
                         new ChallengeOption { Text = "Kort 3", SortOrder = 3, SortingCategory = "Kategori B" },
                         new ChallengeOption { Text = "Kort 4", SortOrder = 4, SortingCategory = "Kategori B" },
                         new ChallengeOption { Text = "Bluffkort", SortOrder = 5 }
+                    ]
+                : game.Type == GameType.WordAssembly
+                    ?
+                    [
+                        new ChallengeOption { Text = "Ord", SortOrder = 1 },
+                        new ChallengeOption { Text = "Del", SortOrder = 2 },
+                        new ChallengeOption { Text = "Exempel", SortOrder = 3 }
                     ]
                 :
                 [
@@ -583,6 +596,121 @@ public static class AdminEndpoints
         return Results.NoContent();
     }
 
+    private static async Task<IResult> AddWordPartAsync(
+        Guid challengeId,
+        ClaimsPrincipal principal,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var challenge = await db.Challenges
+            .Include(candidate => candidate.Game)
+            .Include(candidate => candidate.Options)
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == challengeId && candidate.IsActive,
+                cancellationToken);
+        if (challenge is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (challenge.Game.Type != GameType.WordAssembly)
+        {
+            return Results.BadRequest(new { message = "Orddelar kan bara läggas till i spelet Bilda ordet." });
+        }
+
+        if (challenge.Options.Count >= 8)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["wordParts"] = ["Ett ord kan bestå av högst åtta delar."]
+            });
+        }
+
+        var option = new ChallengeOption
+        {
+            ChallengeId = challenge.Id,
+            Text = "Ny del",
+            SortOrder = challenge.Options.Max(candidate => (int?)candidate.SortOrder) + 1 ?? 1
+        };
+        db.ChallengeOptions.Add(option);
+        db.AuditEntries.Add(new AuditEntry
+        {
+            OccurredAtUtc = timeProvider.GetUtcNow(),
+            Actor = principal.Identity?.Name ?? "unknown",
+            Action = "created",
+            EntityType = "word-part",
+            EntityId = option.Id.ToString(),
+            Summary = $"Added a word part to challenge '{challenge.Prompt}'."
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.Created(
+            $"/api/admin/challenges/{challenge.Id}/word-parts/{option.Id}",
+            ToAdminOption(option));
+    }
+
+    private static async Task<IResult> DeleteWordPartAsync(
+        Guid challengeId,
+        Guid optionId,
+        ClaimsPrincipal principal,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var challenge = await db.Challenges
+            .Include(candidate => candidate.Game)
+            .Include(candidate => candidate.Options)
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == challengeId && candidate.IsActive,
+                cancellationToken);
+        if (challenge is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (challenge.Game.Type != GameType.WordAssembly)
+        {
+            return Results.BadRequest(new { message = "Orddelar kan bara tas bort från spelet Bilda ordet." });
+        }
+
+        var option = challenge.Options.SingleOrDefault(candidate => candidate.Id == optionId);
+        if (option is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (challenge.Options.Count <= 2)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["wordParts"] = ["Ett ord måste bestå av minst två delar."]
+            });
+        }
+
+        db.ChallengeOptions.Remove(option);
+        var remainingOptions = challenge.Options
+            .Where(candidate => candidate.Id != option.Id)
+            .OrderBy(candidate => candidate.SortOrder)
+            .ToList();
+        for (var index = 0; index < remainingOptions.Count; index++)
+        {
+            remainingOptions[index].SortOrder = index + 1;
+        }
+
+        db.AuditEntries.Add(new AuditEntry
+        {
+            OccurredAtUtc = timeProvider.GetUtcNow(),
+            Actor = principal.Identity?.Name ?? "unknown",
+            Action = "deleted",
+            EntityType = "word-part",
+            EntityId = option.Id.ToString(),
+            Summary = $"Removed word part '{option.Text}' from challenge '{challenge.Prompt}'."
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
+    }
+
     private static async Task<IResult> DeleteChallengeAsync(
         Guid challengeId,
         ClaimsPrincipal principal,
@@ -795,7 +923,8 @@ public static class AdminEndpoints
                 continue;
             }
 
-            if (game.Type != GameType.Sorting && update.Options.Count(option => option.IsCorrect) != 1)
+            if (game.Type is not GameType.Sorting and not GameType.WordAssembly &&
+                update.Options.Count(option => option.IsCorrect) != 1)
             {
                 errors[$"challenges.{update.Id}.correctAnswer"] = ["Exakt ett svar måste vara markerat som korrekt."];
             }
@@ -907,6 +1036,36 @@ public static class AdminEndpoints
             }
         }
 
+        if (game.Type == GameType.WordAssembly)
+        {
+            foreach (var update in request.Challenges)
+            {
+                if (update.Options.Count is < 2 or > 8)
+                {
+                    errors[$"challenges.{update.Id}.wordParts"] =
+                        ["Ett ord måste bestå av mellan två och åtta delar."];
+                    continue;
+                }
+
+                var requestedSortOrders = update.Options
+                    .Select(option => option.SortOrder)
+                    .Order()
+                    .ToArray();
+                if (!requestedSortOrders.SequenceEqual(Enumerable.Range(1, update.Options.Count)))
+                {
+                    errors[$"challenges.{update.Id}.wordPartOrder"] =
+                        ["Orddelarnas ordning måste vara sammanhängande och utan dubbletter."];
+                }
+
+                if (update.Options.Select(option => option.Text.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count() != update.Options.Count)
+                {
+                    errors[$"challenges.{update.Id}.wordParts"] =
+                        ["Orddelarna i samma ord måste ha unika texter."];
+                }
+            }
+        }
+
         return errors;
     }
 
@@ -971,6 +1130,7 @@ public static class AdminEndpoints
     public sealed record UpdateOptionRequest(
         Guid Id,
         string Text,
+        int SortOrder,
         bool IsCorrect,
         string? SortingCategory,
         string? MatchingIconKey);

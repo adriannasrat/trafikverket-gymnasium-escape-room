@@ -12,6 +12,7 @@ import type {
   Session,
   SortingResult,
   TimeoutResult,
+  WordAssemblyResult,
 } from "../types";
 
 export class ApiError extends Error {
@@ -99,6 +100,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ challengeId, placements }),
     }),
+  submitWordAssembly: (
+    sessionId: string,
+    challengeId: string,
+    orderedOptionIds: string[],
+  ) =>
+    request<WordAssemblyResult>(`/api/sessions/${sessionId}/word-assembly`, {
+      method: "POST",
+      body: JSON.stringify({ challengeId, orderedOptionIds }),
+    }),
   revealPixel: (sessionId: string, challengeId: string) =>
     request<PixelRevealResult>(`/api/sessions/${sessionId}/pixel-reveal`, {
       method: "POST",
@@ -157,6 +167,16 @@ export const api = {
   deleteSortingCard: (challengeId: string, optionId: string) =>
     protectedRequest<void>(
       `/api/admin/challenges/${challengeId}/sorting-cards/${optionId}`,
+      { method: "DELETE" },
+    ),
+  addWordPart: (challengeId: string) =>
+    protectedRequest<AdminChallenge["options"][number]>(
+      `/api/admin/challenges/${challengeId}/word-parts`,
+      { method: "POST" },
+    ),
+  deleteWordPart: (challengeId: string, optionId: string) =>
+    protectedRequest<void>(
+      `/api/admin/challenges/${challengeId}/word-parts/${optionId}`,
       { method: "DELETE" },
     ),
   deleteChallenge: (challengeId: string) =>

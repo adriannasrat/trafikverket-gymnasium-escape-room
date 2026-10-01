@@ -27,6 +27,9 @@ export type Challenge = {
     cards: Array<{ id: string; text: string }>
     categories: string[]
   }
+  wordAssembly: null | {
+    parts: Array<{ id: string; text: string }>
+  }
 }
 
 export type AnswerResult = {
@@ -48,6 +51,10 @@ export type SortingResult = AnswerResult & {
   incorrectOptionIds: string[]
   currentChallengePenaltyMilliseconds: number
   secondsRemaining?: number
+}
+
+export type WordAssemblyResult = AnswerResult & {
+  incorrectOptionIds: string[]
 }
 
 export type TimeoutResult = {

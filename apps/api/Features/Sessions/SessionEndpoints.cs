@@ -16,6 +16,7 @@ public static class SessionEndpoints
         group.MapPost("/{sessionId:guid}/matches", SubmitMatchesAsync);
         group.MapPost("/{sessionId:guid}/pixel-reveal", RevealPixelAsync);
         group.MapPost("/{sessionId:guid}/sorting", SubmitSortingAsync);
+        group.MapPost("/{sessionId:guid}/word-assembly", SubmitWordAssemblyAsync);
         group.MapPost("/{sessionId:guid}/timeout", RegisterTimeoutAsync);
         group.MapPost("/{sessionId:guid}/next", MoveToNextChallengeAsync);
 
@@ -160,6 +161,29 @@ public static class SessionEndpoints
             };
         }
 
+        object? wordAssembly = null;
+        if (challenge.Game.Type == GameType.WordAssembly)
+        {
+            var wordParts = challenge.Options
+                .OrderBy(option => option.SortOrder)
+                .Select(option => new WordPartResponse(option.Id, option.Text))
+                .ToList();
+            if (!awaitingNext)
+            {
+                var correctOrder = wordParts.Select(part => part.Id).ToList();
+                wordParts = wordParts.OrderBy(_ => Random.Shared.Next()).ToList();
+                if (wordParts.Select(part => part.Id).SequenceEqual(correctOrder))
+                {
+                    wordParts = [.. wordParts.Skip(1), wordParts[0]];
+                }
+            }
+
+            wordAssembly = new
+            {
+                parts = wordParts
+            };
+        }
+
         return Results.Ok(new
         {
             completed = false,
@@ -198,7 +222,8 @@ public static class SessionEndpoints
                     .Select(option => new { option.Id, option.Text })
             },
             matching,
-            sorting
+            sorting,
+            wordAssembly
         });
     }
 
@@ -627,6 +652,116 @@ public static class SessionEndpoints
         });
     }
 
+    private static async Task<IResult> SubmitWordAssemblyAsync(
+        Guid sessionId,
+        SubmitWordAssemblyRequest request,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var session = await db.GameSessions
+            .SingleOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken);
+        if (session is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (session.Status != SessionStatus.InProgress || session.CurrentChallengeId is null)
+        {
+            return Results.Conflict(new { message = "Spelsessionen är redan avslutad." });
+        }
+
+        if (session.CurrentChallengeId != request.ChallengeId)
+        {
+            return Results.BadRequest(new { message = "Orddelarna tillhör inte det aktuella uppdraget." });
+        }
+
+        if (session.CurrentChallengeStartedAtUtc is null)
+        {
+            return Results.Conflict(new { message = "Ordet är redan klart. Gå vidare när du är redo." });
+        }
+
+        var challenge = await db.Challenges
+            .Include(candidate => candidate.Game)
+            .Include(candidate => candidate.Options)
+            .SingleAsync(candidate => candidate.Id == request.ChallengeId, cancellationToken);
+        if (challenge.Game.Type != GameType.WordAssembly)
+        {
+            return Results.BadRequest(new { message = "Det aktuella uppdraget är inte ett ordbyggarspel." });
+        }
+
+        var correctOrder = challenge.Options
+            .OrderBy(option => option.SortOrder)
+            .Select(option => option.Id)
+            .ToList();
+        if (request.OrderedOptionIds.Count != correctOrder.Count ||
+            request.OrderedOptionIds.Distinct().Count() != correctOrder.Count ||
+            request.OrderedOptionIds.Any(optionId => !correctOrder.Contains(optionId)))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["orderedOptionIds"] = ["Varje orddel måste finnas med exakt en gång."]
+            });
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var timeLimit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
+        var expired = now - session.CurrentChallengeStartedAtUtc.Value >= TimeSpan.FromSeconds(timeLimit);
+        var incorrectOptionIds = request.OrderedOptionIds
+            .Where((optionId, index) => optionId != correctOrder[index])
+            .ToList();
+
+        db.ChallengeAttempts.Add(new ChallengeAttempt
+        {
+            GameSessionId = session.Id,
+            ChallengeId = challenge.Id,
+            SubmittedAtUtc = now,
+            IsCorrect = !expired && incorrectOptionIds.Count == 0,
+            WasExpired = expired
+        });
+
+        if (expired)
+        {
+            session.CurrentChallengeStartedAtUtc = now;
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Ok(new
+            {
+                correct = false,
+                expired = true,
+                message = "Tiden tog slut. Orddelarna har blandats om – försök igen.",
+                incorrectOptionIds = correctOrder,
+                challengeStartedAtUtc = now,
+                timeLimitSeconds = timeLimit,
+                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+            });
+        }
+
+        if (incorrectOptionIds.Count > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Ok(new
+            {
+                correct = false,
+                expired = false,
+                message = "Orddelarna ligger inte i rätt ordning ännu. Försök igen.",
+                incorrectOptionIds,
+                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+            });
+        }
+
+        session.CurrentChallengeStartedAtUtc = null;
+        session.PausedAtUtc = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new
+        {
+            correct = true,
+            completed = false,
+            challenge.Game.SuccessMessage,
+            incorrectOptionIds,
+            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+        });
+    }
+
     private static async Task<IResult> RevealPixelAsync(
         Guid sessionId,
         PixelRevealRequest request,
@@ -855,6 +990,7 @@ public static class SessionEndpoints
     public sealed record MatchSelectionRequest(Guid ChallengeId, Guid OptionId);
     public sealed record SubmitSortingRequest(Guid ChallengeId, List<SortingPlacementRequest> Placements);
     public sealed record SortingPlacementRequest(Guid OptionId, string? Category);
+    public sealed record SubmitWordAssemblyRequest(Guid ChallengeId, List<Guid> OrderedOptionIds);
     public sealed record ChallengeTimeoutRequest(Guid ChallengeId);
     public sealed record PixelRevealRequest(Guid ChallengeId);
     private sealed record MatchingScenarioResponse(
@@ -863,4 +999,5 @@ public static class SessionEndpoints
         string? ImagePath,
         List<MatchingOptionResponse> Options);
     private sealed record MatchingOptionResponse(Guid Id, string Text, string MatchingIconKey);
+    private sealed record WordPartResponse(Guid Id, string Text);
 }

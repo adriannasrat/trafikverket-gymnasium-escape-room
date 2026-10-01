@@ -8,6 +8,7 @@ import { MatchingBoard } from "../components/MatchingBoard";
 import { MissionRoute } from "../components/MissionRoute";
 import { PixelRevealBoard } from "../components/PixelRevealBoard";
 import { SortingBoard } from "../components/SortingBoard";
+import { WordAssemblyBoard } from "../components/WordAssemblyBoard";
 import { api } from "../lib/api";
 import { formatElapsed } from "../lib/time";
 import type { Challenge } from "../types";
@@ -40,6 +41,9 @@ export function GamePage() {
   const [sortingPlacements, setSortingPlacements] = useState<Record<string, string | null>>({});
   const [correctSortingIds, setCorrectSortingIds] = useState<Set<string>>(() => new Set());
   const [incorrectSortingIds, setIncorrectSortingIds] = useState<Set<string>>(() => new Set());
+  const [wordOrder, setWordOrder] = useState<string[]>([]);
+  const [correctWordPartIds, setCorrectWordPartIds] = useState<Set<string>>(() => new Set());
+  const [incorrectWordPartIds, setIncorrectWordPartIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState("");
 
   const loadChallenge = useCallback(async () => {
@@ -62,6 +66,10 @@ export function GamePage() {
     ));
     setCorrectSortingIds(new Set());
     setIncorrectSortingIds(new Set());
+    const wordPartIds = result.wordAssembly?.parts.map((part) => part.id) ?? [];
+    setWordOrder(wordPartIds);
+    setCorrectWordPartIds(result.challenge.awaitingNext ? new Set(wordPartIds) : new Set());
+    setIncorrectWordPartIds(new Set());
     setAwaitingNext(result.challenge.awaitingNext);
     const isMatchingChallenge = result.game.type === "Matching";
     setFeedback(
@@ -72,6 +80,8 @@ export function GamePage() {
               ? "Alla kopplingar är klara. Gå vidare när du är redo."
               : result.game.type === "Sorting"
                 ? "Alla kort är rätt sorterade. Gå vidare när du är redo."
+                : result.game.type === "WordAssembly"
+                  ? "Ordet är rätt byggt. Gå vidare när du är redo."
                 : "Frågan är klar. Gå vidare när du är redo.",
           }
         : null,
@@ -112,7 +122,15 @@ export function GamePage() {
     setTimingOut(true);
     api
       .timeout(sessionId, challengeId)
-      .then((result) => {
+      .then(async (result) => {
+        if (result.expired && data.wordAssembly) {
+          await loadChallenge();
+          setFeedback({
+            correct: false,
+            text: result.message ?? "Tiden tog slut. Försök igen.",
+          });
+          return;
+        }
         setData((current) =>
           current?.challenge.id === challengeId
             ? {
@@ -141,6 +159,9 @@ export function GamePage() {
           ));
           setCorrectSortingIds(new Set());
           setIncorrectSortingIds(new Set());
+          setWordOrder([]);
+          setCorrectWordPartIds(new Set());
+          setIncorrectWordPartIds(new Set());
           setFeedback({
             correct: false,
             text: result.message ?? "Tiden tog slut. Försök igen.",
@@ -157,7 +178,7 @@ export function GamePage() {
         });
       })
       .finally(() => setTimingOut(false));
-  }, [awaitingNext, completed, data?.challenge.id, data?.sorting?.cards, remaining, sessionId, timingOut]);
+  }, [awaitingNext, completed, data?.challenge.id, data?.sorting?.cards, data?.wordAssembly, loadChallenge, remaining, sessionId, timingOut]);
 
   async function submit() {
     if (!data || !selected || awaitingNext || timingOut) return;
@@ -401,6 +422,52 @@ export function GamePage() {
     }
   }
 
+  function reorderWordParts(order: string[]) {
+    if (awaitingNext) return;
+    setWordOrder(order);
+    setCorrectWordPartIds(new Set());
+    setIncorrectWordPartIds(new Set());
+    setFeedback(null);
+  }
+
+  async function submitWordAssembly() {
+    if (!data?.wordAssembly || awaitingNext || timingOut || wordOrder.length === 0) return;
+    setSubmitting(true);
+    setFeedback(null);
+    try {
+      const result = await api.submitWordAssembly(sessionId, data.challenge.id, wordOrder);
+      setFeedback({
+        correct: result.correct,
+        text: result.successMessage ?? result.message ?? "",
+      });
+      if (result.elapsedMilliseconds !== undefined) setElapsed(result.elapsedMilliseconds);
+
+      if (result.expired) {
+        await loadChallenge();
+        setFeedback({
+          correct: false,
+          text: result.message ?? "Tiden tog slut. Försök igen.",
+        });
+      } else if (result.correct) {
+        setCorrectWordPartIds(new Set(wordOrder));
+        setIncorrectWordPartIds(new Set());
+        setAwaitingNext(true);
+        setRemaining(0);
+      } else {
+        const incorrect = new Set(result.incorrectOptionIds);
+        setIncorrectWordPartIds(incorrect);
+        setCorrectWordPartIds(new Set(wordOrder.filter((id) => !incorrect.has(id))));
+      }
+    } catch (caught) {
+      setFeedback({
+        correct: false,
+        text: caught instanceof Error ? caught.message : "Orddelarna kunde inte kontrolleras.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function goToNextChallenge() {
     if (!awaitingNext || submitting) return;
     setSubmitting(true);
@@ -471,6 +538,7 @@ export function GamePage() {
   const isTrueFalse = data.game.type === "TrueFalse";
   const isPixelHunt = data.game.type === "PixelHunt";
   const isSorting = data.game.type === "Sorting" && data.sorting !== null;
+  const isWordAssembly = data.game.type === "WordAssembly" && data.wordAssembly !== null;
   const allScenariosConnected = isMatching &&
     data.matching!.scenarios.every(scenario => Boolean(connections[scenario.id]));
   const isLastQuestion = data.challenge.questionNumber === data.challenge.questionTotal;
@@ -485,6 +553,8 @@ export function GamePage() {
         : "Nästa spel"
       : isPixelHunt
         ? "Nästa bild"
+        : isWordAssembly
+          ? "Nästa ord"
         : "Nästa fråga";
 
   return (
@@ -502,7 +572,7 @@ export function GamePage() {
           <div className="flex justify-between gap-10 border-b border-[#dedede] pb-[25px] max-[720px]:gap-[10px]">
             <div>
               <p className={eyebrow}>
-                {isMatching ? "ETAPP" : isPixelHunt ? "BILD" : isSorting ? "SORTERING" : "FRÅGA"} {(
+                {isMatching ? "ETAPP" : isPixelHunt ? "BILD" : isSorting ? "SORTERING" : isWordAssembly ? "ORD" : "FRÅGA"} {(
                   isMatching ? data.challenge.number : data.challenge.questionNumber
                 ).toString().padStart(2, "0")} ·{" "}
                 {data.game.title.toUpperCase()}
@@ -529,7 +599,7 @@ export function GamePage() {
             remaining={remaining}
             total={data.challenge.timeLimitSeconds}
             complete={awaitingNext}
-            completeLabel={isMatching ? "KOPPLINGARNA ÄR KLARA" : isSorting ? "SORTERINGEN ÄR KLAR" : undefined}
+            completeLabel={isMatching ? "KOPPLINGARNA ÄR KLARA" : isSorting ? "SORTERINGEN ÄR KLAR" : isWordAssembly ? "ORDET ÄR KLART" : undefined}
           />
           {isPixelHunt && (
             <PixelRevealBoard
@@ -562,6 +632,16 @@ export function GamePage() {
               incorrectIds={incorrectSortingIds}
               disabled={awaitingNext || submitting || timingOut || remaining <= 0}
               onMove={moveSortingCard}
+            />
+          ) : isWordAssembly ? (
+            <WordAssemblyBoard
+              key={data.challenge.id}
+              parts={data.wordAssembly!.parts}
+              order={wordOrder}
+              correctIds={correctWordPartIds}
+              incorrectIds={incorrectWordPartIds}
+              disabled={awaitingNext || submitting || timingOut || remaining <= 0}
+              onReorder={reorderWordParts}
             />
           ) : isTrueFalse ? (
             <fieldset className="m-0 grid grid-cols-2 gap-4 border-0 p-0 max-[520px]:grid-cols-1">
@@ -668,9 +748,11 @@ export function GamePage() {
                     ? !allScenariosConnected || submitting || timingOut
                     : isSorting
                       ? submitting || timingOut
+                      : isWordAssembly
+                        ? wordOrder.length === 0 || submitting || timingOut
                       : !selected || submitting || timingOut || revealingPixel
               }
-              onClick={awaitingNext ? goToNextChallenge : isMatching ? submitMatches : isSorting ? submitSorting : submit}
+              onClick={awaitingNext ? goToNextChallenge : isMatching ? submitMatches : isSorting ? submitSorting : isWordAssembly ? submitWordAssembly : submit}
             >
               {submitting
                 ? awaitingNext
@@ -684,6 +766,8 @@ export function GamePage() {
                       ? "Kontrollera kopplingar"
                       : isSorting
                         ? "Kontrollera sortering"
+                        : isWordAssembly
+                          ? "Kontrollera ordning"
                       : "Bekräfta svar"}{" "}
               <ArrowRight size={18} />
             </button>

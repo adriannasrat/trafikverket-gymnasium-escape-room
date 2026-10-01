@@ -30,7 +30,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.NotNull(challenge);
         Assert.DoesNotContain(challenge.Challenge.Options, option => option.IsCorrect is not null);
         Assert.Equal(1, challenge.Challenge.Number);
-        Assert.Equal(5, challenge.Challenge.Total);
+        Assert.Equal(6, challenge.Challenge.Total);
 
         Guid correctOptionId;
         using (var scope = factory.Services.CreateScope())
@@ -220,8 +220,74 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.True(sortingResult?.Correct);
         Assert.Empty(sortingResult!.IncorrectOptionIds);
 
-        var completeResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
-        Assert.Equal(HttpStatusCode.NoContent, completeResponse.StatusCode);
+        var wordGameResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
+        Assert.Equal(HttpStatusCode.NoContent, wordGameResponse.StatusCode);
+
+        var wordAssembly = await client.GetFromJsonAsync<ChallengeResponse>(
+            $"/api/sessions/{session.Id}/current-challenge");
+        Assert.NotNull(wordAssembly?.WordAssembly);
+        Assert.Equal("WordAssembly", wordAssembly.Game.Type);
+        Assert.Equal(6, wordAssembly.Challenge.Number);
+        Assert.Equal(4, wordAssembly.Challenge.QuestionTotal);
+        Assert.Equal(3, wordAssembly.WordAssembly.Parts.Count);
+
+        List<Guid> firstCorrectWordOrder;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            firstCorrectWordOrder = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+                .ChallengeOptions
+                .Where(option => option.ChallengeId == wordAssembly.Challenge.Id)
+                .OrderBy(option => option.SortOrder)
+                .Select(option => option.Id)
+                .ToListAsync();
+        }
+        Assert.False(firstCorrectWordOrder.SequenceEqual(
+            wordAssembly.WordAssembly.Parts.Select(part => part.Id)));
+        var wrongWordOrder = firstCorrectWordOrder.Skip(1).Append(firstCorrectWordOrder[0]);
+        var wrongWordResponse = await client.PostAsJsonAsync(
+            $"/api/sessions/{session.Id}/word-assembly",
+            new
+            {
+                challengeId = wordAssembly.Challenge.Id,
+                orderedOptionIds = wrongWordOrder
+            });
+        wrongWordResponse.EnsureSuccessStatusCode();
+        var wrongWordResult = await wrongWordResponse.Content.ReadFromJsonAsync<WordAssemblyAnswerResponse>();
+        Assert.False(wrongWordResult?.Correct);
+        Assert.False(wrongWordResult?.Expired);
+        Assert.NotEmpty(wrongWordResult!.IncorrectOptionIds);
+
+        for (var question = 0; question < 4; question++)
+        {
+            List<Guid> correctWordOrder;
+            await using (var scope = factory.Services.CreateAsyncScope())
+            {
+                correctWordOrder = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+                    .ChallengeOptions
+                    .Where(option => option.ChallengeId == wordAssembly.Challenge.Id)
+                    .OrderBy(option => option.SortOrder)
+                    .Select(option => option.Id)
+                    .ToListAsync();
+            }
+
+            var wordResponse = await client.PostAsJsonAsync(
+                $"/api/sessions/{session.Id}/word-assembly",
+                new { challengeId = wordAssembly.Challenge.Id, orderedOptionIds = correctWordOrder });
+            wordResponse.EnsureSuccessStatusCode();
+            var wordResult = await wordResponse.Content.ReadFromJsonAsync<WordAssemblyAnswerResponse>();
+            Assert.True(wordResult?.Correct);
+            Assert.Empty(wordResult!.IncorrectOptionIds);
+
+            var advanceResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
+            Assert.Equal(HttpStatusCode.NoContent, advanceResponse.StatusCode);
+            if (question < 3)
+            {
+                wordAssembly = await client.GetFromJsonAsync<ChallengeResponse>(
+                    $"/api/sessions/{session.Id}/current-challenge");
+                Assert.NotNull(wordAssembly?.WordAssembly);
+                Assert.Equal(question + 2, wordAssembly.Challenge.QuestionNumber);
+            }
+        }
 
         var completedSession = await client.GetFromJsonAsync<SessionStatusResponse>(
             $"/api/sessions/{session.Id}");
@@ -364,6 +430,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         ChallengeBody Challenge,
         MatchingBody? Matching,
         SortingBody? Sorting,
+        WordAssemblyBody? WordAssembly,
         long ElapsedMilliseconds);
     private sealed record GameBody(string Type);
     private sealed record ChallengeBody(
@@ -380,6 +447,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
     private sealed record MatchingDestinationBody(string Text, string IconKey);
     private sealed record MatchingScenarioBody(Guid Id, string Prompt, List<OptionBody> Options);
     private sealed record SortingBody(List<OptionBody> Cards, List<string> Categories);
+    private sealed record WordAssemblyBody(List<OptionBody> Parts);
     private sealed record MatchSelectionRequest(Guid ChallengeId, Guid OptionId);
     private sealed record SortingPlacementRequest(Guid OptionId, string? Category);
     private sealed record OptionBody(Guid Id, string Text, bool? IsCorrect);
@@ -391,6 +459,10 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         List<Guid> IncorrectOptionIds,
         long CurrentChallengePenaltyMilliseconds,
         long ElapsedMilliseconds);
+    private sealed record WordAssemblyAnswerResponse(
+        bool Correct,
+        bool Expired,
+        List<Guid> IncorrectOptionIds);
     private sealed record SessionStatusResponse(string Status);
     private sealed record TimeoutResponse(bool Expired, string Message);
     private sealed record PixelRevealResponse(int PixelRevealCount, int PenaltySeconds, long ElapsedMilliseconds);

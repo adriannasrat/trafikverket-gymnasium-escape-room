@@ -19,6 +19,7 @@ import { BrandHeader } from "../components/BrandHeader";
 import { AdminMatchingBoard } from "../components/AdminMatchingBoard";
 import { AdminResultsPanel } from "../components/AdminResultsPanel";
 import { AdminSortingBoard } from "../components/AdminSortingBoard";
+import { AdminWordAssemblyBoard } from "../components/AdminWordAssemblyBoard";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { ApiError, api } from "../lib/api";
 import type { AdminGame } from "../types";
@@ -43,7 +44,8 @@ export function AdminPage() {
   const isTrueFalse = game?.type === "TrueFalse";
   const isPixelHunt = game?.type === "PixelHunt";
   const isSorting = game?.type === "Sorting";
-  const canManageQuestions = game?.type === "Quiz" || isMatching || isTrueFalse || isPixelHunt || isSorting;
+  const isWordAssembly = game?.type === "WordAssembly";
+  const canManageQuestions = game?.type === "Quiz" || isMatching || isTrueFalse || isPixelHunt || isSorting || isWordAssembly;
 
   useEffect(() => {
     api
@@ -110,7 +112,7 @@ export function AdminPage() {
       const challenge = await api.createChallenge(game.id);
       updateGame({ challenges: [...game.challenges, challenge] });
       setOpenChallengeIds((current) => new Set(current).add(challenge.id));
-      setStatus(`${isMatching ? "Ett nytt scenario" : isTrueFalse ? "Ett nytt påstående" : isPixelHunt ? "En ny bildfråga" : isSorting ? "En ny sorteringsrunda" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
+      setStatus(`${isMatching ? "Ett nytt scenario" : isTrueFalse ? "Ett nytt påstående" : isPixelHunt ? "En ny bildfråga" : isSorting ? "En ny sorteringsrunda" : isWordAssembly ? "Ett nytt ord" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -126,7 +128,7 @@ export function AdminPage() {
     if (!game || !canManageQuestions || game.challenges.length <= 1) return;
     const challenge = game.challenges.find((item) => item.id === challengeId);
     if (!challenge) return;
-    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : "frågan"} ”${challenge.prompt}”?`)) return;
+    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : isWordAssembly ? "ordet" : "frågan"} ”${challenge.prompt}”?`)) return;
 
     setMutating(challengeId);
     setStatus("");
@@ -142,7 +144,7 @@ export function AdminPage() {
         next.delete(challengeId);
         return next;
       });
-      setStatus(`${isMatching ? "Scenariot" : isTrueFalse ? "Påståendet" : isPixelHunt ? "Bildfrågan" : isSorting ? "Sorteringsrundan" : "Frågan"} har tagits bort från spelet.`);
+      setStatus(`${isMatching ? "Scenariot" : isTrueFalse ? "Påståendet" : isPixelHunt ? "Bildfrågan" : isSorting ? "Sorteringsrundan" : isWordAssembly ? "Ordet" : "Frågan"} har tagits bort från spelet.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -257,6 +259,58 @@ export function AdminPage() {
       setStatus("Kortet har tagits bort från sorteringen.");
     } catch (caught) {
       setStatus(caught instanceof Error ? caught.message : "Kortet kunde inte tas bort.");
+    } finally {
+      setMutating(null);
+    }
+  }
+
+  async function addWordPart(challengeId: string) {
+    if (!game || !isWordAssembly) return;
+    setMutating(`word-part-add-${challengeId}`);
+    setStatus("");
+    try {
+      const option = await api.addWordPart(challengeId);
+      updateGame({
+        challenges: game.challenges.map((challenge) =>
+          challenge.id === challengeId
+            ? { ...challenge, options: [...challenge.options, option] }
+            : challenge,
+        ),
+      });
+      setStatus("En ny orddel har lagts till. Ändra texten, placera den rätt och spara ändringarna.");
+    } catch (caught) {
+      setStatus(caught instanceof Error ? caught.message : "Orddelen kunde inte läggas till.");
+    } finally {
+      setMutating(null);
+    }
+  }
+
+  async function deleteWordPart(challengeId: string, optionId: string) {
+    if (!game || !isWordAssembly) return;
+    const challenge = game.challenges.find((candidate) => candidate.id === challengeId);
+    const option = challenge?.options.find((candidate) => candidate.id === optionId);
+    if (!challenge || !option || !window.confirm(`Ta bort orddelen ”${option.text}”?`)) return;
+
+    setMutating(`word-part-delete-${optionId}`);
+    setStatus("");
+    try {
+      await api.deleteWordPart(challengeId, optionId);
+      updateGame({
+        challenges: game.challenges.map((candidate) =>
+          candidate.id === challengeId
+            ? {
+                ...candidate,
+                options: candidate.options
+                  .filter((item) => item.id !== optionId)
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((item, index) => ({ ...item, sortOrder: index + 1 })),
+              }
+            : candidate,
+        ),
+      });
+      setStatus("Orddelen har tagits bort.");
+    } catch (caught) {
+      setStatus(caught instanceof Error ? caught.message : "Orddelen kunde inte tas bort.");
     } finally {
       setMutating(null);
     }
@@ -433,7 +487,7 @@ export function AdminPage() {
                     />
                   </label>
                   <label className={fieldLabel}>
-                    {isMatching ? "TID FÖR MATCHNING (SEK)" : isPixelHunt ? "TID PER BILD (SEK)" : isSorting ? "TID PER SORTERING (SEK)" : "TID PER UPPDRAG (SEK)"}
+                    {isMatching ? "TID FÖR MATCHNING (SEK)" : isPixelHunt ? "TID PER BILD (SEK)" : isSorting ? "TID PER SORTERING (SEK)" : isWordAssembly ? "TID PER ORD (SEK)" : "TID PER UPPDRAG (SEK)"}
                     <input
                       className={field}
                       type="number"
@@ -615,6 +669,8 @@ export function AdminPage() {
                             ? "BILDER I SPELET"
                             : isSorting
                               ? "SORTERINGSRUNDOR I SPELET"
+                              : isWordAssembly
+                                ? "ORD I SPELET"
                           : "FRÅGOR I SPELET"}
                     </p>
                     <p className="m-0 text-[11px] text-[#686868]">
@@ -626,6 +682,8 @@ export function AdminPage() {
                             ? "Bilden visas pixlad. Varje klick gör den skarpare men lägger till 5 sekunder på totaltiden."
                             : isSorting
                               ? "Varje kort kopplas till ett område. Kort utan målkategori ska lämnas kvar som bluffkort."
+                              : isWordAssembly
+                                ? "Varje uppdrag består av orddelar. Ordningen från vänster till höger är det rätta sammansatta ordet."
                           : "Lägg till textfrågor eller använd en bild som deltagaren ska tolka."}
                     </p>
                   </div>
@@ -648,7 +706,7 @@ export function AdminPage() {
                           : undefined
                       }
                     >
-                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : isTrueFalse ? "Lägg till påstående" : isPixelHunt ? "Lägg till bildfråga" : isSorting ? "Lägg till sortering" : "Lägg till fråga"}
+                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : isTrueFalse ? "Lägg till påstående" : isPixelHunt ? "Lägg till bildfråga" : isSorting ? "Lägg till sortering" : isWordAssembly ? "Lägg till ord" : "Lägg till fråga"}
                     </button>
                   )}
                 </div>
@@ -679,7 +737,7 @@ export function AdminPage() {
                           </span>
                           <span className="grid min-w-0 flex-1 gap-0.5">
                             <small className="text-[8px] tracking-[0.14em] text-[#777]">
-                              {isMatching ? "SCENARIO" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "BILDFRÅGA" : isSorting ? "SORTERING" : "UPPDRAG"}
+                              {isMatching ? "SCENARIO" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "BILDFRÅGA" : isSorting ? "SORTERING" : isWordAssembly ? "ORD" : "UPPDRAG"}
                             </small>
                             <strong className="overflow-hidden text-[12px] text-ellipsis whitespace-nowrap">
                               {challenge.prompt}
@@ -698,7 +756,7 @@ export function AdminPage() {
                             className={`mr-[10px] inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-[6px] border border-[#c9c9c9] bg-white px-[10px] text-[9px] font-bold tracking-[0.08em] text-[#8f2424] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
                             type="button"
                             aria-label={`Ta bort uppdrag ${challengeIndex + 1}`}
-                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : isTrueFalse ? "ett påstående" : isPixelHunt ? "en bildfråga" : isSorting ? "en sorteringsrunda" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : "frågan"}`}
+                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : isTrueFalse ? "ett påstående" : isPixelHunt ? "en bildfråga" : isSorting ? "en sorteringsrunda" : isWordAssembly ? "ett ord" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : isWordAssembly ? "ordet" : "frågan"}`}
                             disabled={game.challenges.length <= 1 || mutating !== null || saving}
                             onClick={() => deleteChallenge(challenge.id)}
                           >
@@ -710,7 +768,7 @@ export function AdminPage() {
                       {isOpen && (
                       <div id={contentId}>
                       <label className={`${fieldLabel} px-5 pt-5`}>
-                        {isMatching ? "SCENARIO / HÄNDELSE" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "FRÅGA OM BILDEN" : isSorting ? "INSTRUKTION TILL SORTERINGEN" : "FRÅGA / INSTRUKTION"}
+                        {isMatching ? "SCENARIO / HÄNDELSE" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "FRÅGA OM BILDEN" : isSorting ? "INSTRUKTION TILL SORTERINGEN" : isWordAssembly ? "INSTRUKTION TILL ORDET" : "FRÅGA / INSTRUKTION"}
                         <textarea
                           className={`${field} min-h-[88px] resize-y`}
                           value={challenge.prompt}
@@ -840,6 +898,45 @@ export function AdminPage() {
                               })
                             }
                             onDelete={(optionId) => void deleteSortingCard(challenge.id, optionId)}
+                          />
+                        </div>
+                      ) : isWordAssembly ? (
+                        <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
+                          <AdminWordAssemblyBoard
+                            options={challenge.options}
+                            disabled={mutating !== null || saving}
+                            mutating={mutating}
+                            onChangeText={(optionId, text) =>
+                              updateGame({
+                                challenges: game.challenges.map((item) =>
+                                  item.id === challenge.id
+                                    ? {
+                                        ...item,
+                                        options: item.options.map((option) =>
+                                          option.id === optionId ? { ...option, text } : option,
+                                        ),
+                                      }
+                                    : item,
+                                ),
+                              })
+                            }
+                            onReorder={(optionIds) =>
+                              updateGame({
+                                challenges: game.challenges.map((item) =>
+                                  item.id === challenge.id
+                                    ? {
+                                        ...item,
+                                        options: item.options.map((option) => ({
+                                          ...option,
+                                          sortOrder: optionIds.indexOf(option.id) + 1,
+                                        })),
+                                      }
+                                    : item,
+                                ),
+                              })
+                            }
+                            onAdd={() => void addWordPart(challenge.id)}
+                            onDelete={(optionId) => void deleteWordPart(challenge.id, optionId)}
                           />
                         </div>
                       ) : isMatching ? (

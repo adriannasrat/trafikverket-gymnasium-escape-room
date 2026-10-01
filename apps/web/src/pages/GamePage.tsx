@@ -657,11 +657,11 @@ export function GamePage() {
                   <label
                     className={cx(
                       `grid min-h-[148px] cursor-pointer place-items-center gap-2 border bg-white p-5 text-center text-[#202020] ${focusRing}`,
-                      isSelected && !awaitingNext
-                        ? "border-2 border-[#d70000] bg-[#fffafa] p-[19px] shadow-[0_5px_18px_rgba(215,0,0,0.08)]"
-                        : "border-[#cfcfcf] hover:border-[#888]",
+                      isSelected && !awaitingNext &&
+                        "!border-2 !border-[#d70000] !bg-[#fffafa] !p-[19px] shadow-[0_5px_18px_rgba(215,0,0,0.08)]",
                       isSelected && awaitingNext &&
-                        "border-2 border-[#23845e] bg-[#f3faf6] p-[19px] text-[#176b4c]",
+                        "!border-2 !border-[#23845e] !bg-[#f3faf6] !p-[19px] !text-[#176b4c] shadow-[0_5px_18px_rgba(35,132,94,0.1)]",
+                      !isSelected && !awaitingNext && "border-[#cfcfcf] hover:border-[#888]",
                       awaitingNext && "cursor-default",
                     )}
                     key={option.id}
@@ -681,8 +681,8 @@ export function GamePage() {
                     <OptionIcon
                       className={cx(
                         "size-10 text-[#777]",
-                        isSelected && !awaitingNext && "text-[#d70000]",
-                        isSelected && awaitingNext && "text-[#23845e]",
+                        isSelected && !awaitingNext && "!text-[#d70000]",
+                        isSelected && awaitingNext && "!text-[#23845e]",
                       )}
                       strokeWidth={1.8}
                     />
@@ -700,9 +700,11 @@ export function GamePage() {
               <label
                 className={cx(
                   'grid min-h-[78px] cursor-pointer grid-cols-[38px_minmax(0,1fr)] items-center gap-[15px] border border-[#cfcfcf] bg-white p-[15px] text-[#202020]',
-                  selected === option.id
-                    ? 'border-2 border-[#d70000] p-[14px] shadow-[0_5px_18px_rgba(215,0,0,0.08)] hover:border-[#d70000]'
-                    : 'hover:border-[#888]',
+                  selected === option.id && !awaitingNext &&
+                    '!border-2 !border-[#d70000] !bg-[#fffafa] !p-[14px] shadow-[0_5px_18px_rgba(215,0,0,0.08)] hover:!border-[#d70000]',
+                  selected === option.id && awaitingNext &&
+                    '!border-2 !border-[#23845e] !bg-[#f3faf6] !p-[14px] !text-[#176b4c] shadow-[0_5px_18px_rgba(35,132,94,0.1)]',
+                  selected !== option.id && !awaitingNext && 'hover:border-[#888]',
                   awaitingNext && 'cursor-default',
                 )}
                 key={option.id}
@@ -719,7 +721,11 @@ export function GamePage() {
                     setFeedback(null);
                   }}
                 />
-                <span className={cx(`${barlow} grid size-9 place-items-center bg-[#ededed] text-[18px] font-bold text-[#555]`, selected === option.id && 'bg-[#f9eeee] text-[#d70000]')}>{String.fromCharCode(65 + index)}</span>
+                <span className={cx(
+                  `${barlow} grid size-9 place-items-center bg-[#ededed] text-[18px] font-bold text-[#555]`,
+                  selected === option.id && !awaitingNext && '!bg-[#f9eeee] !text-[#d70000]',
+                  selected === option.id && awaitingNext && '!bg-[#23845e] !text-white',
+                )}>{String.fromCharCode(65 + index)}</span>
                 <strong className="text-[14px] leading-[1.45]">{option.text}</strong>
               </label>
             ))}

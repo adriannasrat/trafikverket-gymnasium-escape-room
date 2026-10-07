@@ -89,7 +89,9 @@ export function StartPage() {
           >
             Håll Sverige
             <br />
-            <mark className="bg-transparent text-[#d70000]">i rörelse.</mark>
+            <mark className="relative top-[0.1em] bg-transparent text-[#d70000]">
+              i rörelse
+            </mark>
           </h1>
           <p className="mx-auto mt-7 max-w-[600px] text-[15px] leading-[1.7] text-[#565656] max-[720px]:mt-[23px] max-[720px]:text-[14px]">
             Ta plats i Trafikverkets digitala kontrollrum. Lös uppdragen, slå

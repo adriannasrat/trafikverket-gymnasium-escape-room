@@ -57,6 +57,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
         modelBuilder.Entity<ChallengeAttempt>(entity =>
         {
+            entity.Property(attempt => attempt.SubmittedValue).HasMaxLength(20);
             entity.HasOne(attempt => attempt.GameSession)
                 .WithMany(session => session.Attempts)
                 .HasForeignKey(attempt => attempt.GameSessionId)

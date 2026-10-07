@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { BrandHeader } from "../components/BrandHeader";
 import { ChallengeTimer } from "../components/ChallengeTimer";
+import { HangmanBoard } from "../components/HangmanBoard";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { MatchingBoard } from "../components/MatchingBoard";
 import { MissionRoute } from "../components/MissionRoute";
@@ -80,8 +81,10 @@ export function GamePage() {
               ? "Alla kopplingar är klara. Gå vidare när du är redo."
               : result.game.type === "Sorting"
                 ? "Alla kort är rätt sorterade. Gå vidare när du är redo."
-                : result.game.type === "WordAssembly"
+              : result.game.type === "WordAssembly"
                   ? "Ordet är rätt byggt. Gå vidare när du är redo."
+                : result.game.type === "Hangman"
+                  ? "Signalordet är löst. Gå vidare när du är redo."
                 : "Frågan är klar. Gå vidare när du är redo.",
           }
         : null,
@@ -123,7 +126,7 @@ export function GamePage() {
     api
       .timeout(sessionId, challengeId)
       .then(async (result) => {
-        if (result.expired && data.wordAssembly) {
+        if (result.expired && (data.wordAssembly || data.hangman)) {
           await loadChallenge();
           setFeedback({
             correct: false,
@@ -178,7 +181,7 @@ export function GamePage() {
         });
       })
       .finally(() => setTimingOut(false));
-  }, [awaitingNext, completed, data?.challenge.id, data?.sorting?.cards, data?.wordAssembly, loadChallenge, remaining, sessionId, timingOut]);
+  }, [awaitingNext, completed, data?.challenge.id, data?.hangman, data?.sorting?.cards, data?.wordAssembly, loadChallenge, remaining, sessionId, timingOut]);
 
   async function submit() {
     if (!data || !selected || awaitingNext || timingOut) return;
@@ -468,6 +471,46 @@ export function GamePage() {
     }
   }
 
+  async function guessHangmanLetter(letter: string) {
+    if (!data?.hangman || awaitingNext || timingOut || submitting || remaining <= 0) return;
+    setSubmitting(true);
+    setFeedback(null);
+    try {
+      const result = await api.submitHangmanGuess(sessionId, data.challenge.id, letter);
+      const resetPattern = result.roundReset
+        ? result.hangman.pattern.map((character) => character === " " || character === "-" ? character : null)
+        : result.hangman.pattern;
+      setData({
+        ...data,
+        challenge: {
+          ...data.challenge,
+          challengeStartedAtUtc: result.challengeStartedAtUtc ?? data.challenge.challengeStartedAtUtc,
+        },
+        hangman: result.roundReset
+          ? { ...result.hangman, pattern: resetPattern, guessedLetters: [] }
+          : result.hangman,
+      });
+      setFeedback({
+        correct: result.correct,
+        text: result.successMessage ?? result.message ?? "",
+      });
+      if (result.elapsedMilliseconds !== undefined) setElapsed(result.elapsedMilliseconds);
+      if (result.roundReset) {
+        setRemaining(result.timeLimitSeconds ?? data.challenge.timeLimitSeconds);
+      } else if (result.solved) {
+        setAwaitingNext(true);
+        setRemaining(0);
+      }
+    } catch (caught) {
+      setFeedback({
+        correct: false,
+        text: caught instanceof Error ? caught.message : "Bokstaven kunde inte skickas.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function goToNextChallenge() {
     if (!awaitingNext || submitting) return;
     setSubmitting(true);
@@ -539,6 +582,7 @@ export function GamePage() {
   const isPixelHunt = data.game.type === "PixelHunt";
   const isSorting = data.game.type === "Sorting" && data.sorting !== null;
   const isWordAssembly = data.game.type === "WordAssembly" && data.wordAssembly !== null;
+  const isHangman = data.game.type === "Hangman" && data.hangman !== null;
   const allScenariosConnected = isMatching &&
     data.matching!.scenarios.every(scenario => Boolean(connections[scenario.id]));
   const isLastQuestion = data.challenge.questionNumber === data.challenge.questionTotal;
@@ -555,6 +599,8 @@ export function GamePage() {
         ? "Nästa bild"
         : isWordAssembly
           ? "Nästa ord"
+        : isHangman
+          ? "Nästa signalord"
         : "Nästa fråga";
 
   return (
@@ -572,7 +618,7 @@ export function GamePage() {
           <div className="flex justify-between gap-10 border-b border-[#dedede] pb-[25px] max-[720px]:gap-[10px]">
             <div>
               <p className={eyebrow}>
-                {isMatching ? "ETAPP" : isPixelHunt ? "BILD" : isSorting ? "SORTERING" : isWordAssembly ? "ORD" : "FRÅGA"} {(
+                {isMatching ? "ETAPP" : isPixelHunt ? "BILD" : isSorting ? "SORTERING" : isWordAssembly ? "ORD" : isHangman ? "SIGNALORD" : "FRÅGA"} {(
                   isMatching ? data.challenge.number : data.challenge.questionNumber
                 ).toString().padStart(2, "0")} ·{" "}
                 {data.game.title.toUpperCase()}
@@ -599,7 +645,7 @@ export function GamePage() {
             remaining={remaining}
             total={data.challenge.timeLimitSeconds}
             complete={awaitingNext}
-            completeLabel={isMatching ? "KOPPLINGARNA ÄR KLARA" : isSorting ? "SORTERINGEN ÄR KLAR" : isWordAssembly ? "ORDET ÄR KLART" : undefined}
+            completeLabel={isMatching ? "KOPPLINGARNA ÄR KLARA" : isSorting ? "SORTERINGEN ÄR KLAR" : isWordAssembly ? "ORDET ÄR KLART" : isHangman ? "SIGNALORDET ÄR LÖST" : undefined}
           />
           {isPixelHunt && (
             <PixelRevealBoard
@@ -643,6 +689,17 @@ export function GamePage() {
               disabled={awaitingNext || submitting || timingOut || remaining <= 0}
               onReorder={reorderWordParts}
             />
+          ) : isHangman ? (
+            <HangmanBoard
+              key={data.challenge.id}
+              pattern={data.hangman!.pattern}
+              guessedLetters={data.hangman!.guessedLetters}
+              mistakes={data.hangman!.mistakes}
+              maxMistakes={data.hangman!.maxMistakes}
+              disabled={awaitingNext || timingOut || remaining <= 0}
+              submitting={submitting}
+              onGuess={guessHangmanLetter}
+            />
           ) : isTrueFalse ? (
             <fieldset className="m-0 grid grid-cols-2 gap-4 border-0 p-0 max-[520px]:grid-cols-1">
               <legend className="absolute size-px overflow-hidden">
@@ -657,11 +714,11 @@ export function GamePage() {
                   <label
                     className={cx(
                       `grid min-h-[148px] cursor-pointer place-items-center gap-2 border bg-white p-5 text-center text-[#202020] ${focusRing}`,
-                      isSelected && !awaitingNext
-                        ? "border-2 border-[#d70000] bg-[#fffafa] p-[19px] shadow-[0_5px_18px_rgba(215,0,0,0.08)]"
-                        : "border-[#cfcfcf] hover:border-[#888]",
+                      isSelected && !awaitingNext &&
+                        "!border-2 !border-[#d70000] !bg-[#fffafa] !p-[19px] shadow-[0_5px_18px_rgba(215,0,0,0.08)]",
                       isSelected && awaitingNext &&
-                        "border-2 border-[#23845e] bg-[#f3faf6] p-[19px] text-[#176b4c]",
+                        "!border-2 !border-[#23845e] !bg-[#f3faf6] !p-[19px] !text-[#176b4c] shadow-[0_5px_18px_rgba(35,132,94,0.1)]",
+                      !isSelected && !awaitingNext && "border-[#cfcfcf] hover:border-[#888]",
                       awaitingNext && "cursor-default",
                     )}
                     key={option.id}
@@ -681,8 +738,8 @@ export function GamePage() {
                     <OptionIcon
                       className={cx(
                         "size-10 text-[#777]",
-                        isSelected && !awaitingNext && "text-[#d70000]",
-                        isSelected && awaitingNext && "text-[#23845e]",
+                        isSelected && !awaitingNext && "!text-[#d70000]",
+                        isSelected && awaitingNext && "!text-[#23845e]",
                       )}
                       strokeWidth={1.8}
                     />
@@ -700,9 +757,11 @@ export function GamePage() {
               <label
                 className={cx(
                   'grid min-h-[78px] cursor-pointer grid-cols-[38px_minmax(0,1fr)] items-center gap-[15px] border border-[#cfcfcf] bg-white p-[15px] text-[#202020]',
-                  selected === option.id
-                    ? 'border-2 border-[#d70000] p-[14px] shadow-[0_5px_18px_rgba(215,0,0,0.08)] hover:border-[#d70000]'
-                    : 'hover:border-[#888]',
+                  selected === option.id && !awaitingNext &&
+                    '!border-2 !border-[#d70000] !bg-[#fffafa] !p-[14px] shadow-[0_5px_18px_rgba(215,0,0,0.08)] hover:!border-[#d70000]',
+                  selected === option.id && awaitingNext &&
+                    '!border-2 !border-[#23845e] !bg-[#f3faf6] !p-[14px] !text-[#176b4c] shadow-[0_5px_18px_rgba(35,132,94,0.1)]',
+                  selected !== option.id && !awaitingNext && 'hover:border-[#888]',
                   awaitingNext && 'cursor-default',
                 )}
                 key={option.id}
@@ -719,7 +778,11 @@ export function GamePage() {
                     setFeedback(null);
                   }}
                 />
-                <span className={cx(`${barlow} grid size-9 place-items-center bg-[#ededed] text-[18px] font-bold text-[#555]`, selected === option.id && 'bg-[#f9eeee] text-[#d70000]')}>{String.fromCharCode(65 + index)}</span>
+                <span className={cx(
+                  `${barlow} grid size-9 place-items-center bg-[#ededed] text-[18px] font-bold text-[#555]`,
+                  selected === option.id && !awaitingNext && '!bg-[#f9eeee] !text-[#d70000]',
+                  selected === option.id && awaitingNext && '!bg-[#23845e] !text-white',
+                )}>{String.fromCharCode(65 + index)}</span>
                 <strong className="text-[14px] leading-[1.45]">{option.text}</strong>
               </label>
             ))}
@@ -739,7 +802,7 @@ export function GamePage() {
                 </p>
               )}
             </div>
-            <button
+            {(!isHangman || awaitingNext) && <button
               className={`${primaryButton} max-[720px]:w-full`}
               disabled={
                 awaitingNext
@@ -770,7 +833,7 @@ export function GamePage() {
                           ? "Kontrollera ordning"
                       : "Bekräfta svar"}{" "}
               <ArrowRight size={18} />
-            </button>
+            </button>}
           </div>
         </main>
       </div>

@@ -45,7 +45,8 @@ export function AdminPage() {
   const isPixelHunt = game?.type === "PixelHunt";
   const isSorting = game?.type === "Sorting";
   const isWordAssembly = game?.type === "WordAssembly";
-  const canManageQuestions = game?.type === "Quiz" || isMatching || isTrueFalse || isPixelHunt || isSorting || isWordAssembly;
+  const isHangman = game?.type === "Hangman";
+  const canManageQuestions = game?.type === "Quiz" || isMatching || isTrueFalse || isPixelHunt || isSorting || isWordAssembly || isHangman;
 
   useEffect(() => {
     api
@@ -112,7 +113,7 @@ export function AdminPage() {
       const challenge = await api.createChallenge(game.id);
       updateGame({ challenges: [...game.challenges, challenge] });
       setOpenChallengeIds((current) => new Set(current).add(challenge.id));
-      setStatus(`${isMatching ? "Ett nytt scenario" : isTrueFalse ? "Ett nytt påstående" : isPixelHunt ? "En ny bildfråga" : isSorting ? "En ny sorteringsrunda" : isWordAssembly ? "Ett nytt ord" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
+      setStatus(`${isMatching ? "Ett nytt scenario" : isTrueFalse ? "Ett nytt påstående" : isPixelHunt ? "En ny bildfråga" : isSorting ? "En ny sorteringsrunda" : isWordAssembly ? "Ett nytt ord" : isHangman ? "Ett nytt signalord" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -128,7 +129,7 @@ export function AdminPage() {
     if (!game || !canManageQuestions || game.challenges.length <= 1) return;
     const challenge = game.challenges.find((item) => item.id === challengeId);
     if (!challenge) return;
-    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : isWordAssembly ? "ordet" : "frågan"} ”${challenge.prompt}”?`)) return;
+    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : isWordAssembly ? "ordet" : isHangman ? "signalordet" : "frågan"} ”${challenge.prompt}”?`)) return;
 
     setMutating(challengeId);
     setStatus("");
@@ -144,7 +145,7 @@ export function AdminPage() {
         next.delete(challengeId);
         return next;
       });
-      setStatus(`${isMatching ? "Scenariot" : isTrueFalse ? "Påståendet" : isPixelHunt ? "Bildfrågan" : isSorting ? "Sorteringsrundan" : isWordAssembly ? "Ordet" : "Frågan"} har tagits bort från spelet.`);
+      setStatus(`${isMatching ? "Scenariot" : isTrueFalse ? "Påståendet" : isPixelHunt ? "Bildfrågan" : isSorting ? "Sorteringsrundan" : isWordAssembly ? "Ordet" : isHangman ? "Signalordet" : "Frågan"} har tagits bort från spelet.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -487,7 +488,7 @@ export function AdminPage() {
                     />
                   </label>
                   <label className={fieldLabel}>
-                    {isMatching ? "TID FÖR MATCHNING (SEK)" : isPixelHunt ? "TID PER BILD (SEK)" : isSorting ? "TID PER SORTERING (SEK)" : isWordAssembly ? "TID PER ORD (SEK)" : "TID PER UPPDRAG (SEK)"}
+                    {isMatching ? "TID FÖR MATCHNING (SEK)" : isPixelHunt ? "TID PER BILD (SEK)" : isSorting ? "TID PER SORTERING (SEK)" : isWordAssembly ? "TID PER ORD (SEK)" : isHangman ? "TID PER SIGNALORD (SEK)" : "TID PER UPPDRAG (SEK)"}
                     <input
                       className={field}
                       type="number"
@@ -671,6 +672,8 @@ export function AdminPage() {
                               ? "SORTERINGSRUNDOR I SPELET"
                               : isWordAssembly
                                 ? "ORD I SPELET"
+                              : isHangman
+                                ? "SIGNALORD I SPELET"
                           : "FRÅGOR I SPELET"}
                     </p>
                     <p className="m-0 text-[11px] text-[#686868]">
@@ -684,6 +687,8 @@ export function AdminPage() {
                               ? "Varje kort kopplas till ett område. Kort utan målkategori ska lämnas kvar som bluffkort."
                               : isWordAssembly
                                 ? "Varje uppdrag består av orddelar. Ordningen från vänster till höger är det rätta sammansatta ordet."
+                              : isHangman
+                                ? "Skriv en ledtråd och ett hemligt ord. Spelaren ser bara ledtråden och gissar en bokstav i taget."
                           : "Lägg till textfrågor eller använd en bild som deltagaren ska tolka."}
                     </p>
                   </div>
@@ -706,7 +711,7 @@ export function AdminPage() {
                           : undefined
                       }
                     >
-                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : isTrueFalse ? "Lägg till påstående" : isPixelHunt ? "Lägg till bildfråga" : isSorting ? "Lägg till sortering" : isWordAssembly ? "Lägg till ord" : "Lägg till fråga"}
+                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : isTrueFalse ? "Lägg till påstående" : isPixelHunt ? "Lägg till bildfråga" : isSorting ? "Lägg till sortering" : isWordAssembly ? "Lägg till ord" : isHangman ? "Lägg till signalord" : "Lägg till fråga"}
                     </button>
                   )}
                 </div>
@@ -737,7 +742,7 @@ export function AdminPage() {
                           </span>
                           <span className="grid min-w-0 flex-1 gap-0.5">
                             <small className="text-[8px] tracking-[0.14em] text-[#777]">
-                              {isMatching ? "SCENARIO" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "BILDFRÅGA" : isSorting ? "SORTERING" : isWordAssembly ? "ORD" : "UPPDRAG"}
+                              {isMatching ? "SCENARIO" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "BILDFRÅGA" : isSorting ? "SORTERING" : isWordAssembly ? "ORD" : isHangman ? "SIGNALORD" : "UPPDRAG"}
                             </small>
                             <strong className="overflow-hidden text-[12px] text-ellipsis whitespace-nowrap">
                               {challenge.prompt}
@@ -756,7 +761,7 @@ export function AdminPage() {
                             className={`mr-[10px] inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-[6px] border border-[#c9c9c9] bg-white px-[10px] text-[9px] font-bold tracking-[0.08em] text-[#8f2424] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
                             type="button"
                             aria-label={`Ta bort uppdrag ${challengeIndex + 1}`}
-                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : isTrueFalse ? "ett påstående" : isPixelHunt ? "en bildfråga" : isSorting ? "en sorteringsrunda" : isWordAssembly ? "ett ord" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : isWordAssembly ? "ordet" : "frågan"}`}
+                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : isTrueFalse ? "ett påstående" : isPixelHunt ? "en bildfråga" : isSorting ? "en sorteringsrunda" : isWordAssembly ? "ett ord" : isHangman ? "ett signalord" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : isWordAssembly ? "ordet" : isHangman ? "signalordet" : "frågan"}`}
                             disabled={game.challenges.length <= 1 || mutating !== null || saving}
                             onClick={() => deleteChallenge(challenge.id)}
                           >
@@ -768,7 +773,7 @@ export function AdminPage() {
                       {isOpen && (
                       <div id={contentId}>
                       <label className={`${fieldLabel} px-5 pt-5`}>
-                        {isMatching ? "SCENARIO / HÄNDELSE" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "FRÅGA OM BILDEN" : isSorting ? "INSTRUKTION TILL SORTERINGEN" : isWordAssembly ? "INSTRUKTION TILL ORDET" : "FRÅGA / INSTRUKTION"}
+                        {isMatching ? "SCENARIO / HÄNDELSE" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "FRÅGA OM BILDEN" : isSorting ? "INSTRUKTION TILL SORTERINGEN" : isWordAssembly ? "INSTRUKTION TILL ORDET" : isHangman ? "LEDTRÅD TILL ORDET" : "FRÅGA / INSTRUKTION"}
                         <textarea
                           className={`${field} min-h-[88px] resize-y`}
                           value={challenge.prompt}
@@ -783,7 +788,7 @@ export function AdminPage() {
                           }
                         />
                       </label>
-                      <section className="mx-5 mt-4 grid grid-cols-[150px_minmax(0,1fr)] items-center gap-4 border border-[#dedede] bg-[#fafafa] p-3 max-[720px]:mx-3 max-[720px]:grid-cols-1">
+                      {!isHangman && <section className="mx-5 mt-4 grid grid-cols-[150px_minmax(0,1fr)] items-center gap-4 border border-[#dedede] bg-[#fafafa] p-3 max-[720px]:mx-3 max-[720px]:grid-cols-1">
                         {challenge.imagePath ? (
                           <img
                             className="h-[105px] w-full bg-white object-contain p-1"
@@ -826,7 +831,7 @@ export function AdminPage() {
                             </label>
                           )}
                         </div>
-                      </section>
+                      </section>}
                       {isSorting ? (
                         <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
                           <div className="mb-4 flex items-center justify-between gap-4 border-l-[3px] border-[#d70000] bg-[#fffafa] px-4 py-3 max-[560px]:items-start">
@@ -938,6 +943,54 @@ export function AdminPage() {
                             onAdd={() => void addWordPart(challenge.id)}
                             onDelete={(optionId) => void deleteWordPart(challenge.id, optionId)}
                           />
+                        </div>
+                      ) : isHangman ? (
+                        <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
+                          <div className="border-l-[3px] border-[#d70000] bg-[#fffafa] px-4 py-3">
+                            <p className="m-0 text-[9px] font-extrabold tracking-[0.13em] text-[#a32620] uppercase">HEMLIGT ORD</p>
+                            <p className="mt-1 mb-0 text-[10px] leading-[1.5] text-[#666]">
+                              Ordet visas här för administratören, men skickas aldrig till spelarens webbläsare. Mellanslag och bindestreck är tillåtna.
+                            </p>
+                          </div>
+                          <label className={`${fieldLabel} mt-4`}>
+                            ORDET SOM SKA GISSAS
+                            <input
+                              className={`${field} ${barlow} text-[25px] font-bold tracking-[0.08em] uppercase`}
+                              value={challenge.options[0]?.text ?? ""}
+                              maxLength={40}
+                              autoComplete="off"
+                              spellCheck={false}
+                              onChange={(event) => {
+                                const text = event.target.value.toLocaleUpperCase("sv-SE");
+                                updateGame({
+                                  challenges: game.challenges.map((item) =>
+                                    item.id === challenge.id
+                                      ? {
+                                          ...item,
+                                          options: item.options.map((option, index) =>
+                                            index === 0 ? { ...option, text, isCorrect: false } : option,
+                                          ),
+                                        }
+                                      : item,
+                                  ),
+                                });
+                              }}
+                            />
+                          </label>
+                          <div className="mt-4 border border-[#dedede] bg-[#fafafa] px-4 py-5">
+                            <p className="mt-0 mb-4 text-[8px] font-extrabold tracking-[0.15em] text-[#777] uppercase">FÖRHANDSVISNING AV BOKSTAVSPLATSER</p>
+                            <div className="flex flex-wrap gap-x-2 gap-y-3">
+                              {(challenge.options[0]?.text ?? "").split("").map((character, index) =>
+                                character === " " ? (
+                                  <span key={index} className="w-4" />
+                                ) : (
+                                  <span key={index} className={`${barlow} grid h-10 w-8 place-items-center border-b-2 border-[#555] text-[24px] font-bold text-[#202020] uppercase`}>
+                                    {character === "-" ? "-" : character}
+                                  </span>
+                                ),
+                              )}
+                            </div>
+                          </div>
                         </div>
                       ) : isMatching ? (
                         <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">

@@ -30,6 +30,15 @@ export type Challenge = {
   wordAssembly: null | {
     parts: Array<{ id: string; text: string }>
   }
+  hangman: null | HangmanState
+}
+
+export type HangmanState = {
+  pattern: Array<string | null>
+  guessedLetters: string[]
+  mistakes: number
+  maxMistakes: number
+  solved: boolean
 }
 
 export type AnswerResult = {
@@ -55,6 +64,12 @@ export type SortingResult = AnswerResult & {
 
 export type WordAssemblyResult = AnswerResult & {
   incorrectOptionIds: string[]
+}
+
+export type HangmanResult = AnswerResult & {
+  solved: boolean
+  roundReset: boolean
+  hangman: HangmanState
 }
 
 export type TimeoutResult = {

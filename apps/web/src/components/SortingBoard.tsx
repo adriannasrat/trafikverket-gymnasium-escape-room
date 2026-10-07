@@ -50,9 +50,9 @@ function SortingCardButton({
       className={cx(
         `flex min-h-[52px] touch-none items-center gap-2 border bg-white px-3 py-2 text-left text-[12px] font-bold text-[#202020] shadow-[0_3px_10px_rgba(25,25,25,0.06)] ${focusRing}`,
         !disabled && "cursor-grab active:cursor-grabbing",
-        selected && "border-2 border-[#d70000] bg-[#fffafa] px-[11px] py-[7px] text-[#a32620]",
-        correct && "border-[#23845e] bg-[#f3faf6] text-[#176b4c]",
-        incorrect && "border-[#c7352d] bg-[#fff0ef] text-[#9f302b]",
+        selected && !correct && !incorrect && "!border-2 !border-[#d70000] !bg-[#fffafa] !px-[11px] !py-[7px] !text-[#a32620]",
+        correct && "!border-2 !border-[#23845e] !bg-[#eaf6f0] !px-[11px] !py-[7px] !text-[#176b4c] shadow-[0_4px_14px_rgba(35,132,94,0.12)]",
+        incorrect && "!border-2 !border-[#c7352d] !bg-[#fde8e6] !px-[11px] !py-[7px] !text-[#8f2424] shadow-[0_4px_14px_rgba(199,53,45,0.14)]",
         isDragging && "z-50 opacity-80 shadow-[0_14px_32px_rgba(25,25,25,0.18)]",
         disabled && "cursor-default",
       )}

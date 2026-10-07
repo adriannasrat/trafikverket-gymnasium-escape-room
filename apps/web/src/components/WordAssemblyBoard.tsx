@@ -57,9 +57,9 @@ function WordPartCard({
       className={cx(
         "relative grid min-w-[180px] flex-1 grid-cols-[42px_minmax(0,1fr)] border-2 bg-white shadow-[0_6px_18px_rgba(25,25,25,0.07)] max-[560px]:min-w-0 max-[560px]:grid-cols-[38px_minmax(0,1fr)]",
         !correct && !incorrect && "border-[#cfcfcf]",
-        correct && "border-[#23845e] bg-[#f3faf6]",
-        incorrect && "border-[#c7352d] bg-[#fff7f6]",
-        droppable.isOver && !disabled && "border-[#d70000] bg-[#fffafa]",
+        correct && "!border-[#23845e] !bg-[#eaf6f0] shadow-[0_6px_18px_rgba(35,132,94,0.12)]",
+        incorrect && "!border-[#c7352d] !bg-[#fde8e6] shadow-[0_6px_18px_rgba(199,53,45,0.12)]",
+        droppable.isOver && !disabled && "!border-[#d70000] !bg-[#fffafa]",
         draggable.isDragging && "z-50 opacity-80 shadow-[0_16px_35px_rgba(25,25,25,0.2)]",
       )}
       style={{
@@ -69,17 +69,25 @@ function WordPartCard({
       }}
     >
       <button
-        className={`row-span-2 grid touch-none cursor-grab place-items-center border-0 border-r border-[#dedede] bg-[#f5f5f5] text-[#777] active:cursor-grabbing disabled:cursor-default ${focusRing}`}
+        className={cx(
+          `row-span-2 grid touch-none cursor-grab place-items-center border-0 border-r border-[#dedede] bg-[#f5f5f5] text-[#777] active:cursor-grabbing disabled:cursor-default ${focusRing}`,
+          correct && "!bg-[#23845e] !text-white",
+          incorrect && "!bg-[#c7352d] !text-white",
+        )}
         type="button"
         aria-label={`Dra orddelen ${part.text}, position ${index + 1} av ${total}`}
         disabled={disabled}
         {...draggable.listeners}
         {...draggable.attributes}
       >
-        {correct ? <Check className="text-[#23845e]" size={19} /> : incorrect ? <X className="text-[#c7352d]" size={19} /> : <GripVertical size={19} />}
+        {correct ? <Check size={19} /> : incorrect ? <X size={19} /> : <GripVertical size={19} />}
       </button>
       <div className="grid min-h-[82px] place-items-center px-4 py-3 text-center">
-        <span className={`${barlow} text-[clamp(25px,3vw,35px)] leading-none font-bold text-[#202020] uppercase`}>{part.text}</span>
+        <span className={cx(
+          `${barlow} text-[clamp(25px,3vw,35px)] leading-none font-bold text-[#202020] uppercase`,
+          correct && "!text-[#176b4c]",
+          incorrect && "!text-[#8f2424]",
+        )}>{part.text}</span>
       </div>
       <div className="flex border-t border-[#e2e2e2]">
         <button

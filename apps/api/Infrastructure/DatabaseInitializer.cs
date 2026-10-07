@@ -349,6 +349,33 @@ public sealed class DatabaseInitializer(
             });
         }
 
+        if (!await db.Games.AnyAsync(game => game.Slug == "signalordet", cancellationToken))
+        {
+            db.Games.Add(new Game
+            {
+                Slug = "signalordet",
+                Title = "Signalordet",
+                Summary = "Gissa ett ord från Trafikverkets värld innan signalen visar stopp.",
+                Type = GameType.Hangman,
+                SortOrder = 7,
+                DefaultTimeLimitSeconds = 90,
+                SuccessMessage = "Rätt ord! Du höll signalen öppen och löste det sista uppdraget.",
+                Challenges =
+                [
+                    new Challenge
+                    {
+                        Prompt = "En svensk myndighet som planerar och ansvarar för långsiktig infrastruktur för väg och järnväg.",
+                        SortOrder = 1,
+                        TimeLimitSeconds = 90,
+                        Options =
+                        [
+                            new ChallengeOption { Text = "TRAFIKVERKET", SortOrder = 1 }
+                        ]
+                    }
+                ]
+            });
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 

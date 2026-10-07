@@ -196,7 +196,7 @@ public static class AdminEndpoints
                 var option = challenge.Options.Single(candidate => candidate.Id == optionUpdate.Id);
                 option.Text = optionUpdate.Text.Trim();
                 option.SortOrder = optionUpdate.SortOrder;
-                option.IsCorrect = optionUpdate.IsCorrect;
+                option.IsCorrect = game.Type == GameType.Hangman ? false : optionUpdate.IsCorrect;
                 option.SortingCategory = game.Type == GameType.Sorting
                     ? string.IsNullOrWhiteSpace(optionUpdate.SortingCategory)
                         ? null
@@ -277,6 +277,7 @@ public static class AdminEndpoints
                 GameType.PixelHunt => "Vad visar bilden?",
                 GameType.Sorting => "Sortera korten till rätt område.",
                 GameType.WordAssembly => "Dra orddelarna så att de bildar ett korrekt sammansatt ord.",
+                GameType.Hangman => "Vilket Trafikverket-ord söker vi? Använd ledtråden och gissa en bokstav i taget.",
                 _ => "Ny fråga"
             },
             ImagePath = game.Type == GameType.PixelHunt
@@ -322,6 +323,11 @@ public static class AdminEndpoints
                         new ChallengeOption { Text = "Ord", SortOrder = 1 },
                         new ChallengeOption { Text = "Del", SortOrder = 2 },
                         new ChallengeOption { Text = "Exempel", SortOrder = 3 }
+                    ]
+                : game.Type == GameType.Hangman
+                    ?
+                    [
+                        new ChallengeOption { Text = "TRAFIKVERKET", SortOrder = 1 }
                     ]
                 :
                 [
@@ -923,7 +929,7 @@ public static class AdminEndpoints
                 continue;
             }
 
-            if (game.Type is not GameType.Sorting and not GameType.WordAssembly &&
+            if (game.Type is not GameType.Sorting and not GameType.WordAssembly and not GameType.Hangman &&
                 update.Options.Count(option => option.IsCorrect) != 1)
             {
                 errors[$"challenges.{update.Id}.correctAnswer"] = ["Exakt ett svar måste vara markerat som korrekt."];
@@ -1062,6 +1068,27 @@ public static class AdminEndpoints
                 {
                     errors[$"challenges.{update.Id}.wordParts"] =
                         ["Orddelarna i samma ord måste ha unika texter."];
+                }
+            }
+        }
+
+        if (game.Type == GameType.Hangman)
+        {
+            foreach (var update in request.Challenges)
+            {
+                if (update.Options.Count != 1)
+                {
+                    errors[$"challenges.{update.Id}.hangmanAnswer"] =
+                        ["Varje ordgåta måste ha exakt ett hemligt ord."];
+                    continue;
+                }
+
+                var answer = update.Options[0].Text.Trim();
+                if (answer.Length is < 3 or > 40 ||
+                    answer.Any(character => !char.IsLetter(character) && character is not ' ' and not '-'))
+                {
+                    errors[$"challenges.{update.Id}.hangmanAnswer"] =
+                        ["Det hemliga ordet måste vara 3–40 tecken och får bara innehålla bokstäver, mellanslag och bindestreck."];
                 }
             }
         }

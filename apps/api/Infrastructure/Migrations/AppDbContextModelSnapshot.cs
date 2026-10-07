@@ -148,6 +148,10 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
                     b.Property<Guid?>("SelectedOptionId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("SubmittedValue")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<DateTimeOffset>("SubmittedAtUtc")
                         .HasColumnType("timestamp with time zone");
 

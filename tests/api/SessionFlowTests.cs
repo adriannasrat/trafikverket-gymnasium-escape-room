@@ -30,7 +30,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.NotNull(challenge);
         Assert.DoesNotContain(challenge.Challenge.Options, option => option.IsCorrect is not null);
         Assert.Equal(1, challenge.Challenge.Number);
-        Assert.Equal(6, challenge.Challenge.Total);
+        Assert.Equal(7, challenge.Challenge.Total);
 
         Guid correctOptionId;
         using (var scope = factory.Services.CreateScope())
@@ -289,6 +289,44 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
             }
         }
 
+        var hangman = await client.GetFromJsonAsync<ChallengeResponse>(
+            $"/api/sessions/{session.Id}/current-challenge");
+        Assert.NotNull(hangman?.Hangman);
+        Assert.Equal("Hangman", hangman.Game.Type);
+        Assert.Equal(7, hangman.Challenge.Number);
+        Assert.Empty(hangman.Challenge.Options);
+        Assert.All(hangman.Hangman.Pattern, character => Assert.Null(character));
+
+        var wrongGuessResponse = await client.PostAsJsonAsync(
+            $"/api/sessions/{session.Id}/hangman-guesses",
+            new { challengeId = hangman.Challenge.Id, letter = "Z" });
+        wrongGuessResponse.EnsureSuccessStatusCode();
+        var wrongGuess = await wrongGuessResponse.Content.ReadFromJsonAsync<HangmanAnswerResponse>();
+        Assert.False(wrongGuess?.Correct);
+        Assert.False(wrongGuess?.Solved);
+        Assert.Equal(1, wrongGuess?.Hangman.Mistakes);
+
+        var persistedHangman = await client.GetFromJsonAsync<ChallengeResponse>(
+            $"/api/sessions/{session.Id}/current-challenge");
+        Assert.Contains("Z", persistedHangman!.Hangman!.GuessedLetters);
+        Assert.Equal(1, persistedHangman.Hangman.Mistakes);
+
+        HangmanAnswerResponse? solvedHangman = null;
+        foreach (var letter in new[] { "T", "R", "A", "F", "I", "K", "V", "E" })
+        {
+            var guessResponse = await client.PostAsJsonAsync(
+                $"/api/sessions/{session.Id}/hangman-guesses",
+                new { challengeId = hangman.Challenge.Id, letter });
+            guessResponse.EnsureSuccessStatusCode();
+            solvedHangman = await guessResponse.Content.ReadFromJsonAsync<HangmanAnswerResponse>();
+        }
+        Assert.True(solvedHangman?.Solved);
+        Assert.True(solvedHangman?.Correct);
+        Assert.DoesNotContain(solvedHangman!.Hangman.Pattern, character => character is null);
+
+        var completeResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
+        Assert.Equal(HttpStatusCode.NoContent, completeResponse.StatusCode);
+
         var completedSession = await client.GetFromJsonAsync<SessionStatusResponse>(
             $"/api/sessions/{session.Id}");
         Assert.Equal("Completed", completedSession?.Status);
@@ -334,6 +372,51 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.True(attempt.WasExpired);
         Assert.False(attempt.IsCorrect);
         Assert.Null(attempt.SelectedOptionId);
+    }
+
+    [Fact]
+    public async Task SixWrongSignalWordGuessesResetTheRoundAndAddPenalty()
+    {
+        var started = await client.PostAsJsonAsync("/api/sessions/", new { playerName = "Signaltestaren" });
+        started.EnsureSuccessStatusCode();
+        var session = await started.Content.ReadFromJsonAsync<SessionResponse>();
+        Assert.NotNull(session);
+
+        Guid hangmanChallengeId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            hangmanChallengeId = await db.Challenges
+                .Where(challenge => challenge.Game.Type == EscapeRoom.Api.Domain.GameType.Hangman)
+                .Select(challenge => challenge.Id)
+                .SingleAsync();
+            var storedSession = await db.GameSessions.SingleAsync(candidate => candidate.Id == session.Id);
+            storedSession.CurrentChallengeId = hangmanChallengeId;
+            storedSession.CurrentChallengeStartedAtUtc = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        HangmanAnswerResponse? lastResult = null;
+        foreach (var letter in new[] { "B", "C", "D", "G", "H", "J" })
+        {
+            var response = await client.PostAsJsonAsync(
+                $"/api/sessions/{session.Id}/hangman-guesses",
+                new { challengeId = hangmanChallengeId, letter });
+            response.EnsureSuccessStatusCode();
+            lastResult = await response.Content.ReadFromJsonAsync<HangmanAnswerResponse>();
+        }
+
+        Assert.True(lastResult?.RoundReset);
+        Assert.Equal(6, lastResult?.Hangman.Mistakes);
+        var restarted = await client.GetFromJsonAsync<ChallengeResponse>(
+            $"/api/sessions/{session.Id}/current-challenge");
+        Assert.Empty(restarted!.Hangman!.GuessedLetters);
+        Assert.Equal(0, restarted.Hangman.Mistakes);
+
+        await using var verificationScope = factory.Services.CreateAsyncScope();
+        var verifiedSession = await verificationScope.ServiceProvider.GetRequiredService<AppDbContext>()
+            .GameSessions.SingleAsync(candidate => candidate.Id == session.Id);
+        Assert.Equal(10_000, verifiedSession.TotalPenaltyMilliseconds);
     }
 
     [Fact]
@@ -431,6 +514,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         MatchingBody? Matching,
         SortingBody? Sorting,
         WordAssemblyBody? WordAssembly,
+        HangmanBody? Hangman,
         long ElapsedMilliseconds);
     private sealed record GameBody(string Type);
     private sealed record ChallengeBody(
@@ -448,6 +532,12 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
     private sealed record MatchingScenarioBody(Guid Id, string Prompt, List<OptionBody> Options);
     private sealed record SortingBody(List<OptionBody> Cards, List<string> Categories);
     private sealed record WordAssemblyBody(List<OptionBody> Parts);
+    private sealed record HangmanBody(
+        List<string?> Pattern,
+        List<string> GuessedLetters,
+        int Mistakes,
+        int MaxMistakes,
+        bool Solved);
     private sealed record MatchSelectionRequest(Guid ChallengeId, Guid OptionId);
     private sealed record SortingPlacementRequest(Guid OptionId, string? Category);
     private sealed record OptionBody(Guid Id, string Text, bool? IsCorrect);
@@ -463,6 +553,11 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         bool Correct,
         bool Expired,
         List<Guid> IncorrectOptionIds);
+    private sealed record HangmanAnswerResponse(
+        bool Correct,
+        bool Solved,
+        bool RoundReset,
+        HangmanBody Hangman);
     private sealed record SessionStatusResponse(string Status);
     private sealed record TimeoutResponse(bool Expired, string Message);
     private sealed record PixelRevealResponse(int PixelRevealCount, int PenaltySeconds, long ElapsedMilliseconds);

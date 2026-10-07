@@ -6,6 +6,9 @@ namespace EscapeRoom.Api.Features.Sessions;
 
 public static class SessionEndpoints
 {
+    private const string HangmanAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ";
+    private const int HangmanMaximumMistakes = 6;
+
     public static IEndpointRouteBuilder MapSessionEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/sessions").WithTags("Sessions");
@@ -17,6 +20,7 @@ public static class SessionEndpoints
         group.MapPost("/{sessionId:guid}/pixel-reveal", RevealPixelAsync);
         group.MapPost("/{sessionId:guid}/sorting", SubmitSortingAsync);
         group.MapPost("/{sessionId:guid}/word-assembly", SubmitWordAssemblyAsync);
+        group.MapPost("/{sessionId:guid}/hangman-guesses", SubmitHangmanGuessAsync);
         group.MapPost("/{sessionId:guid}/timeout", RegisterTimeoutAsync);
         group.MapPost("/{sessionId:guid}/next", MoveToNextChallengeAsync);
 
@@ -184,6 +188,23 @@ public static class SessionEndpoints
             };
         }
 
+        object? hangman = null;
+        if (challenge.Game.Type == GameType.Hangman)
+        {
+            var answer = NormalizeHangmanAnswer(challenge.Options.Single().Text);
+            var guessedLetters = awaitingNext
+                ? answer.Where(char.IsLetter).Select(character => character.ToString()).Distinct().ToList()
+                : await db.ChallengeAttempts.AsNoTracking()
+                    .Where(attempt => attempt.GameSessionId == session.Id &&
+                        attempt.ChallengeId == challenge.Id &&
+                        attempt.SubmittedValue != null &&
+                        attempt.SubmittedAtUtc > startedAt)
+                    .Select(attempt => attempt.SubmittedValue!)
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
+            hangman = BuildHangmanState(answer, guessedLetters);
+        }
+
         return Results.Ok(new
         {
             completed = false,
@@ -217,13 +238,162 @@ public static class SessionEndpoints
                 secondsRemaining = Math.Max(
                     0,
                     limit - elapsed.TotalSeconds - currentChallengePenaltyMilliseconds / 1000d),
-                options = challenge.Options
-                    .OrderBy(option => option.SortOrder)
-                    .Select(option => new { option.Id, option.Text })
+                options = challenge.Game.Type == GameType.Hangman
+                    ? new List<ChallengeOptionResponse>()
+                    : challenge.Options
+                        .OrderBy(option => option.SortOrder)
+                        .Select(option => new ChallengeOptionResponse(option.Id, option.Text))
+                        .ToList()
             },
             matching,
             sorting,
-            wordAssembly
+            wordAssembly,
+            hangman
+        });
+    }
+
+    private static async Task<IResult> SubmitHangmanGuessAsync(
+        Guid sessionId,
+        SubmitHangmanGuessRequest request,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var session = await db.GameSessions
+            .SingleOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken);
+        if (session is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (session.Status != SessionStatus.InProgress || session.CurrentChallengeId is null)
+        {
+            return Results.Conflict(new { message = "Spelsessionen är redan avslutad." });
+        }
+
+        if (session.CurrentChallengeId != request.ChallengeId)
+        {
+            return Results.BadRequest(new { message = "Bokstaven tillhör inte det aktuella uppdraget." });
+        }
+
+        if (session.CurrentChallengeStartedAtUtc is null)
+        {
+            return Results.Conflict(new { message = "Ordet är redan löst. Gå vidare när du är redo." });
+        }
+
+        var challenge = await db.Challenges
+            .Include(candidate => candidate.Game)
+            .Include(candidate => candidate.Options)
+            .SingleAsync(candidate => candidate.Id == request.ChallengeId, cancellationToken);
+        if (challenge.Game.Type != GameType.Hangman || challenge.Options.Count != 1)
+        {
+            return Results.BadRequest(new { message = "Det aktuella uppdraget är inte ett signalord." });
+        }
+
+        var letter = request.Letter.Trim().ToUpperInvariant();
+        if (letter.Length != 1 || !char.IsLetter(letter[0]) || !HangmanAlphabet.Contains(letter, StringComparison.Ordinal))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["letter"] = ["Välj en bokstav från det svenska alfabetet."]
+            });
+        }
+
+        var roundStartedAt = session.CurrentChallengeStartedAtUtc.Value;
+        var previousGuesses = await db.ChallengeAttempts.AsNoTracking()
+            .Where(attempt => attempt.GameSessionId == session.Id &&
+                attempt.ChallengeId == challenge.Id &&
+                attempt.SubmittedValue != null &&
+                attempt.SubmittedAtUtc > roundStartedAt)
+            .Select(attempt => attempt.SubmittedValue!)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        if (previousGuesses.Contains(letter, StringComparer.Ordinal))
+        {
+            return Results.Conflict(new { message = "Den bokstaven är redan gissad." });
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var timeLimit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
+        var expired = now - roundStartedAt >= TimeSpan.FromSeconds(timeLimit);
+        var answer = NormalizeHangmanAnswer(challenge.Options.Single().Text);
+        var letterIsCorrect = answer.Contains(letter, StringComparison.Ordinal);
+        db.ChallengeAttempts.Add(new ChallengeAttempt
+        {
+            GameSessionId = session.Id,
+            ChallengeId = challenge.Id,
+            SubmittedValue = letter,
+            SubmittedAtUtc = now,
+            IsCorrect = letterIsCorrect && !expired,
+            WasExpired = expired
+        });
+
+        if (expired)
+        {
+            session.CurrentChallengeStartedAtUtc = now;
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Ok(new
+            {
+                correct = false,
+                solved = false,
+                expired = true,
+                roundReset = true,
+                message = "Tiden tog slut. Bokstäverna har återställts – försök igen.",
+                challengeStartedAtUtc = now,
+                timeLimitSeconds = timeLimit,
+                hangman = BuildHangmanState(answer, [])
+            });
+        }
+
+        var guesses = previousGuesses.Append(letter).Distinct(StringComparer.Ordinal).ToList();
+        var state = BuildHangmanState(answer, guesses);
+        if (state.Solved)
+        {
+            session.CurrentChallengeStartedAtUtc = null;
+            session.PausedAtUtc = now;
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Ok(new
+            {
+                correct = true,
+                solved = true,
+                expired = false,
+                roundReset = false,
+                challenge.Game.SuccessMessage,
+                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now),
+                hangman = state
+            });
+        }
+
+        if (state.Mistakes >= HangmanMaximumMistakes)
+        {
+            const int penaltyMilliseconds = 10_000;
+            session.TotalPenaltyMilliseconds += penaltyMilliseconds;
+            session.CurrentChallengeStartedAtUtc = now;
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Ok(new
+            {
+                correct = false,
+                solved = false,
+                expired = false,
+                roundReset = true,
+                message = "Signalen visar stopp. Bokstäverna återställs och 10 sekunder läggs till på totaltiden.",
+                challengeStartedAtUtc = now,
+                timeLimitSeconds = timeLimit,
+                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now),
+                hangman = state
+            });
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new
+        {
+            correct = letterIsCorrect,
+            solved = false,
+            expired = false,
+            roundReset = false,
+            message = letterIsCorrect ? "Bokstaven finns i ordet." : "Bokstaven finns inte i ordet.",
+            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now),
+            hangman = state
         });
     }
 
@@ -984,6 +1154,30 @@ public static class SessionEndpoints
         return Math.Max(0, totalMilliseconds - pausedMilliseconds + session.TotalPenaltyMilliseconds);
     }
 
+    private static string NormalizeHangmanAnswer(string answer) => answer.Trim().ToUpperInvariant();
+
+    private static HangmanStateResponse BuildHangmanState(string answer, IEnumerable<string> guesses)
+    {
+        var guessedLetters = guesses
+            .Select(guess => guess.Trim().ToUpperInvariant())
+            .Where(guess => guess.Length == 1 && HangmanAlphabet.Contains(guess, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var guessedCharacters = guessedLetters.Select(guess => guess[0]).ToHashSet();
+        var pattern = answer
+            .Select(character => !char.IsLetter(character) || guessedCharacters.Contains(character)
+                ? character.ToString()
+                : null)
+            .ToList();
+        var mistakes = guessedLetters.Count(guess => !answer.Contains(guess, StringComparison.Ordinal));
+        return new HangmanStateResponse(
+            pattern,
+            guessedLetters,
+            Math.Min(mistakes, HangmanMaximumMistakes),
+            HangmanMaximumMistakes,
+            pattern.All(character => character is not null));
+    }
+
     public sealed record StartSessionRequest(string PlayerName);
     public sealed record SubmitAnswerRequest(Guid ChallengeId, Guid OptionId);
     public sealed record SubmitMatchesRequest(Guid ChallengeId, List<MatchSelectionRequest> Selections);
@@ -991,6 +1185,7 @@ public static class SessionEndpoints
     public sealed record SubmitSortingRequest(Guid ChallengeId, List<SortingPlacementRequest> Placements);
     public sealed record SortingPlacementRequest(Guid OptionId, string? Category);
     public sealed record SubmitWordAssemblyRequest(Guid ChallengeId, List<Guid> OrderedOptionIds);
+    public sealed record SubmitHangmanGuessRequest(Guid ChallengeId, string Letter);
     public sealed record ChallengeTimeoutRequest(Guid ChallengeId);
     public sealed record PixelRevealRequest(Guid ChallengeId);
     private sealed record MatchingScenarioResponse(
@@ -1000,4 +1195,11 @@ public static class SessionEndpoints
         List<MatchingOptionResponse> Options);
     private sealed record MatchingOptionResponse(Guid Id, string Text, string MatchingIconKey);
     private sealed record WordPartResponse(Guid Id, string Text);
+    private sealed record ChallengeOptionResponse(Guid Id, string Text);
+    private sealed record HangmanStateResponse(
+        List<string?> Pattern,
+        List<string> GuessedLetters,
+        int Mistakes,
+        int MaxMistakes,
+        bool Solved);
 }

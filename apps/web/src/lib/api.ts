@@ -6,6 +6,7 @@ import type {
   AnswerResult,
   Challenge,
   GameSummary,
+  HangmanResult,
   LeaderboardEntry,
   MatchingResult,
   PixelRevealResult,
@@ -108,6 +109,11 @@ export const api = {
     request<WordAssemblyResult>(`/api/sessions/${sessionId}/word-assembly`, {
       method: "POST",
       body: JSON.stringify({ challengeId, orderedOptionIds }),
+    }),
+  submitHangmanGuess: (sessionId: string, challengeId: string, letter: string) =>
+    request<HangmanResult>(`/api/sessions/${sessionId}/hangman-guesses`, {
+      method: "POST",
+      body: JSON.stringify({ challengeId, letter }),
     }),
   revealPixel: (sessionId: string, challengeId: string) =>
     request<PixelRevealResult>(`/api/sessions/${sessionId}/pixel-reveal`, {

@@ -456,8 +456,79 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
             finalChallenge.Options.OrderBy(option => option.SortOrder).Select(option => option.SortOrder));
     }
 
+    [Fact]
+    public async Task AdminTimeLimitAppliesToEveryChallengeAcrossAllGameTypes()
+    {
+        await LoginAsync();
+        var games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        Assert.NotNull(games);
+        Assert.Equal(7, games.Count);
+
+        var expectedLimits = new Dictionary<Guid, int>();
+        foreach (var (game, index) in games.OrderBy(game => game.SortOrder).Select((game, index) => (game, index)))
+        {
+            var expectedLimit = 41 + index;
+            expectedLimits[game.Id] = expectedLimit;
+            using var updateRequest = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/games/{game.Id}")
+            {
+                Content = JsonContent.Create(new
+                {
+                    game.Title,
+                    game.Summary,
+                    game.IsActive,
+                    DefaultTimeLimitSeconds = expectedLimit,
+                    game.SuccessMessage,
+                    game.Challenges
+                })
+            };
+            await AddAntiforgeryTokenAsync(updateRequest);
+
+            var updateResponse = await client.SendAsync(updateRequest);
+            Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+            var updatedGame = await updateResponse.Content.ReadFromJsonAsync<AdminGameResponse>();
+            Assert.NotNull(updatedGame);
+            Assert.Equal(expectedLimit, updatedGame.DefaultTimeLimitSeconds);
+            Assert.All(updatedGame.Challenges, challenge => Assert.Null(challenge.TimeLimitSeconds));
+        }
+
+        var started = await client.PostAsJsonAsync("/api/sessions/", new { playerName = "Tidstestaren" });
+        Assert.Equal(HttpStatusCode.Created, started.StatusCode);
+        var session = await started.Content.ReadFromJsonAsync<SessionResponse>();
+        Assert.NotNull(session);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var persistedGames = await db.Games
+            .Include(game => game.Challenges.Where(challenge => challenge.IsActive))
+            .OrderBy(game => game.SortOrder)
+            .ToListAsync();
+        var persistedSession = await db.GameSessions.SingleAsync(candidate => candidate.Id == session.Id);
+
+        foreach (var game in persistedGames)
+        {
+            var expectedLimit = expectedLimits[game.Id];
+            Assert.Equal(expectedLimit, game.DefaultTimeLimitSeconds);
+            Assert.All(game.Challenges, challenge => Assert.Null(challenge.TimeLimitSeconds));
+
+            persistedSession.CurrentChallengeId = game.Challenges.OrderBy(challenge => challenge.SortOrder).First().Id;
+            persistedSession.CurrentChallengeStartedAtUtc = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+
+            var current = await client.GetFromJsonAsync<ChallengeEnvelope>(
+                $"/api/sessions/{session.Id}/current-challenge");
+            Assert.NotNull(current);
+            Assert.Equal(expectedLimit, current.Challenge.TimeLimitSeconds);
+        }
+    }
+
     private async Task LoginAsync()
     {
+        var status = await client.GetFromJsonAsync<AuthStatusResponse>("/api/auth/me");
+        if (status?.Authenticated == true)
+        {
+            return;
+        }
+
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
         {
             Content = JsonContent.Create(new
@@ -479,6 +550,7 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
     }
 
     private sealed record AntiforgeryResponse(string Token);
+    private sealed record AuthStatusResponse(bool Authenticated);
     private sealed record ImageResponse(string ImagePath);
     private sealed record SessionResponse(Guid Id);
     private sealed record SessionStatusResponse(string Status, long ElapsedMilliseconds);
@@ -491,13 +563,14 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         bool IsCorrect,
         string? MatchingIconKey);
     private sealed record ChallengeEnvelope(AdminChallengeBody Challenge);
-    private sealed record AdminChallengeBody(Guid Id, string? ImagePath);
+    private sealed record AdminChallengeBody(Guid Id, string? ImagePath, int TimeLimitSeconds);
     private sealed record AdminGameResponse(
         Guid Id,
         string Type,
         string Title,
         string Summary,
         bool IsActive,
+        int SortOrder,
         int DefaultTimeLimitSeconds,
         string SuccessMessage,
         List<AdminChallengeResponse> Challenges);

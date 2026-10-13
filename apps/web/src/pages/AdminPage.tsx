@@ -11,342 +11,63 @@ import {
   Trash2,
   Trophy,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BrandHeader } from "../components/BrandHeader";
 import { AdminAuditPanel } from "../components/AdminAuditPanel";
 import { AdminGameList } from "../components/AdminGameList";
 import { AdminGameSettings } from "../components/AdminGameSettings";
-import { AdminMatchingBoard } from "../components/AdminMatchingBoard";
+import { AdminMatchingEditor } from "../components/AdminMatchingEditor";
 import { AdminResultsPanel } from "../components/AdminResultsPanel";
 import { AdminSortingBoard } from "../components/AdminSortingBoard";
 import { AdminWordAssemblyBoard } from "../components/AdminWordAssemblyBoard";
 import { LoadingScreen } from "../components/LoadingScreen";
-import { ApiError, api } from "../lib/api";
-import { getAdminGameCopy, manageableGameTypes } from "../lib/gameCatalog";
-import type { AdminGame } from "../types";
+import { useAdminGameEditor } from "../hooks/useAdminGameEditor";
+import { api } from "../lib/api";
 import { barlow, cx, eyebrow, field, fieldLabel, focusRing, primaryButton, secondaryButton } from "../uiStyles";
 
 const sidebarButton = `flex min-h-[45px] w-full cursor-pointer items-center gap-[11px] border-0 bg-transparent px-3 text-left text-[12px] text-[#777] disabled:cursor-not-allowed disabled:opacity-[0.42] [&>svg]:w-[17px] max-[980px]:justify-center max-[980px]:text-[0px] max-[980px]:[&>svg]:w-[19px] max-[720px]:min-h-[42px] max-[720px]:w-auto max-[720px]:justify-start max-[720px]:px-3 max-[720px]:text-[11px] max-[420px]:w-10 max-[420px]:justify-center max-[420px]:!px-0 max-[420px]:text-[0px] ${focusRing}`;
 
 export function AdminPage() {
   const [activeView, setActiveView] = useState<"games" | "results" | "audit">("games");
-  const [games, setGames] = useState<AdminGame[] | null>(null);
-  const [selectedId, setSelectedId] = useState("");
-  const [status, setStatus] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [mutating, setMutating] = useState<string | null>(null);
-  const [openChallengeIds, setOpenChallengeIds] = useState<Set<string>>(
-    () => new Set(),
-  );
   const navigate = useNavigate();
-  const game =
-    games?.find((candidate) => candidate.id === selectedId) ?? games?.[0];
-  const isMatching = game?.type === "Matching";
-  const isTrueFalse = game?.type === "TrueFalse";
-  const isPixelHunt = game?.type === "PixelHunt";
-  const isSorting = game?.type === "Sorting";
-  const isWordAssembly = game?.type === "WordAssembly";
-  const isHangman = game?.type === "Hangman";
-  const canManageQuestions = game ? manageableGameTypes.has(game.type) : false;
-  const gameCopy = getAdminGameCopy(game?.type ?? "Quiz");
-
-  useEffect(() => {
-    api
-      .adminGames()
-      .then((result) => {
-        setGames(result);
-        setSelectedId(result[0]?.id ?? "");
-      })
-      .catch((error) => {
-        if (error instanceof ApiError && error.status === 401)
-          navigate("/admin/login", { replace: true });
-      });
-  }, [navigate]);
-
-  function updateGame(change: Partial<AdminGame>) {
-    if (!game) return;
-    setGames(
-      (current) =>
-        current?.map((candidate) =>
-          candidate.id === game.id ? { ...candidate, ...change } : candidate,
-        ) ?? null,
-    );
-    setStatus("");
-  }
-
-  function toggleChallenge(challengeId: string) {
-    setOpenChallengeIds((current) => {
-      const next = new Set(current);
-      if (next.has(challengeId)) next.delete(challengeId);
-      else next.add(challengeId);
-      return next;
-    });
-  }
-
-  async function save() {
-    if (!game) return;
-    setSaving(true);
-    setStatus("");
-    try {
-      const saved = await api.updateGame(game);
-      setGames(
-        (current) =>
-          current?.map((candidate) =>
-            candidate.id === saved.id ? saved : candidate,
-          ) ?? null,
-      );
-      setStatus("Ändringarna är sparade och klara för eventet.");
-    } catch (caught) {
-      setStatus(
-        caught instanceof Error
-          ? caught.message
-          : "Ändringarna kunde inte sparas.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function addChallenge() {
-    if (!game || !canManageQuestions) return;
-    setMutating("add");
-    setStatus("");
-    try {
-      const challenge = await api.createChallenge(game.id);
-      updateGame({ challenges: [...game.challenges, challenge] });
-      setOpenChallengeIds((current) => new Set(current).add(challenge.id));
-      setStatus(`${gameCopy.indefiniteItem} har lagts till. Fyll i innehållet och spara ändringarna.`);
-    } catch (caught) {
-      setStatus(
-        caught instanceof Error
-          ? caught.message
-          : "Frågan kunde inte läggas till.",
-      );
-    } finally {
-      setMutating(null);
-    }
-  }
-
-  async function deleteChallenge(challengeId: string) {
-    if (!game || !canManageQuestions || game.challenges.length <= 1) return;
-    const challenge = game.challenges.find((item) => item.id === challengeId);
-    if (!challenge) return;
-    if (!window.confirm(`Ta bort ${gameCopy.definiteItem} ”${challenge.prompt}”?`)) return;
-
-    setMutating(challengeId);
-    setStatus("");
-    try {
-      await api.deleteChallenge(challengeId);
-      updateGame({
-        challenges: game.challenges
-          .filter((item) => item.id !== challengeId)
-          .map((item, index) => ({ ...item, sortOrder: index + 1 })),
-      });
-      setOpenChallengeIds((current) => {
-        const next = new Set(current);
-        next.delete(challengeId);
-        return next;
-      });
-      setStatus(`${gameCopy.definiteItemCapitalized} har tagits bort från spelet.`);
-    } catch (caught) {
-      setStatus(
-        caught instanceof Error
-          ? caught.message
-          : "Frågan kunde inte tas bort.",
-      );
-    } finally {
-      setMutating(null);
-    }
-  }
-
-  async function addMatchingDestination() {
-    if (!game || !isMatching) return;
-    setMutating("add-destination");
-    setStatus("");
-    try {
-      const result = await api.addMatchingDestination(game.id);
-      const optionsByChallenge = new Map(
-        result.options.map((option) => [option.challengeId, option]),
-      );
-      updateGame({
-        challenges: game.challenges.map((challenge) => {
-          const option = optionsByChallenge.get(challenge.id);
-          return option
-            ? { ...challenge, options: [...challenge.options, option] }
-            : challenge;
-        }),
-      });
-      setStatus("En ny riskzon har lagts till. Ge den ett namn och spara ändringarna.");
-    } catch (caught) {
-      setStatus(caught instanceof Error ? caught.message : "Riskzonen kunde inte läggas till.");
-    } finally {
-      setMutating(null);
-    }
-  }
-
-  async function deleteMatchingDestination(sortOrder: number) {
-    if (!game || !isMatching) return;
-    const destination = game.challenges[0]?.options.find(
-      (option) => option.sortOrder === sortOrder,
-    );
-    if (!destination || !window.confirm(`Ta bort riskzonen ”${destination.text}”?`)) return;
-
-    setMutating(`destination-${sortOrder}`);
-    setStatus("");
-    try {
-      await api.deleteMatchingDestination(game.id, sortOrder);
-      updateGame({
-        challenges: game.challenges.map((challenge) => ({
-          ...challenge,
-          options: challenge.options
-            .filter((option) => option.sortOrder !== sortOrder)
-            .map((option) => ({
-              ...option,
-              sortOrder: option.sortOrder > sortOrder
-                ? option.sortOrder - 1
-                : option.sortOrder,
-            })),
-        })),
-      });
-      setStatus("Riskzonen har tagits bort.");
-    } catch (caught) {
-      setStatus(caught instanceof Error ? caught.message : "Riskzonen kunde inte tas bort.");
-    } finally {
-      setMutating(null);
-    }
-  }
-
-  async function addSortingCard(challengeId: string) {
-    if (!game || !isSorting) return;
-    setMutating(`sorting-card-add-${challengeId}`);
-    setStatus("");
-    try {
-      const option = await api.addSortingCard(challengeId);
-      updateGame({
-        challenges: game.challenges.map((challenge) =>
-          challenge.id === challengeId
-            ? { ...challenge, options: [...challenge.options, option] }
-            : challenge,
-        ),
-      });
-      setStatus("Ett nytt kort har lagts till. Ändra korttext eller målområde och spara ändringarna.");
-    } catch (caught) {
-      setStatus(caught instanceof Error ? caught.message : "Kortet kunde inte läggas till.");
-    } finally {
-      setMutating(null);
-    }
-  }
-
-  async function deleteSortingCard(challengeId: string, optionId: string) {
-    if (!game || !isSorting) return;
-    const challenge = game.challenges.find((candidate) => candidate.id === challengeId);
-    const option = challenge?.options.find((candidate) => candidate.id === optionId);
-    if (!challenge || !option || !window.confirm(`Ta bort kortet ”${option.text}”?`)) return;
-
-    setMutating(`sorting-card-delete-${optionId}`);
-    setStatus("");
-    try {
-      await api.deleteSortingCard(challengeId, optionId);
-      updateGame({
-        challenges: game.challenges.map((candidate) =>
-          candidate.id === challengeId
-            ? {
-                ...candidate,
-                options: candidate.options
-                  .filter((item) => item.id !== optionId)
-                  .map((item, index) => ({ ...item, sortOrder: index + 1 })),
-              }
-            : candidate,
-        ),
-      });
-      setStatus("Kortet har tagits bort från sorteringen.");
-    } catch (caught) {
-      setStatus(caught instanceof Error ? caught.message : "Kortet kunde inte tas bort.");
-    } finally {
-      setMutating(null);
-    }
-  }
-
-  async function addWordPart(challengeId: string) {
-    if (!game || !isWordAssembly) return;
-    setMutating(`word-part-add-${challengeId}`);
-    setStatus("");
-    try {
-      const option = await api.addWordPart(challengeId);
-      updateGame({
-        challenges: game.challenges.map((challenge) =>
-          challenge.id === challengeId
-            ? { ...challenge, options: [...challenge.options, option] }
-            : challenge,
-        ),
-      });
-      setStatus("En ny orddel har lagts till. Ändra texten, placera den rätt och spara ändringarna.");
-    } catch (caught) {
-      setStatus(caught instanceof Error ? caught.message : "Orddelen kunde inte läggas till.");
-    } finally {
-      setMutating(null);
-    }
-  }
-
-  async function deleteWordPart(challengeId: string, optionId: string) {
-    if (!game || !isWordAssembly) return;
-    const challenge = game.challenges.find((candidate) => candidate.id === challengeId);
-    const option = challenge?.options.find((candidate) => candidate.id === optionId);
-    if (!challenge || !option || !window.confirm(`Ta bort orddelen ”${option.text}”?`)) return;
-
-    setMutating(`word-part-delete-${optionId}`);
-    setStatus("");
-    try {
-      await api.deleteWordPart(challengeId, optionId);
-      updateGame({
-        challenges: game.challenges.map((candidate) =>
-          candidate.id === challengeId
-            ? {
-                ...candidate,
-                options: candidate.options
-                  .filter((item) => item.id !== optionId)
-                  .sort((a, b) => a.sortOrder - b.sortOrder)
-                  .map((item, index) => ({ ...item, sortOrder: index + 1 })),
-              }
-            : candidate,
-        ),
-      });
-      setStatus("Orddelen har tagits bort.");
-    } catch (caught) {
-      setStatus(caught instanceof Error ? caught.message : "Orddelen kunde inte tas bort.");
-    } finally {
-      setMutating(null);
-    }
-  }
+  const handleUnauthorized = useCallback(
+    () => navigate("/admin/login", { replace: true }),
+    [navigate],
+  );
+  const {
+    games,
+    game,
+    status,
+    saving,
+    mutating,
+    openChallengeIds,
+    isMatching,
+    isTrueFalse,
+    isPixelHunt,
+    isSorting,
+    isWordAssembly,
+    isHangman,
+    canManageQuestions,
+    gameCopy,
+    selectGame,
+    toggleChallenge,
+    updateGame,
+    save,
+    addChallenge,
+    deleteChallenge,
+    addMatchingDestination,
+    deleteMatchingDestination,
+    addSortingCard,
+    deleteSortingCard,
+    addWordPart,
+    deleteWordPart,
+    uploadImage,
+  } = useAdminGameEditor(handleUnauthorized);
 
   async function logout() {
     await api.logout();
     navigate("/admin/login");
-  }
-  async function uploadImage(challengeId: string, image?: File) {
-    if (!game || !image) return;
-    setMutating(`image-${challengeId}`);
-    setStatus("Laddar upp bilden…");
-    try {
-      const result = await api.uploadChallengeImage(challengeId, image);
-      updateGame({
-        challenges: game.challenges.map((challenge) =>
-          challenge.id === challengeId
-            ? { ...challenge, imagePath: result.imagePath }
-            : challenge,
-        ),
-      });
-      setStatus("Bilden är uppladdad och syns nu i uppdraget.");
-    } catch (caught) {
-      setStatus(
-        caught instanceof Error
-          ? caught.message
-          : "Bilden kunde inte laddas upp.",
-      );
-    } finally {
-      setMutating(null);
-    }
   }
   if (!games) return <LoadingScreen label="Öppnar kontrollrummet…" />;
 
@@ -403,11 +124,11 @@ export function AdminPage() {
         <main className="min-w-0 px-[clamp(24px,4vw,60px)] pt-[38px] pb-[65px] max-[720px]:px-[14px] max-[720px]:pt-[30px] max-[720px]:pb-[45px]">
           {activeView === "results" ? (
             <AdminResultsPanel
-              onUnauthorized={() => navigate("/admin/login", { replace: true })}
+              onUnauthorized={handleUnauthorized}
             />
           ) : activeView === "audit" ? (
             <AdminAuditPanel
-              onUnauthorized={() => navigate("/admin/login", { replace: true })}
+              onUnauthorized={handleUnauthorized}
             />
           ) : (
           <>
@@ -434,10 +155,7 @@ export function AdminPage() {
             <AdminGameList
               games={games}
               selectedId={game?.id}
-              onSelect={(gameId) => {
-                setSelectedId(gameId);
-                setOpenChallengeIds(new Set());
-              }}
+              onSelect={selectGame}
             />
             {game && (
               <section className="min-w-0 p-[30px] max-[720px]:px-[14px] max-[720px]:py-[22px]">
@@ -447,129 +165,13 @@ export function AdminPage() {
                   onChange={updateGame}
                 />
                 {isMatching && game.challenges[0] && (
-                  <AdminMatchingBoard
-                    challenges={game.challenges}
+                  <AdminMatchingEditor
+                    game={game}
                     disabled={mutating !== null || saving}
                     mutating={mutating}
                     onAddDestination={() => void addMatchingDestination()}
                     onAddScenario={() => void addChallenge()}
-                    onRenameDestination={(sortOrder, text) =>
-                      updateGame({
-                        challenges: game.challenges.map((challenge) => ({
-                          ...challenge,
-                          options: challenge.options.map((option) =>
-                            option.sortOrder === sortOrder ? { ...option, text } : option,
-                          ),
-                        })),
-                      })
-                    }
-                    onChangeDestinationIcon={(sortOrder, matchingIconKey) =>
-                      updateGame({
-                        challenges: game.challenges.map((challenge) => ({
-                          ...challenge,
-                          options: challenge.options.map((option) =>
-                            option.sortOrder === sortOrder
-                              ? { ...option, matchingIconKey }
-                              : option,
-                          ),
-                        })),
-                      })
-                    }
-                    onMoveDestination={(sortOrder, direction) => {
-                      const adjacentSortOrder = sortOrder + direction;
-                      updateGame({
-                        challenges: game.challenges.map((challenge) => {
-                          const current = challenge.options.find(
-                            (option) => option.sortOrder === sortOrder,
-                          );
-                          const adjacent = challenge.options.find(
-                            (option) => option.sortOrder === adjacentSortOrder,
-                          );
-                          if (!current || !adjacent) return challenge;
-
-                          return {
-                            ...challenge,
-                            options: challenge.options.map((option) => {
-                              if (option.sortOrder === sortOrder) {
-                                return {
-                                  ...option,
-                                  text: adjacent.text,
-                                  matchingIconKey: adjacent.matchingIconKey,
-                                  isCorrect: adjacent.isCorrect,
-                                };
-                              }
-                              if (option.sortOrder === adjacentSortOrder) {
-                                return {
-                                  ...option,
-                                  text: current.text,
-                                  matchingIconKey: current.matchingIconKey,
-                                  isCorrect: current.isCorrect,
-                                };
-                              }
-                              return option;
-                            }),
-                          };
-                        }),
-                      });
-                    }}
-                    onMoveScenario={(challengeId, direction) => {
-                      const current = game.challenges.find(
-                        (challenge) => challenge.id === challengeId,
-                      );
-                      if (!current) return;
-                      const adjacentSortOrder = current.sortOrder + direction;
-                      const adjacent = game.challenges.find(
-                        (challenge) => challenge.sortOrder === adjacentSortOrder,
-                      );
-                      if (!adjacent) return;
-
-                      updateGame({
-                        challenges: game.challenges.map((challenge) => {
-                          if (challenge.id === current.id) {
-                            return { ...challenge, sortOrder: adjacent.sortOrder };
-                          }
-                          if (challenge.id === adjacent.id) {
-                            return { ...challenge, sortOrder: current.sortOrder };
-                          }
-                          return challenge;
-                        }),
-                      });
-                    }}
-                    onAssignScenario={(challengeId, destinationSortOrder) => {
-                      const movedChallenge = game.challenges.find((item) => item.id === challengeId);
-                      const previousSortOrder = movedChallenge?.options.find((option) => option.isCorrect)?.sortOrder;
-                      if (!movedChallenge || previousSortOrder === undefined || previousSortOrder === destinationSortOrder) return;
-                      const displacedChallenge = game.challenges.find((item) =>
-                        item.id !== challengeId && item.options.some(
-                          (option) => option.sortOrder === destinationSortOrder && option.isCorrect,
-                        ),
-                      );
-                      updateGame({
-                        challenges: game.challenges.map((item) => {
-                          const assignedSortOrder = item.id === challengeId
-                            ? destinationSortOrder
-                            : item.id === displacedChallenge?.id
-                              ? previousSortOrder
-                              : undefined;
-                          return assignedSortOrder === undefined
-                            ? item
-                            : {
-                                ...item,
-                                options: item.options.map((option) => ({
-                                  ...option,
-                                  isCorrect: option.sortOrder === assignedSortOrder,
-                                })),
-                              };
-                        }),
-                      });
-                    }}
-                    onChangePrompt={(challengeId, prompt) =>
-                      updateGame({
-                        challenges: game.challenges.map((challenge) =>
-                          challenge.id === challengeId ? { ...challenge, prompt } : challenge,
-                        ),
-                      })
-                    }
+                    onUpdate={updateGame}
                     onUploadImage={(challengeId, image) => void uploadImage(challengeId, image)}
                     onDeleteScenario={(challengeId) => void deleteChallenge(challengeId)}
                     onDeleteDestination={(sortOrder) => void deleteMatchingDestination(sortOrder)}

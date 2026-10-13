@@ -3,6 +3,7 @@ import type {
   AdminResult,
   AddedMatchingOption,
   AdminGame,
+  AuditEntry,
   AnswerResult,
   Challenge,
   GameSummary,
@@ -27,6 +28,28 @@ export class ApiError extends Error {
 
 let csrfToken: string | null = null;
 
+type ProblemDetails = {
+  message?: string;
+  detail?: string;
+  title?: string;
+  errors?: Record<string, string[]>;
+};
+
+export function getApiErrorMessage(
+  payload: ProblemDetails | null,
+  fallback = "Något gick fel. Försök igen.",
+) {
+  const validationMessage = payload?.errors
+    ? Object.values(payload.errors).flat().find(Boolean)
+    : undefined;
+
+  return payload?.message
+    ?? payload?.detail
+    ?? validationMessage
+    ?? payload?.title
+    ?? fallback;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const hasFormData = init?.body instanceof FormData;
   const response = await fetch(path, {
@@ -38,16 +61,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as {
-      message?: string;
-      detail?: string;
-      title?: string;
-    } | null;
+    const payload = (await response.json().catch(() => null)) as ProblemDetails | null;
     throw new ApiError(
-      payload?.message ??
-        payload?.detail ??
-        payload?.title ??
-        "Något gick fel. Försök igen.",
+      getApiErrorMessage(payload),
       response.status,
     );
   }
@@ -140,6 +156,7 @@ export const api = {
   logout: () => protectedRequest<void>("/api/auth/logout", { method: "POST" }),
   adminGames: () => request<AdminGame[]>("/api/admin/games"),
   adminResults: () => request<AdminResult[]>("/api/admin/results"),
+  adminAudit: () => request<AuditEntry[]>("/api/admin/audit"),
   deleteAdminResult: (sessionId: string) =>
     protectedRequest<void>(`/api/admin/results/${sessionId}`, {
       method: "DELETE",

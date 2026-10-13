@@ -1,7 +1,8 @@
 import { Check, Circle } from 'lucide-react'
+import { gameCatalog, gameTypeOrder } from '../lib/gameCatalog'
 import { barlow, cx, eyebrow } from '../uiStyles'
 
-const labels = ['Digital trafikledning', 'Säkra vägar', 'Digital säkerhet', 'Pixeljakten', 'Sortera rätt', 'Bilda ordet', 'Signalordet']
+const labels = gameTypeOrder.map((type) => gameCatalog[type].routeLabel)
 
 export function MissionRoute({ current = 1, total = 5 }: { current?: number; total?: number }) {
   return (
@@ -23,9 +24,11 @@ export function MissionRoute({ current = 1, total = 5 }: { current?: number; tot
             >
               <span className={cx(
                 'relative z-1 grid size-[25px] place-items-center rounded-full border border-[#bdbdbd] bg-white text-[#aaa]',
-                state === 'current' && 'border-[#d70000] text-[#d70000] shadow-[0_0_0_5px_rgba(215,0,0,0.08)]',
-                state === 'done' && 'border-[#23845e] bg-[#23845e] text-white',
-              )}>{state === 'done' ? <Check size={14} /> : <Circle size={12} />}</span>
+                state === 'current' && '!border-[#d70000] !text-[#d70000] shadow-[0_0_0_5px_rgba(215,0,0,0.08)]',
+                state === 'done' && '!border-[#23845e] !bg-[#23845e] !text-white shadow-[0_0_0_4px_rgba(35,132,94,0.1)]',
+              )}
+              aria-label={state === 'done' ? `Etapp ${number} klar` : state === 'current' ? `Etapp ${number} pågår` : `Etapp ${number} återstår`}
+            >{state === 'done' ? <Check size={15} strokeWidth={3} /> : <Circle size={12} />}</span>
               <div className="grid content-start gap-[5px] max-[720px]:hidden"><small className="text-[8px] tracking-[0.13em]">ETAPP {number}</small><strong className={`${barlow} tracking-[0.03em] uppercase`}>{labels[index] ?? `Uppdrag ${number}`}</strong></div>
             </li>
           )

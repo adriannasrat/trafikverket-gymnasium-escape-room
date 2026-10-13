@@ -4,11 +4,9 @@ import {
   ChevronRight,
   Gamepad2,
   ImagePlus,
-  LayoutDashboard,
   LogOut,
   Plus,
   Save,
-  Settings2,
   ShieldCheck,
   Trash2,
   Trophy,
@@ -16,19 +14,23 @@ import {
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BrandHeader } from "../components/BrandHeader";
+import { AdminAuditPanel } from "../components/AdminAuditPanel";
+import { AdminGameList } from "../components/AdminGameList";
+import { AdminGameSettings } from "../components/AdminGameSettings";
 import { AdminMatchingBoard } from "../components/AdminMatchingBoard";
 import { AdminResultsPanel } from "../components/AdminResultsPanel";
 import { AdminSortingBoard } from "../components/AdminSortingBoard";
 import { AdminWordAssemblyBoard } from "../components/AdminWordAssemblyBoard";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { ApiError, api } from "../lib/api";
+import { getAdminGameCopy, manageableGameTypes } from "../lib/gameCatalog";
 import type { AdminGame } from "../types";
 import { barlow, cx, eyebrow, field, fieldLabel, focusRing, primaryButton, secondaryButton } from "../uiStyles";
 
-const sidebarButton = `flex min-h-[45px] w-full cursor-pointer items-center gap-[11px] border-0 bg-transparent px-3 text-left text-[12px] text-[#777] disabled:cursor-not-allowed disabled:opacity-[0.42] [&>svg]:w-[17px] max-[980px]:justify-center max-[980px]:text-[0px] max-[980px]:[&>svg]:w-[19px] max-[720px]:min-h-[42px] max-[720px]:w-auto max-[720px]:justify-start max-[720px]:px-3 max-[720px]:text-[11px] ${focusRing}`;
+const sidebarButton = `flex min-h-[45px] w-full cursor-pointer items-center gap-[11px] border-0 bg-transparent px-3 text-left text-[12px] text-[#777] disabled:cursor-not-allowed disabled:opacity-[0.42] [&>svg]:w-[17px] max-[980px]:justify-center max-[980px]:text-[0px] max-[980px]:[&>svg]:w-[19px] max-[720px]:min-h-[42px] max-[720px]:w-auto max-[720px]:justify-start max-[720px]:px-3 max-[720px]:text-[11px] max-[420px]:w-10 max-[420px]:justify-center max-[420px]:!px-0 max-[420px]:text-[0px] ${focusRing}`;
 
 export function AdminPage() {
-  const [activeView, setActiveView] = useState<"games" | "results">("games");
+  const [activeView, setActiveView] = useState<"games" | "results" | "audit">("games");
   const [games, setGames] = useState<AdminGame[] | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [status, setStatus] = useState("");
@@ -46,7 +48,8 @@ export function AdminPage() {
   const isSorting = game?.type === "Sorting";
   const isWordAssembly = game?.type === "WordAssembly";
   const isHangman = game?.type === "Hangman";
-  const canManageQuestions = game?.type === "Quiz" || isMatching || isTrueFalse || isPixelHunt || isSorting || isWordAssembly || isHangman;
+  const canManageQuestions = game ? manageableGameTypes.has(game.type) : false;
+  const gameCopy = getAdminGameCopy(game?.type ?? "Quiz");
 
   useEffect(() => {
     api
@@ -113,7 +116,7 @@ export function AdminPage() {
       const challenge = await api.createChallenge(game.id);
       updateGame({ challenges: [...game.challenges, challenge] });
       setOpenChallengeIds((current) => new Set(current).add(challenge.id));
-      setStatus(`${isMatching ? "Ett nytt scenario" : isTrueFalse ? "Ett nytt påstående" : isPixelHunt ? "En ny bildfråga" : isSorting ? "En ny sorteringsrunda" : isWordAssembly ? "Ett nytt ord" : isHangman ? "Ett nytt signalord" : "En ny fråga"} har lagts till. Fyll i innehållet och spara ändringarna.`);
+      setStatus(`${gameCopy.indefiniteItem} har lagts till. Fyll i innehållet och spara ändringarna.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -129,7 +132,7 @@ export function AdminPage() {
     if (!game || !canManageQuestions || game.challenges.length <= 1) return;
     const challenge = game.challenges.find((item) => item.id === challengeId);
     if (!challenge) return;
-    if (!window.confirm(`Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : isWordAssembly ? "ordet" : isHangman ? "signalordet" : "frågan"} ”${challenge.prompt}”?`)) return;
+    if (!window.confirm(`Ta bort ${gameCopy.definiteItem} ”${challenge.prompt}”?`)) return;
 
     setMutating(challengeId);
     setStatus("");
@@ -145,7 +148,7 @@ export function AdminPage() {
         next.delete(challengeId);
         return next;
       });
-      setStatus(`${isMatching ? "Scenariot" : isTrueFalse ? "Påståendet" : isPixelHunt ? "Bildfrågan" : isSorting ? "Sorteringsrundan" : isWordAssembly ? "Ordet" : isHangman ? "Signalordet" : "Frågan"} har tagits bort från spelet.`);
+      setStatus(`${gameCopy.definiteItemCapitalized} har tagits bort från spelet.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -354,9 +357,6 @@ export function AdminPage() {
         <aside className="flex flex-col border-r border-[#dedede] bg-white px-[18px] py-7 text-[#202020] max-[980px]:px-[10px] max-[980px]:py-[25px] max-[720px]:min-h-[58px] max-[720px]:flex-row max-[720px]:items-center max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:px-[14px] max-[720px]:py-[7px]">
           <p className="m-0 px-3 pb-[13px] text-[9px] tracking-[0.18em] text-[#777] max-[980px]:text-[0px] max-[720px]:hidden">KONTROLLRUM</p>
           <nav className="grid gap-[5px] max-[720px]:flex">
-            <button className={`${sidebarButton} max-[720px]:hidden`} disabled title="Kommer i nästa etapp">
-              <LayoutDashboard /> Översikt
-            </button>
             <button
               className={cx(
                 sidebarButton,
@@ -379,11 +379,16 @@ export function AdminPage() {
             >
               <Trophy /> Spelresultat <ChevronRight className="ml-auto w-[13px] max-[980px]:hidden" />
             </button>
-            <button className={`${sidebarButton} max-[720px]:hidden`} disabled title="Kommer i nästa etapp">
+            <button
+              className={cx(
+                sidebarButton,
+                activeView === "audit" &&
+                  "border-l-[3px] border-[#d70000] bg-[#f9eeee] pl-[9px] font-bold text-[#d70000] max-[980px]:p-0 max-[720px]:px-3",
+              )}
+              type="button"
+              onClick={() => setActiveView("audit")}
+            >
               <ShieldCheck /> Händelselogg
-            </button>
-            <button className={`${sidebarButton} max-[720px]:hidden`} disabled title="Kommer i nästa etapp">
-              <Settings2 /> Inställningar
             </button>
           </nav>
           <div className="mt-auto border-t border-[#dedede] pt-[18px] max-[720px]:ml-auto max-[720px]:mt-0 max-[720px]:border-0 max-[720px]:p-0">
@@ -398,6 +403,10 @@ export function AdminPage() {
         <main className="min-w-0 px-[clamp(24px,4vw,60px)] pt-[38px] pb-[65px] max-[720px]:px-[14px] max-[720px]:pt-[30px] max-[720px]:pb-[45px]">
           {activeView === "results" ? (
             <AdminResultsPanel
+              onUnauthorized={() => navigate("/admin/login", { replace: true })}
+            />
+          ) : activeView === "audit" ? (
+            <AdminAuditPanel
               onUnauthorized={() => navigate("/admin/login", { replace: true })}
             />
           ) : (
@@ -422,111 +431,21 @@ export function AdminPage() {
             </p>
           )}
           <div className="grid min-h-[600px] grid-cols-[235px_minmax(0,1fr)] border border-[#dedede] bg-white max-[980px]:grid-cols-1">
-            <section className="border-r border-[#dedede] bg-[#fafafa] px-3 py-[18px] max-[980px]:border-r-0 max-[980px]:border-b">
-              <h2 className="px-[10px] text-[10px] tracking-[0.15em] text-[#666] uppercase max-[980px]:hidden">
-                Spel
-              </h2>
-              {games.map((candidate) => (
-                <button
-                  key={candidate.id}
-                  className={cx(
-                    `flex w-full cursor-pointer items-center gap-[5px] border-0 bg-transparent px-[11px] py-[14px] text-left text-[#777] max-[980px]:max-w-80 ${focusRing}`,
-                    candidate.id === game?.id &&
-                      "border-l-[3px] border-[#d70000] bg-[#f9eeee] pl-2",
-                  )}
-                  onClick={() => {
-                    setSelectedId(candidate.id);
-                    setOpenChallengeIds(new Set());
-                  }}
-                >
-                  <span className="grid min-w-0 flex-1 gap-[5px]">
-                    <strong className="text-[12px] text-[#202020]">
-                      {candidate.title}
-                    </strong>
-                    <small className="text-[9px]">
-                      {candidate.challenges.length} uppdrag ·{" "}
-                      {candidate.isActive ? "Aktivt" : "Pausat"}
-                    </small>
-                  </span>
-                  <ChevronRight size={16} />
-                </button>
-              ))}
-            </section>
+            <AdminGameList
+              games={games}
+              selectedId={game?.id}
+              onSelect={(gameId) => {
+                setSelectedId(gameId);
+                setOpenChallengeIds(new Set());
+              }}
+            />
             {game && (
               <section className="min-w-0 p-[30px] max-[720px]:px-[14px] max-[720px]:py-[22px]">
-                <div className="flex justify-between gap-5 border-b border-[#dedede] pb-5 max-[720px]:flex-col max-[720px]:items-start">
-                  <div>
-                    <p className={eyebrow}>SPELINSTÄLLNINGAR</p>
-                    <h2
-                      className={`${barlow} text-[33px] text-[#202020] uppercase`}
-                    >
-                      {game.title}
-                    </h2>
-                  </div>
-                  <label className="flex items-center gap-[10px] text-[11px] font-bold text-[#555]">
-                    <span>{game.isActive ? "Aktivt" : "Pausat"}</span>
-                    <input
-                      className="peer absolute size-px opacity-0"
-                      type="checkbox"
-                      checked={game.isActive}
-                      onChange={(event) =>
-                        updateGame({ isActive: event.target.checked })
-                      }
-                    />
-                    <i className="relative h-[21px] w-[39px] rounded-[15px] bg-[#aaa] after:absolute after:top-[3px] after:left-[3px] after:size-[15px] after:rounded-full after:bg-white after:content-[''] peer-checked:bg-[#d70000] peer-checked:after:translate-x-[18px] after:transition-transform after:duration-150" />
-                  </label>
-                </div>
-                <div className="my-[25px] mb-[35px] grid grid-cols-[1fr_190px] gap-[17px] max-[980px]:grid-cols-1">
-                  <label className={fieldLabel}>
-                    TITEL
-                    <input
-                      className={field}
-                      value={game.title}
-                      onChange={(event) =>
-                        updateGame({ title: event.target.value })
-                      }
-                    />
-                  </label>
-                  <label className={fieldLabel}>
-                    {isMatching ? "TID FÖR MATCHNING (SEK)" : isPixelHunt ? "TID PER BILD (SEK)" : isSorting ? "TID PER SORTERING (SEK)" : isWordAssembly ? "TID PER ORD (SEK)" : isHangman ? "TID PER SIGNALORD (SEK)" : "TID PER UPPDRAG (SEK)"}
-                    <input
-                      className={field}
-                      type="number"
-                      min="5"
-                      max="900"
-                      value={game.defaultTimeLimitSeconds}
-                      onChange={(event) =>
-                        updateGame({
-                          defaultTimeLimitSeconds: Number(event.target.value),
-                        })
-                      }
-                    />
-                  </label>
-                  <label
-                    className={`${fieldLabel} col-span-full max-[980px]:col-auto`}
-                  >
-                    INTRODUKTION
-                    <textarea
-                      className={`${field} min-h-[82px] resize-y`}
-                      value={game.summary}
-                      onChange={(event) =>
-                        updateGame({ summary: event.target.value })
-                      }
-                    />
-                  </label>
-                  <label
-                    className={`${fieldLabel} col-span-full max-[980px]:col-auto`}
-                  >
-                    MEDDELANDE VID RÄTT SVAR
-                    <textarea
-                      className={`${field} min-h-[82px] resize-y`}
-                      value={game.successMessage}
-                      onChange={(event) =>
-                        updateGame({ successMessage: event.target.value })
-                      }
-                    />
-                  </label>
-                </div>
+                <AdminGameSettings
+                  game={game}
+                  timeLabel={gameCopy.timeLabel}
+                  onChange={updateGame}
+                />
                 {isMatching && game.challenges[0] && (
                   <AdminMatchingBoard
                     challenges={game.challenges}
@@ -662,34 +581,10 @@ export function AdminPage() {
                 )}>
                   <div>
                     <p className={`${eyebrow} mb-[5px]`}>
-                      {isMatching
-                        ? "SCENARIER I SPELET"
-                        : isTrueFalse
-                          ? "PÅSTÅENDEN I SPELET"
-                          : isPixelHunt
-                            ? "BILDER I SPELET"
-                            : isSorting
-                              ? "SORTERINGSRUNDOR I SPELET"
-                              : isWordAssembly
-                                ? "ORD I SPELET"
-                              : isHangman
-                                ? "SIGNALORD I SPELET"
-                          : "FRÅGOR I SPELET"}
+                      {gameCopy.listTitle}
                     </p>
                     <p className="m-0 text-[11px] text-[#686868]">
-                      {isMatching
-                        ? "Varje scenario kopplas till exakt en av riskzonerna ovan."
-                        : isTrueFalse
-                          ? "Deltagaren avgör om varje påstående är sant eller falskt."
-                          : isPixelHunt
-                            ? "Bilden visas pixlad. Varje klick gör den skarpare men lägger till 5 sekunder på totaltiden."
-                            : isSorting
-                              ? "Varje kort kopplas till ett område. Kort utan målkategori ska lämnas kvar som bluffkort."
-                              : isWordAssembly
-                                ? "Varje uppdrag består av orddelar. Ordningen från vänster till höger är det rätta sammansatta ordet."
-                              : isHangman
-                                ? "Skriv en ledtråd och ett hemligt ord. Spelaren ser bara ledtråden och gissar en bokstav i taget."
-                          : "Lägg till textfrågor eller använd en bild som deltagaren ska tolka."}
+                      {gameCopy.listDescription}
                     </p>
                   </div>
                   {canManageQuestions && (
@@ -711,7 +606,7 @@ export function AdminPage() {
                           : undefined
                       }
                     >
-                      <Plus size={17} /> {isMatching ? "Lägg till scenario" : isTrueFalse ? "Lägg till påstående" : isPixelHunt ? "Lägg till bildfråga" : isSorting ? "Lägg till sortering" : isWordAssembly ? "Lägg till ord" : isHangman ? "Lägg till signalord" : "Lägg till fråga"}
+                      <Plus size={17} /> {gameCopy.addLabel}
                     </button>
                   )}
                 </div>
@@ -742,7 +637,7 @@ export function AdminPage() {
                           </span>
                           <span className="grid min-w-0 flex-1 gap-0.5">
                             <small className="text-[8px] tracking-[0.14em] text-[#777]">
-                              {isMatching ? "SCENARIO" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "BILDFRÅGA" : isSorting ? "SORTERING" : isWordAssembly ? "ORD" : isHangman ? "SIGNALORD" : "UPPDRAG"}
+                              {gameCopy.itemLabel}
                             </small>
                             <strong className="overflow-hidden text-[12px] text-ellipsis whitespace-nowrap">
                               {challenge.prompt}
@@ -761,7 +656,7 @@ export function AdminPage() {
                             className={`mr-[10px] inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-[6px] border border-[#c9c9c9] bg-white px-[10px] text-[9px] font-bold tracking-[0.08em] text-[#8f2424] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
                             type="button"
                             aria-label={`Ta bort uppdrag ${challengeIndex + 1}`}
-                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${isMatching ? "ett scenario" : isTrueFalse ? "ett påstående" : isPixelHunt ? "en bildfråga" : isSorting ? "en sorteringsrunda" : isWordAssembly ? "ett ord" : isHangman ? "ett signalord" : "en fråga"}` : `Ta bort ${isMatching ? "scenariot" : isTrueFalse ? "påståendet" : isPixelHunt ? "bildfrågan" : isSorting ? "sorteringsrundan" : isWordAssembly ? "ordet" : isHangman ? "signalordet" : "frågan"}`}
+                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${gameCopy.minimumItem}` : `Ta bort ${gameCopy.definiteItem}`}
                             disabled={game.challenges.length <= 1 || mutating !== null || saving}
                             onClick={() => deleteChallenge(challenge.id)}
                           >
@@ -773,7 +668,7 @@ export function AdminPage() {
                       {isOpen && (
                       <div id={contentId}>
                       <label className={`${fieldLabel} px-5 pt-5`}>
-                        {isMatching ? "SCENARIO / HÄNDELSE" : isTrueFalse ? "PÅSTÅENDE" : isPixelHunt ? "FRÅGA OM BILDEN" : isSorting ? "INSTRUKTION TILL SORTERINGEN" : isWordAssembly ? "INSTRUKTION TILL ORDET" : isHangman ? "LEDTRÅD TILL ORDET" : "FRÅGA / INSTRUKTION"}
+                        {gameCopy.editorLabel}
                         <textarea
                           className={`${field} min-h-[88px] resize-y`}
                           value={challenge.prompt}

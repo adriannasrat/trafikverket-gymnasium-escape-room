@@ -1,8 +1,32 @@
-export type GameSummary = { id: string; slug: string; title: string; summary: string; sortOrder: number; type: string }
+export const gameTypes = [
+  "Quiz",
+  "Matching",
+  "TrueFalse",
+  "PixelHunt",
+  "Sorting",
+  "WordAssembly",
+  "Hangman",
+] as const
+
+export type GameType = (typeof gameTypes)[number]
+
+export type GameSummary = {
+  id: string
+  slug: string
+  title: string
+  summary: string
+  sortOrder: number
+  type: GameType
+}
 
 export type Session = {
   id: string; playerName: string; startedAtUtc: string; completedAtUtc: string | null
   status: 'InProgress' | 'Completed' | 'Abandoned'; elapsedMilliseconds: number
+}
+
+export type AnswerOption = {
+  id: string
+  text: string
 }
 
 export type Challenge = {
@@ -14,12 +38,12 @@ export type Challenge = {
     currentChallengePenaltyMilliseconds: number
     awaitingNext: boolean
     challengeStartedAtUtc: string; secondsRemaining: number
-    options: Array<{ id: string; text: string }>
+    options: AnswerOption[]
   }
   matching: null | {
     scenarios: Array<{
       id: string; prompt: string; imagePath: string | null
-      options: Array<{ id: string; text: string }>
+      options: AnswerOption[]
     }>
     destinations: Array<{ text: string; iconKey: string }>
   }
@@ -83,6 +107,16 @@ export type LeaderboardEntry = {
 
 export type AdminResult = LeaderboardEntry & {
   startedAtUtc: string
+}
+
+export type AuditEntry = {
+  id: string
+  occurredAtUtc: string
+  actor: string
+  action: string
+  entityType: string
+  entityId: string
+  summary: string
 }
 
 export type AdminOption = {

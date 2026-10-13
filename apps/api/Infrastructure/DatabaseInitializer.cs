@@ -139,26 +139,26 @@ public sealed class DatabaseInitializer(
                 string prompt,
                 int sortOrder,
                 bool correctAnswer) => new()
-            {
-                Prompt = prompt,
-                SortOrder = sortOrder,
-                TimeLimitSeconds = 15,
-                Options =
-                [
-                    new ChallengeOption
-                    {
-                        Text = "Sant",
-                        SortOrder = 1,
-                        IsCorrect = correctAnswer
-                    },
-                    new ChallengeOption
-                    {
-                        Text = "Falskt",
-                        SortOrder = 2,
-                        IsCorrect = !correctAnswer
-                    }
-                ]
-            };
+                {
+                    Prompt = prompt,
+                    SortOrder = sortOrder,
+                    TimeLimitSeconds = 15,
+                    Options =
+                    [
+                        new ChallengeOption
+                        {
+                            Text = "Sant",
+                            SortOrder = 1,
+                            IsCorrect = correctAnswer
+                        },
+                        new ChallengeOption
+                        {
+                            Text = "Falskt",
+                            SortOrder = 2,
+                            IsCorrect = !correctAnswer
+                        }
+                    ]
+                };
 
             db.Games.Add(new Game
             {
@@ -200,18 +200,18 @@ public sealed class DatabaseInitializer(
                 int sortOrder,
                 string correctAnswer,
                 params string[] answers) => new()
-            {
-                Prompt = prompt,
-                ImagePath = imagePath,
-                SortOrder = sortOrder,
-                TimeLimitSeconds = 30,
-                Options = answers.Select((text, index) => new ChallengeOption
                 {
-                    Text = text,
-                    SortOrder = index + 1,
-                    IsCorrect = text == correctAnswer
-                }).ToList()
-            };
+                    Prompt = prompt,
+                    ImagePath = imagePath,
+                    SortOrder = sortOrder,
+                    TimeLimitSeconds = 30,
+                    Options = answers.Select((text, index) => new ChallengeOption
+                    {
+                        Text = text,
+                        SortOrder = index + 1,
+                        IsCorrect = text == correctAnswer
+                    }).ToList()
+                };
 
             pixelHunt = new Game
             {

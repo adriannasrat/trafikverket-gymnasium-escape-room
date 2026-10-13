@@ -1,34 +1,97 @@
 # Architecture
 
-The application is a modular monolith designed for a single offline-capable event computer.
+The application is a modular monolith for a single event computer. It keeps deployment simple while separating player flow, administration, game rules, persistence and infrastructure clearly enough to evolve independently.
 
-## Runtime
+## System context
 
-- **Web:** React and TypeScript, served by Nginx in event mode.
-- **API:** ASP.NET Core on .NET 10 LTS.
-- **Database:** PostgreSQL with a persistent Docker volume.
-- **Deployment:** Docker Compose starts the complete stack with one command.
+```text
+Player / event operator
+          |
+          v
+React + TypeScript web application
+          |
+          v
+ASP.NET Core API
+          |
+          v
+PostgreSQL + persistent upload storage
+```
+
+Docker Compose runs the web application, API and database as one reproducible event stack. Nginx serves the production frontend and forwards `/api` and uploaded images to the API.
+
+## Design principles
+
+### Server-owned game state
+
+The browser renders state and sends player intent. The API remains authoritative for:
+
+- current game and challenge;
+- answer validation and game-specific rules;
+- penalties, challenge deadlines and total elapsed time;
+- progression and session completion;
+- leaderboard results.
+
+This prevents a player from changing a browser timer or inspecting a response payload to discover secret answers.
+
+### Feature-oriented backend
+
+Endpoints are grouped by feature under `Features/` rather than by technical layer. Session handlers are split by game family, while shared progression and timing helpers remain in the partial `SessionEndpoints` class. Administrative game validation lives separately from HTTP orchestration in `GameConfigurationValidator`.
+
+Domain entities contain persisted state. Infrastructure owns Entity Framework configuration, database initialization and operational integrations. Endpoint code coordinates these pieces but does not define frontend presentation.
+
+### Typed, data-driven frontend
+
+The seven game types form a TypeScript union instead of unrestricted strings. Shared metadata such as route labels and administration terminology is held in one typed game catalog. Adding or renaming a game type therefore produces a compile-time error until its presentation metadata is complete.
+
+Pages coordinate data fetching and state. Reusable components own focused presentation and interaction concerns, including matching, sorting, word assembly, Signalordet, pixel reveal and answer choices.
+
+### Deliberate simplicity
+
+The deployment target does not justify microservices, a message bus or separate databases. A modular monolith gives the project clear boundaries without adding operational failure points to an event computer. New abstractions are introduced when they remove duplicated rules or isolate a meaningful responsibility, not merely to create more files.
 
 ## Product boundaries
 
-- The player experience is available without authentication in kiosk mode.
-- The administration area uses cookie authentication and anti-forgery protection.
-- The server owns session start/completion timestamps and leaderboard results.
-- Challenge countdowns communicate urgency; total elapsed session time determines ranking.
-- Games are data-driven so content can be edited without rebuilding the application.
-- Uploaded challenge images are validated and stored in a dedicated persistent volume.
-- Questions can be added and soft-deleted so historical attempts remain intact.
-- Administrative changes, question lifecycle events, and image uploads create audit entries.
+- The player experience runs without authentication in kiosk mode.
+- The administration area uses secure cookie authentication, login throttling and anti-forgery protection.
+- Data-protection keys, PostgreSQL data and uploaded images use persistent Docker volumes.
+- Games and their content can be edited without rebuilding the application.
+- Uploaded images are type- and size-validated before storage.
+- Challenges are soft-deleted so historical attempts remain valid.
+- Administrative content changes and lifecycle operations create audit entries.
 
-## Initial vertical slice
+## Game model
 
-The first slice proves the whole architecture with one configurable quiz game:
+All games share a `Game`, ordered `Challenge` records and ordered `ChallengeOption` records. Game-specific meaning is expressed through the game type and the relevant option fields:
 
-1. An event operator signs into the protected administration area.
-2. The operator edits the game, its answers, time limit, and active state.
-3. A player starts a server-timed session.
-4. The player answers the challenge.
-5. The server validates the answer and records completion time.
-6. The leaderboard ranks the lowest valid elapsed time first.
+| Game | Player interaction | Server validation |
+| --- | --- | --- |
+| Quiz | Select one of four answers | Correct option |
+| Risk & Safety | Match scenarios to risk zones | Complete one-to-one mapping |
+| True or false | Select one statement value | Correct option |
+| Pixel Hunt | Reveal an image and answer | Correct option plus reveal penalties |
+| Sorting | Place cards in target areas | Category for each non-distractor card |
+| Word assembly | Order word parts | Complete option order |
+| Signalordet | Guess letters | Secret word and mistake limit |
 
-Additional game types will reuse these session, administration, audit, and deployment foundations.
+This shared model keeps administration, ordering and progression consistent while dedicated handlers preserve the rules of each game.
+
+## Request flow
+
+1. The player starts a session and receives the current public challenge state.
+2. The client submits an answer or game-specific action.
+3. The API reloads the session, validates ownership and checks the server deadline.
+4. A game-specific handler evaluates the action and records attempts or penalties.
+5. Correct completion pauses progression until the player explicitly continues.
+6. After the final active game, the API completes the session and exposes its verified time to the leaderboard.
+
+## Quality gates
+
+- TypeScript compilation catches contract and game-catalog drift.
+- Oxlint checks frontend code quality.
+- Vitest covers isolated frontend rules and shared metadata.
+- xUnit integration tests exercise authentication, administration and full session flows against the API.
+- GitHub Actions runs the same build, lint and test checks for every pushed change.
+
+## Intentional next steps
+
+The current architecture is suitable for the stated single-computer event deployment. Before using multiple event computers or a public internet deployment, add centralized observability, an explicit backup/restore runbook and a deployment-specific secrets service. Those concerns are intentionally kept outside the current runtime rather than simulated with unnecessary infrastructure.

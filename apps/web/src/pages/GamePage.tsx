@@ -1,7 +1,8 @@
-import { ArrowRight, CheckCircle2, RotateCcw, Trophy, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle2, RotateCcw, Trophy } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { BrandHeader } from "../components/BrandHeader";
+import { AnswerChoiceBoard } from "../components/AnswerChoiceBoard";
 import { ChallengeTimer } from "../components/ChallengeTimer";
 import { HangmanBoard } from "../components/HangmanBoard";
 import { LoadingScreen } from "../components/LoadingScreen";
@@ -700,93 +701,18 @@ export function GamePage() {
               submitting={submitting}
               onGuess={guessHangmanLetter}
             />
-          ) : isTrueFalse ? (
-            <fieldset className="m-0 grid grid-cols-2 gap-4 border-0 p-0 max-[520px]:grid-cols-1">
-              <legend className="absolute size-px overflow-hidden">
-                Välj sant eller falskt
-              </legend>
-              {data.challenge.options.map((option) => {
-                const OptionIcon = option.text.toLocaleLowerCase("sv") === "sant"
-                  ? CheckCircle2
-                  : XCircle;
-                const isSelected = selected === option.id;
-                return (
-                  <label
-                    className={cx(
-                      `grid min-h-[148px] cursor-pointer place-items-center gap-2 border bg-white p-5 text-center text-[#202020] ${focusRing}`,
-                      isSelected && !awaitingNext &&
-                        "!border-2 !border-[#d70000] !bg-[#fffafa] !p-[19px] shadow-[0_5px_18px_rgba(215,0,0,0.08)]",
-                      isSelected && awaitingNext &&
-                        "!border-2 !border-[#23845e] !bg-[#f3faf6] !p-[19px] !text-[#176b4c] shadow-[0_5px_18px_rgba(35,132,94,0.1)]",
-                      !isSelected && !awaitingNext && "border-[#cfcfcf] hover:border-[#888]",
-                      awaitingNext && "cursor-default",
-                    )}
-                    key={option.id}
-                  >
-                    <input
-                      className="pointer-events-none absolute size-px opacity-0"
-                      type="radio"
-                      name="answer"
-                      value={option.id}
-                      checked={isSelected}
-                      disabled={awaitingNext || submitting || timingOut}
-                      onChange={() => {
-                        setSelected(option.id);
-                        setFeedback(null);
-                      }}
-                    />
-                    <OptionIcon
-                      className={cx(
-                        "size-10 text-[#777]",
-                        isSelected && !awaitingNext && "!text-[#d70000]",
-                        isSelected && awaitingNext && "!text-[#23845e]",
-                      )}
-                      strokeWidth={1.8}
-                    />
-                    <strong className={`${barlow} text-[clamp(28px,4vw,40px)] leading-none uppercase`}>
-                      {option.text}
-                    </strong>
-                  </label>
-                );
-              })}
-            </fieldset>
           ) : (
-          <fieldset className="m-0 grid grid-cols-2 gap-[13px] border-0 p-0 max-[720px]:grid-cols-1">
-            <legend className="absolute size-px overflow-hidden">Välj ett svar</legend>
-            {data.challenge.options.map((option, index) => (
-              <label
-                className={cx(
-                  'grid min-h-[78px] cursor-pointer grid-cols-[38px_minmax(0,1fr)] items-center gap-[15px] border border-[#cfcfcf] bg-white p-[15px] text-[#202020]',
-                  selected === option.id && !awaitingNext &&
-                    '!border-2 !border-[#d70000] !bg-[#fffafa] !p-[14px] shadow-[0_5px_18px_rgba(215,0,0,0.08)] hover:!border-[#d70000]',
-                  selected === option.id && awaitingNext &&
-                    '!border-2 !border-[#23845e] !bg-[#f3faf6] !p-[14px] !text-[#176b4c] shadow-[0_5px_18px_rgba(35,132,94,0.1)]',
-                  selected !== option.id && !awaitingNext && 'hover:border-[#888]',
-                  awaitingNext && 'cursor-default',
-                )}
-                key={option.id}
-              >
-                <input
-                  className="pointer-events-none absolute size-px opacity-0"
-                  type="radio"
-                  name="answer"
-                  value={option.id}
-                  checked={selected === option.id}
-                  disabled={awaitingNext || submitting || timingOut}
-                  onChange={() => {
-                    setSelected(option.id);
-                    setFeedback(null);
-                  }}
-                />
-                <span className={cx(
-                  `${barlow} grid size-9 place-items-center bg-[#ededed] text-[18px] font-bold text-[#555]`,
-                  selected === option.id && !awaitingNext && '!bg-[#f9eeee] !text-[#d70000]',
-                  selected === option.id && awaitingNext && '!bg-[#23845e] !text-white',
-                )}>{String.fromCharCode(65 + index)}</span>
-                <strong className="text-[14px] leading-[1.45]">{option.text}</strong>
-              </label>
-            ))}
-          </fieldset>
+            <AnswerChoiceBoard
+              options={data.challenge.options}
+              selectedId={selected}
+              variant={isTrueFalse ? "true-false" : "multiple-choice"}
+              disabled={awaitingNext || submitting || timingOut}
+              completed={awaitingNext}
+              onSelect={(optionId) => {
+                setSelected(optionId);
+                setFeedback(null);
+              }}
+            />
           )}
           <div className="mt-[22px] grid min-h-[52px] grid-cols-[1fr_auto] items-center gap-5 max-[720px]:grid-cols-1">
             <div>

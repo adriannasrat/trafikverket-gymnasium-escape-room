@@ -68,7 +68,7 @@ public static partial class SessionEndpoints
         }
 
         var now = timeProvider.GetUtcNow();
-        var timeLimit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
+        var timeLimit = GetTimeLimitSeconds(challenge);
         var expired = now - roundStartedAt >= TimeSpan.FromSeconds(timeLimit);
         var answer = NormalizeHangmanAnswer(challenge.Options.Single().Text);
         var letterIsCorrect = answer.Contains(letter, StringComparison.Ordinal);

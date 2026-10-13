@@ -40,7 +40,7 @@ public static partial class SessionEndpoints
         }
 
         var now = timeProvider.GetUtcNow();
-        var timeLimit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
+        var timeLimit = GetTimeLimitSeconds(challenge);
         if (now - session.CurrentChallengeStartedAtUtc.Value >= TimeSpan.FromSeconds(timeLimit))
         {
             db.ChallengeAttempts.Add(new ChallengeAttempt
@@ -125,7 +125,7 @@ public static partial class SessionEndpoints
 
         var now = timeProvider.GetUtcNow();
         var challengeStartedAt = session.CurrentChallengeStartedAtUtc.Value;
-        var timeLimit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
+        var timeLimit = GetTimeLimitSeconds(challenge);
         var expired = now - challengeStartedAt > TimeSpan.FromSeconds(timeLimit);
 
         db.ChallengeAttempts.Add(new ChallengeAttempt

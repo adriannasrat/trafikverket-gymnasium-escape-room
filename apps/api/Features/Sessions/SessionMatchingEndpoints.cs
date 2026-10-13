@@ -82,7 +82,7 @@ public static partial class SessionEndpoints
         }
 
         var now = timeProvider.GetUtcNow();
-        var timeLimit = currentChallenge.TimeLimitSeconds ?? currentChallenge.Game.DefaultTimeLimitSeconds;
+        var timeLimit = GetTimeLimitSeconds(currentChallenge);
         var expired = now - session.CurrentChallengeStartedAtUtc.Value > TimeSpan.FromSeconds(timeLimit);
         foreach (var selected in selectedOptions)
         {

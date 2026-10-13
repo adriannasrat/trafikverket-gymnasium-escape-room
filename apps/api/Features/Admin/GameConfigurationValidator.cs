@@ -91,11 +91,6 @@ internal static class GameConfigurationValidator
                 errors[$"challenges.{update.Id}.prompt"] = ["Instruktionen måste innehålla mellan 1 och 1200 tecken."];
             }
 
-            if (update.TimeLimitSeconds is < 5 or > 900)
-            {
-                errors[$"challenges.{update.Id}.timeLimitSeconds"] = ["Frågans tidsgräns måste vara mellan 5 och 900 sekunder."];
-            }
-
             if (update.Options.Count != challenge.Options.Count ||
                 update.Options.Any(option => challenge.Options.All(existing => existing.Id != option.Id)))
             {

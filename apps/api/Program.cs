@@ -64,13 +64,14 @@ builder.Services.AddAntiforgery(options =>
 
 builder.Services.AddRateLimiter(options =>
 {
+    var loginPermitLimit = builder.Configuration.GetValue("RateLimiting:LoginPermitLimit", 8);
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddPolicy("login", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "local",
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 8,
+                PermitLimit = loginPermitLimit,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));

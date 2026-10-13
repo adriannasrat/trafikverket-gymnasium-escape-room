@@ -94,7 +94,9 @@ public static partial class AdminEndpoints
             var challenge = game.Challenges.Single(candidate => candidate.Id == challengeUpdate.Id);
             challenge.Prompt = challengeUpdate.Prompt.Trim();
             challenge.SortOrder = challengeUpdate.SortOrder;
-            challenge.TimeLimitSeconds = challengeUpdate.TimeLimitSeconds;
+            // Administration exposes one timer per game. Clear legacy per-challenge
+            // overrides so the saved game value is authoritative for every round.
+            challenge.TimeLimitSeconds = null;
             foreach (var optionUpdate in challengeUpdate.Options)
             {
                 var option = challenge.Options.Single(candidate => candidate.Id == optionUpdate.Id);

@@ -11,6 +11,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
+var secureCookies = builder.Configuration.GetValue<bool?>("Security:SecureCookies")
+    ?? (!builder.Environment.IsDevelopment() &&
+        !builder.Environment.IsEnvironment("Testing"));
+var cookieSecurePolicy = secureCookies
+    ? CookieSecurePolicy.Always
+    : CookieSecurePolicy.SameAsRequest;
 
 var connectionString = builder.Configuration.GetConnectionString("Database")
     ?? throw new InvalidOperationException("ConnectionStrings:Database must be configured.");
@@ -37,7 +43,7 @@ builder.Services
         options.Cookie.Name = "trv-admin-session-v2";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Strict;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.SecurePolicy = cookieSecurePolicy;
         options.ExpireTimeSpan = TimeSpan.FromHours(2);
         options.SlidingExpiration = true;
         options.Events.OnRedirectToLogin = context =>
@@ -59,7 +65,7 @@ builder.Services.AddAntiforgery(options =>
     options.Cookie.Name = "trv-antiforgery-v2";
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SecurePolicy = cookieSecurePolicy;
 });
 
 builder.Services.AddRateLimiter(options =>

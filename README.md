@@ -46,6 +46,11 @@ persistent file storage can set `Features__ChallengeImageUploads=false`. Existin
 project images remain playable, while administration clearly marks image replacement
 as unavailable instead of saving files that would disappear after a restart.
 
+Production environments use secure authentication and antiforgery cookies by
+default. The local Docker stack explicitly keeps `SECURE_COOKIES_ENABLED=false`
+because it is served over `http://localhost`. Set `Security__SecureCookies=true`
+for a hosted environment and only expose it through an HTTPS endpoint.
+
 Stop the stack without deleting event data:
 
 ```sh

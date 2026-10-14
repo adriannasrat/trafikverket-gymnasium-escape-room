@@ -129,5 +129,7 @@ export type AdminChallenge = {
   timeLimitSeconds: number | null; options: AdminOption[]
 }
 export type AdminGame = GameSummary & {
-  isActive: boolean; defaultTimeLimitSeconds: number; successMessage: string; challenges: AdminChallenge[]
+  isActive: boolean; defaultTimeLimitSeconds: number; successMessage: string
+  supportsChallengeImages: boolean; requiresChallengeImages: boolean
+  challenges: AdminChallenge[]
 }

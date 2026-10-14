@@ -148,12 +148,20 @@ export const api = {
     request<{ authenticated: boolean; username: string | null }>(
       "/api/auth/me",
     ),
-  login: (username: string, password: string) =>
-    protectedRequest<{ username: string }>("/api/auth/login", {
+  login: async (username: string, password: string) => {
+    const result = await protectedRequest<{ username: string }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
-    }),
-  logout: () => protectedRequest<void>("/api/auth/logout", { method: "POST" }),
+    });
+    // The login response changes the authenticated identity. The anonymous
+    // antiforgery token used for login must not be reused by admin mutations.
+    csrfToken = null;
+    return result;
+  },
+  logout: async () => {
+    await protectedRequest<void>("/api/auth/logout", { method: "POST" });
+    csrfToken = null;
+  },
   adminGames: () => request<AdminGame[]>("/api/admin/games"),
   adminResults: () => request<AdminResult[]>("/api/admin/results"),
   adminAudit: () => request<AuditEntry[]>("/api/admin/audit"),

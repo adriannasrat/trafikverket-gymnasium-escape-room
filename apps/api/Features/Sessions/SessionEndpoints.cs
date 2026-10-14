@@ -225,7 +225,9 @@ public static partial class SessionEndpoints
             {
                 challenge.Id,
                 challenge.Prompt,
-                challenge.ImagePath,
+                imagePath = challenge.Game.Type.SupportsChallengeImages()
+                    ? challenge.ImagePath
+                    : null,
                 number = gameNumber,
                 total = activeGameIds.Count,
                 questionNumber,

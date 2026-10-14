@@ -145,6 +145,8 @@ public static partial class AdminEndpoints
         game.IsActive,
         game.DefaultTimeLimitSeconds,
         game.SuccessMessage,
+        supportsChallengeImages = game.Type.SupportsChallengeImages(),
+        requiresChallengeImages = game.Type.RequiresChallengeImages(),
         challenges = game.Challenges
             .Where(challenge => challenge.IsActive)
             .OrderBy(challenge => challenge.SortOrder)

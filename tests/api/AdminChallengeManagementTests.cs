@@ -47,6 +47,12 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         Assert.Equal(HttpStatusCode.OK, uploadResponse.StatusCode);
         var uploaded = await uploadResponse.Content.ReadFromJsonAsync<ImageResponse>();
         Assert.StartsWith("/uploads/", uploaded?.ImagePath);
+        var storedImageResponse = await client.GetAsync(uploaded!.ImagePath);
+        Assert.Equal(HttpStatusCode.OK, storedImageResponse.StatusCode);
+        Assert.Equal("image/png", storedImageResponse.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(
+            [137, 80, 78, 71, 13, 10, 26, 10],
+            await storedImageResponse.Content.ReadAsByteArrayAsync());
 
         var started = await client.PostAsJsonAsync("/api/sessions/", new { playerName = "Bildtestaren" });
         Assert.Equal(HttpStatusCode.Created, started.StatusCode);
@@ -123,6 +129,46 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
             .SingleAsync(challenge => challenge.Id == created.Id);
         Assert.False(deletedChallenge.IsActive);
         Assert.NotNull(deletedChallenge.ImagePath);
+    }
+
+    [Fact]
+    public async Task ChallengeImagesAreAvailableOnlyForSupportedGameTypes()
+    {
+        await LoginAsync();
+        var games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        Assert.NotNull(games);
+
+        var supportedTypes = new HashSet<string>
+        {
+            "Quiz", "Matching", "PixelHunt", "Hangman"
+        };
+
+        foreach (var game in games)
+        {
+            var expectedSupport = supportedTypes.Contains(game.Type);
+            Assert.Equal(expectedSupport, game.SupportsChallengeImages);
+            Assert.Equal(game.Type == "PixelHunt", game.RequiresChallengeImages);
+
+            var challenge = game.Challenges.OrderBy(candidate => candidate.SortOrder).First();
+            using var image = new ByteArrayContent([137, 80, 78, 71, 13, 10, 26, 10]);
+            // Deliberately use a generic browser content type. The server should
+            // inspect the file itself instead of trusting this header.
+            image.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            using var form = new MultipartFormDataContent();
+            form.Add(image, "image", "skylt.bin");
+            using var uploadRequest = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"/api/admin/challenges/{challenge.Id}/image")
+            {
+                Content = form
+            };
+            await AddAntiforgeryTokenAsync(uploadRequest);
+
+            var response = await client.SendAsync(uploadRequest);
+            Assert.Equal(
+                expectedSupport ? HttpStatusCode.OK : HttpStatusCode.BadRequest,
+                response.StatusCode);
+        }
     }
 
     [Fact]
@@ -607,6 +653,8 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         int SortOrder,
         int DefaultTimeLimitSeconds,
         string SuccessMessage,
+        bool SupportsChallengeImages,
+        bool RequiresChallengeImages,
         List<AdminChallengeResponse> Challenges);
     private sealed record AdminChallengeResponse(
         Guid Id,

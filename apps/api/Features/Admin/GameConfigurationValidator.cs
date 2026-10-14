@@ -81,7 +81,7 @@ internal static class GameConfigurationValidator
         foreach (var update in request.Challenges)
         {
             var challenge = game.Challenges.Single(candidate => candidate.Id == update.Id);
-            if (game.Type == GameType.PixelHunt && string.IsNullOrWhiteSpace(challenge.ImagePath))
+            if (game.Type.RequiresChallengeImages() && string.IsNullOrWhiteSpace(challenge.ImagePath))
             {
                 errors[$"challenges.{update.Id}.image"] = ["Ladda upp en bild till pixeljakten."];
             }

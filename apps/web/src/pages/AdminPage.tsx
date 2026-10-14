@@ -285,7 +285,7 @@ export function AdminPage() {
                           }
                         />
                       </label>
-                      {!isHangman && <section className="mx-5 mt-4 grid grid-cols-[150px_minmax(0,1fr)] items-center gap-4 border border-[#dedede] bg-[#fafafa] p-3 max-[720px]:mx-3 max-[720px]:grid-cols-1">
+                      {game.supportsChallengeImages && <section className="mx-5 mt-4 grid grid-cols-[150px_minmax(0,1fr)] items-center gap-4 border border-[#dedede] bg-[#fafafa] p-3 max-[720px]:mx-3 max-[720px]:grid-cols-1">
                         {challenge.imagePath ? (
                           <img
                             className="h-[105px] w-full bg-white object-contain p-1"
@@ -300,7 +300,7 @@ export function AdminPage() {
                         <div className="grid justify-items-start gap-2">
                           <div>
                             <p className="m-0 text-[9px] font-extrabold tracking-[0.12em] text-[#555]">
-                              BILD TILL {isMatching ? "SCENARIOT" : "FRÅGAN"} {!isPixelHunt && <span className="font-normal tracking-normal text-[#777]">(VALFRI)</span>}
+                              BILD TILL FRÅGAN {!game.requiresChallengeImages && <span className="font-normal tracking-normal text-[#777]">(VALFRI)</span>}
                             </p>
                             <p className="mt-1 mb-0 text-[10px] leading-[1.5] text-[#777]">
                               JPG, PNG eller WebP · högst 5 MB. {isPixelHunt ? "Förhandsvisningen är skarp; deltagaren ser den pixlad." : "Hela bilden visas utan beskärning."}

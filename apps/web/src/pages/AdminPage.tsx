@@ -1,12 +1,14 @@
 import {
+  AlertTriangle,
   Check,
   ChevronDown,
   ChevronRight,
+  Clock3,
   Gamepad2,
   ImagePlus,
+  LoaderCircle,
   LogOut,
   Plus,
-  Save,
   ShieldCheck,
   Trash2,
   Trophy,
@@ -24,7 +26,7 @@ import { AdminWordAssemblyBoard } from "../components/AdminWordAssemblyBoard";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { useAdminGameEditor } from "../hooks/useAdminGameEditor";
 import { api } from "../lib/api";
-import { barlow, cx, eyebrow, field, fieldLabel, focusRing, primaryButton, secondaryButton } from "../uiStyles";
+import { barlow, cx, eyebrow, field, fieldLabel, focusRing, secondaryButton } from "../uiStyles";
 
 const sidebarButton = `flex min-h-[45px] w-full cursor-pointer items-center gap-[11px] border-0 bg-transparent px-3 text-left text-[12px] text-[#777] disabled:cursor-not-allowed disabled:opacity-[0.42] [&>svg]:w-[17px] max-[980px]:justify-center max-[980px]:text-[0px] max-[980px]:[&>svg]:w-[19px] max-[720px]:min-h-[42px] max-[720px]:w-auto max-[720px]:justify-start max-[720px]:px-3 max-[720px]:text-[11px] max-[420px]:w-10 max-[420px]:justify-center max-[420px]:!px-0 max-[420px]:text-[0px] ${focusRing}`;
 
@@ -39,7 +41,7 @@ export function AdminPage() {
     games,
     game,
     status,
-    saving,
+    autosaveState,
     mutating,
     openChallengeIds,
     isMatching,
@@ -53,7 +55,7 @@ export function AdminPage() {
     selectGame,
     toggleChallenge,
     updateGame,
-    save,
+    flushPendingSaves,
     addChallenge,
     deleteChallenge,
     addMatchingDestination,
@@ -66,6 +68,7 @@ export function AdminPage() {
   } = useAdminGameEditor(handleUnauthorized);
 
   async function logout() {
+    if (!(await flushPendingSaves())) return;
     await api.logout();
     navigate("/admin/login");
   }
@@ -116,7 +119,11 @@ export function AdminPage() {
             <span className="flex items-center gap-[7px] px-3 pb-[10px] text-[8px] tracking-[0.12em] text-[#23845e] max-[980px]:hidden">
               <i className="size-[7px] rounded-full bg-[#23845e] shadow-[0_0_0_4px_rgba(35,132,94,0.1)]" /> SYSTEM ONLINE
             </span>
-            <button className={sidebarButton} onClick={logout}>
+            <button
+              className={sidebarButton}
+              onClick={logout}
+              disabled={mutating !== null}
+            >
               <LogOut /> Logga ut
             </button>
           </div>
@@ -138,13 +145,29 @@ export function AdminPage() {
               <h1 className={`${barlow} mb-[5px] text-[45px] text-[#202020] uppercase max-[420px]:text-[39px]`}>Hantera uppdrag</h1>
               <p className="m-0 text-[13px] text-[#686868]">Ändra vad deltagarna ser utan att röra koden.</p>
             </div>
-            <button
-              className={`${primaryButton} max-[720px]:w-full`}
-              onClick={save}
-              disabled={!game || saving}
+            <div
+              className={cx(
+                "inline-flex min-h-[44px] shrink-0 items-center gap-2 border px-4 text-[10px] font-bold tracking-[0.08em] uppercase max-[720px]:w-full max-[720px]:justify-center",
+                autosaveState.phase === "error"
+                  ? "border-[#d70000] bg-[#f9eeee] text-[#9b1c1c]"
+                  : autosaveState.phase === "saved"
+                    ? "border-[#9bcbb7] bg-[#eaf6f0] text-[#166b4c]"
+                    : "border-[#cfcfcf] bg-white text-[#555]",
+              )}
+              role="status"
+              aria-live="polite"
             >
-              <Save size={17} /> {saving ? "Sparar…" : "Spara ändringar"}
-            </button>
+              {autosaveState.phase === "saving" ? (
+                <LoaderCircle className="animate-spin" size={16} />
+              ) : autosaveState.phase === "error" ? (
+                <AlertTriangle size={16} />
+              ) : autosaveState.phase === "saved" ? (
+                <Check size={16} />
+              ) : (
+                <Clock3 size={16} />
+              )}
+              {autosaveState.message}
+            </div>
           </div>
           {status && (
             <p className="mb-[18px] flex items-center gap-[7px] border-l-[3px] border-[#23845e] bg-[#eaf6f0] px-[15px] py-[11px] text-[12px] text-[#166b4c]" role="status">
@@ -167,7 +190,7 @@ export function AdminPage() {
                 {isMatching && game.challenges[0] && (
                   <AdminMatchingEditor
                     game={game}
-                    disabled={mutating !== null || saving}
+                    disabled={mutating !== null}
                     mutating={mutating}
                     onAddDestination={() => void addMatchingDestination()}
                     onAddScenario={() => void addChallenge()}
@@ -196,7 +219,6 @@ export function AdminPage() {
                       onClick={addChallenge}
                       disabled={
                         mutating !== null ||
-                        saving ||
                         Boolean(
                           isMatching &&
                           game.challenges.length >= (game.challenges[0]?.options.length ?? 0),
@@ -274,7 +296,7 @@ export function AdminPage() {
                               className="peer absolute size-px opacity-0"
                               type="checkbox"
                               checked={challenge.isEnabled}
-                              disabled={isOnlyEnabledChallenge || mutating !== null || saving}
+                              disabled={isOnlyEnabledChallenge || mutating !== null}
                               onChange={(event) =>
                                 updateGame({
                                   challenges: game.challenges.map((candidate) =>
@@ -297,7 +319,7 @@ export function AdminPage() {
                             type="button"
                             aria-label={`Ta bort uppdrag ${challengeIndex + 1}`}
                             title={!canDeleteChallenge ? "Spelet måste ha minst en aktiv fråga" : `Ta bort ${gameCopy.definiteItem}`}
-                            disabled={!canDeleteChallenge || mutating !== null || saving}
+                            disabled={!canDeleteChallenge || mutating !== null}
                             onClick={() => deleteChallenge(challenge.id)}
                           >
                             <Trash2 size={14} />
@@ -356,7 +378,7 @@ export function AdminPage() {
                                 className="absolute size-px opacity-0"
                                 type="file"
                                 accept="image/jpeg,image/png,image/webp"
-                                disabled={mutating !== null || saving}
+                                disabled={mutating !== null}
                                 onChange={(event) => {
                                   const image = event.target.files?.[0];
                                   event.target.value = "";
@@ -381,7 +403,7 @@ export function AdminPage() {
                             <button
                               className="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 border border-[#d70000] bg-white px-3 text-[9px] font-extrabold tracking-[0.07em] text-[#b00000] uppercase disabled:cursor-not-allowed disabled:opacity-50"
                               type="button"
-                              disabled={mutating !== null || saving}
+                              disabled={mutating !== null}
                               onClick={() => void addSortingCard(challenge.id)}
                             >
                               <Plus size={14} />
@@ -390,7 +412,7 @@ export function AdminPage() {
                           </div>
                           <AdminSortingBoard
                             options={challenge.options}
-                            disabled={mutating !== null || saving}
+                            disabled={mutating !== null}
                             onChangeText={(optionId, text) =>
                               updateGame({
                                 challenges: game.challenges.map((item) =>
@@ -444,7 +466,7 @@ export function AdminPage() {
                         <div className="p-5 max-[720px]:px-3 max-[720px]:py-4">
                           <AdminWordAssemblyBoard
                             options={challenge.options}
-                            disabled={mutating !== null || saving}
+                            disabled={mutating !== null}
                             mutating={mutating}
                             onChangeText={(optionId, text) =>
                               updateGame({

@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../lib/api";
 import { getAdminGameCopy, manageableGameTypes } from "../lib/gameCatalog";
 import type { AdminGame } from "../types";
+import { useAdminAutosave } from "./useAdminAutosave";
 
 export function useAdminGameEditor(onUnauthorized: () => void) {
   const [games, setGames] = useState<AdminGame[] | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [status, setStatus] = useState("");
-  const [saving, setSaving] = useState(false);
   const [mutating, setMutating] = useState<string | null>(null);
   const [openChallengeIds, setOpenChallengeIds] = useState<Set<string>>(
     () => new Set(),
@@ -22,15 +22,40 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
   const isHangman = game?.type === "Hangman";
   const canManageQuestions = game ? manageableGameTypes.has(game.type) : false;
   const gameCopy = getAdminGameCopy(game?.type ?? "Quiz");
+  const gamesRef = useRef<AdminGame[] | null>(null);
+  const {
+    autosaveState,
+    initialize: initializeAutosave,
+    markChanged,
+    flushPendingSaves,
+    beginMutation: beginAutosaveMutation,
+    endMutation: endAutosaveMutation,
+    waitForActiveSave,
+  } = useAdminAutosave({ gamesRef, setGames, onUnauthorized });
+
+  function beginMutation(gameId: string, mutation: string) {
+    beginAutosaveMutation(gameId);
+    setMutating(mutation);
+  }
+
+  function endMutation(gameId: string) {
+    endAutosaveMutation(gameId);
+    setMutating(null);
+  }
 
   useEffect(() => {
+    let cancelled = false;
     api
       .adminGames()
       .then((result) => {
+        if (cancelled) return;
+        gamesRef.current = result;
+        initializeAutosave(result);
         setGames(result);
         setSelectedId(result[0]?.id ?? "");
       })
       .catch((error) => {
+        if (cancelled) return;
         if (error instanceof ApiError && error.status === 401) {
           onUnauthorized();
           return;
@@ -38,17 +63,31 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
         setStatus(error instanceof Error ? error.message : "Spelen kunde inte laddas.");
         setGames([]);
       });
-  }, [onUnauthorized]);
+    return () => {
+      cancelled = true;
+    };
+  }, [initializeAutosave, onUnauthorized]);
+
+  function updateGameById(gameId: string, change: Partial<AdminGame>) {
+    const currentGame = gamesRef.current?.find(
+      (candidate) => candidate.id === gameId,
+    );
+    if (!currentGame) return;
+    const nextGames = gamesRef.current?.map((candidate) =>
+      candidate.id === gameId ? { ...candidate, ...change } : candidate,
+    ) ?? null;
+    gamesRef.current = nextGames;
+    setGames(nextGames);
+    markChanged(gameId);
+    setStatus("");
+  }
 
   function updateGame(change: Partial<AdminGame>) {
-    if (!game) return;
-    setGames(
-      (current) =>
-        current?.map((candidate) =>
-          candidate.id === game.id ? { ...candidate, ...change } : candidate,
-        ) ?? null,
-    );
-    setStatus("");
+    if (game) updateGameById(game.id, change);
+  }
+
+  function getCurrentGame(gameId: string, fallback: AdminGame) {
+    return gamesRef.current?.find((candidate) => candidate.id === gameId) ?? fallback;
   }
 
   function toggleChallenge(challengeId: string) {
@@ -60,39 +99,19 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     });
   }
 
-  async function save() {
-    if (!game) return;
-    setSaving(true);
-    setStatus("");
-    try {
-      const saved = await api.updateGame(game);
-      setGames(
-        (current) =>
-          current?.map((candidate) =>
-            candidate.id === saved.id ? saved : candidate,
-          ) ?? null,
-      );
-      setStatus("Ändringarna är sparade och klara för eventet.");
-    } catch (caught) {
-      setStatus(
-        caught instanceof Error
-          ? caught.message
-          : "Ändringarna kunde inte sparas.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function addChallenge() {
     if (!game || !canManageQuestions) return;
-    setMutating("add");
+    beginMutation(game.id, "add");
     setStatus("");
     try {
+      await waitForActiveSave(game.id);
       const challenge = await api.createChallenge(game.id);
-      updateGame({ challenges: [...game.challenges, challenge] });
+      const currentGame = getCurrentGame(game.id, game);
+      updateGameById(game.id, {
+        challenges: [...currentGame.challenges, challenge],
+      });
       setOpenChallengeIds((current) => new Set(current).add(challenge.id));
-      setStatus(`${gameCopy.indefiniteItem} har lagts till. Fyll i innehållet och spara ändringarna.`);
+      setStatus(`${gameCopy.indefiniteItem} har lagts till. Ändringar du gör sparas automatiskt.`);
     } catch (caught) {
       setStatus(
         caught instanceof Error
@@ -100,7 +119,7 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
           : "Frågan kunde inte läggas till.",
       );
     } finally {
-      setMutating(null);
+      endMutation(game.id);
     }
   }
 
@@ -110,12 +129,14 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     if (!challenge) return;
     if (!window.confirm(`Ta bort ${gameCopy.definiteItem} ”${challenge.prompt}”?`)) return;
 
-    setMutating(challengeId);
+    beginMutation(game.id, challengeId);
     setStatus("");
     try {
+      await waitForActiveSave(game.id);
       await api.deleteChallenge(challengeId);
-      updateGame({
-        challenges: game.challenges
+      const currentGame = getCurrentGame(game.id, game);
+      updateGameById(game.id, {
+        challenges: currentGame.challenges
           .filter((item) => item.id !== challengeId)
           .map((item, index) => ({ ...item, sortOrder: index + 1 })),
       });
@@ -132,32 +153,34 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
           : "Frågan kunde inte tas bort.",
       );
     } finally {
-      setMutating(null);
+      endMutation(game.id);
     }
   }
 
   async function addMatchingDestination() {
     if (!game || !isMatching) return;
-    setMutating("add-destination");
+    beginMutation(game.id, "add-destination");
     setStatus("");
     try {
+      await waitForActiveSave(game.id);
       const result = await api.addMatchingDestination(game.id);
       const optionsByChallenge = new Map(
         result.options.map((option) => [option.challengeId, option]),
       );
-      updateGame({
-        challenges: game.challenges.map((challenge) => {
+      const currentGame = getCurrentGame(game.id, game);
+      updateGameById(game.id, {
+        challenges: currentGame.challenges.map((challenge) => {
           const option = optionsByChallenge.get(challenge.id);
           return option
             ? { ...challenge, options: [...challenge.options, option] }
             : challenge;
         }),
       });
-      setStatus("En ny riskzon har lagts till. Ge den ett namn och spara ändringarna.");
+      setStatus("En ny riskzon har lagts till. Ändringar du gör sparas automatiskt.");
     } catch (caught) {
       setStatus(caught instanceof Error ? caught.message : "Riskzonen kunde inte läggas till.");
     } finally {
-      setMutating(null);
+      endMutation(game.id);
     }
   }
 
@@ -168,12 +191,14 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     );
     if (!destination || !window.confirm(`Ta bort riskzonen ”${destination.text}”?`)) return;
 
-    setMutating(`destination-${sortOrder}`);
+    beginMutation(game.id, `destination-${sortOrder}`);
     setStatus("");
     try {
+      await waitForActiveSave(game.id);
       await api.deleteMatchingDestination(game.id, sortOrder);
-      updateGame({
-        challenges: game.challenges.map((challenge) => ({
+      const currentGame = getCurrentGame(game.id, game);
+      updateGameById(game.id, {
+        challenges: currentGame.challenges.map((challenge) => ({
           ...challenge,
           options: challenge.options
             .filter((option) => option.sortOrder !== sortOrder)
@@ -189,28 +214,30 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     } catch (caught) {
       setStatus(caught instanceof Error ? caught.message : "Riskzonen kunde inte tas bort.");
     } finally {
-      setMutating(null);
+      endMutation(game.id);
     }
   }
 
   async function addSortingCard(challengeId: string) {
     if (!game || !isSorting) return;
-    setMutating(`sorting-card-add-${challengeId}`);
+    beginMutation(game.id, `sorting-card-add-${challengeId}`);
     setStatus("");
     try {
+      await waitForActiveSave(game.id);
       const option = await api.addSortingCard(challengeId);
-      updateGame({
-        challenges: game.challenges.map((challenge) =>
+      const currentGame = getCurrentGame(game.id, game);
+      updateGameById(game.id, {
+        challenges: currentGame.challenges.map((challenge) =>
           challenge.id === challengeId
             ? { ...challenge, options: [...challenge.options, option] }
             : challenge,
         ),
       });
-      setStatus("Ett nytt kort har lagts till. Ändra korttext eller målområde och spara ändringarna.");
+      setStatus("Ett nytt kort har lagts till. Ändringar du gör sparas automatiskt.");
     } catch (caught) {
       setStatus(caught instanceof Error ? caught.message : "Kortet kunde inte läggas till.");
     } finally {
-      setMutating(null);
+      endMutation(game.id);
     }
   }
 
@@ -220,12 +247,14 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     const option = challenge?.options.find((candidate) => candidate.id === optionId);
     if (!challenge || !option || !window.confirm(`Ta bort kortet ”${option.text}”?`)) return;
 
-    setMutating(`sorting-card-delete-${optionId}`);
+    beginMutation(game.id, `sorting-card-delete-${optionId}`);
     setStatus("");
     try {
+      await waitForActiveSave(game.id);
       await api.deleteSortingCard(challengeId, optionId);
-      updateGame({
-        challenges: game.challenges.map((candidate) =>
+      const currentGame = getCurrentGame(game.id, game);
+      updateGameById(game.id, {
+        challenges: currentGame.challenges.map((candidate) =>
           candidate.id === challengeId
             ? {
                 ...candidate,
@@ -240,28 +269,30 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     } catch (caught) {
       setStatus(caught instanceof Error ? caught.message : "Kortet kunde inte tas bort.");
     } finally {
-      setMutating(null);
+      endMutation(game.id);
     }
   }
 
   async function addWordPart(challengeId: string) {
     if (!game || !isWordAssembly) return;
-    setMutating(`word-part-add-${challengeId}`);
+    beginMutation(game.id, `word-part-add-${challengeId}`);
     setStatus("");
     try {
+      await waitForActiveSave(game.id);
       const option = await api.addWordPart(challengeId);
-      updateGame({
-        challenges: game.challenges.map((challenge) =>
+      const currentGame = getCurrentGame(game.id, game);
+      updateGameById(game.id, {
+        challenges: currentGame.challenges.map((challenge) =>
           challenge.id === challengeId
             ? { ...challenge, options: [...challenge.options, option] }
             : challenge,
         ),
       });
-      setStatus("En ny orddel har lagts till. Ändra texten, placera den rätt och spara ändringarna.");
+      setStatus("En ny orddel har lagts till. Ändringar du gör sparas automatiskt.");
     } catch (caught) {
       setStatus(caught instanceof Error ? caught.message : "Orddelen kunde inte läggas till.");
     } finally {
-      setMutating(null);
+      endMutation(game.id);
     }
   }
 
@@ -271,12 +302,14 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     const option = challenge?.options.find((candidate) => candidate.id === optionId);
     if (!challenge || !option || !window.confirm(`Ta bort orddelen ”${option.text}”?`)) return;
 
-    setMutating(`word-part-delete-${optionId}`);
+    beginMutation(game.id, `word-part-delete-${optionId}`);
     setStatus("");
     try {
+      await waitForActiveSave(game.id);
       await api.deleteWordPart(challengeId, optionId);
-      updateGame({
-        challenges: game.challenges.map((candidate) =>
+      const currentGame = getCurrentGame(game.id, game);
+      updateGameById(game.id, {
+        challenges: currentGame.challenges.map((candidate) =>
           candidate.id === challengeId
             ? {
                 ...candidate,
@@ -292,18 +325,20 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     } catch (caught) {
       setStatus(caught instanceof Error ? caught.message : "Orddelen kunde inte tas bort.");
     } finally {
-      setMutating(null);
+      endMutation(game.id);
     }
   }
 
   async function uploadImage(challengeId: string, image?: File) {
     if (!game || !image) return;
-    setMutating(`image-${challengeId}`);
+    beginMutation(game.id, `image-${challengeId}`);
     setStatus("Laddar upp bilden…");
     try {
+      await waitForActiveSave(game.id);
       const result = await api.uploadChallengeImage(challengeId, image);
-      updateGame({
-        challenges: game.challenges.map((challenge) =>
+      const currentGame = getCurrentGame(game.id, game);
+      updateGameById(game.id, {
+        challenges: currentGame.challenges.map((challenge) =>
           challenge.id === challengeId
             ? { ...challenge, imagePath: result.imagePath }
             : challenge,
@@ -317,7 +352,7 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
           : "Bilden kunde inte laddas upp.",
       );
     } finally {
-      setMutating(null);
+      endMutation(game.id);
     }
   }
 
@@ -330,7 +365,7 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     games,
     game,
     status,
-    saving,
+    autosaveState,
     mutating,
     openChallengeIds,
     isMatching,
@@ -344,7 +379,7 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     selectGame,
     toggleChallenge,
     updateGame,
-    save,
+    flushPendingSaves,
     addChallenge,
     deleteChallenge,
     addMatchingDestination,

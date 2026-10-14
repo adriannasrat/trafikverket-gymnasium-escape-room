@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using EscapeRoom.Api.Domain;
 using EscapeRoom.Api.Infrastructure;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -69,6 +71,51 @@ public sealed class AdminAuthenticationTests(ApiFactory factory) : IClassFixture
 
         var auditResponse = await client.GetAsync("/api/admin/audit");
         Assert.Equal(HttpStatusCode.OK, auditResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task HostedAuthenticationCookiesAreSecureHttpOnlyAndStrict()
+    {
+        using var hostedFactory = factory.WithWebHostBuilder(builder =>
+            builder.UseSetting("Security:SecureCookies", "true"));
+        using var client = hostedFactory.CreateClient(
+            new WebApplicationFactoryClientOptions
+            {
+                BaseAddress = new Uri("https://localhost")
+            });
+
+        var antiforgeryResponse = await client.GetAsync("/api/auth/csrf");
+        antiforgeryResponse.EnsureSuccessStatusCode();
+        AssertCookieIsHardened(antiforgeryResponse, "trv-antiforgery-v2");
+        var antiforgery = await antiforgeryResponse.Content
+            .ReadFromJsonAsync<AntiforgeryResponse>();
+        Assert.NotNull(antiforgery);
+
+        using var loginRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
+        {
+            Content = JsonContent.Create(new
+            {
+                username = "event-admin",
+                password = "a-long-test-password"
+            })
+        };
+        loginRequest.Headers.Add("X-CSRF-TOKEN", antiforgery.Token);
+
+        var loginResponse = await client.SendAsync(loginRequest);
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        AssertCookieIsHardened(loginResponse, "trv-admin-session-v2");
+    }
+
+    private static void AssertCookieIsHardened(
+        HttpResponseMessage response,
+        string cookieName)
+    {
+        var cookie = Assert.Single(
+            response.Headers.GetValues("Set-Cookie"),
+            value => value.StartsWith($"{cookieName}=", StringComparison.Ordinal));
+        Assert.Contains("secure", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed record AntiforgeryResponse(string Token);

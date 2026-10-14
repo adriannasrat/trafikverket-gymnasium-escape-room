@@ -30,6 +30,7 @@ services:
       Admin__Username: ${ADMIN_USERNAME:-admin}
       Admin__Password: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
       Features__ChallengeImageUploads: ${IMAGE_UPLOADS_ENABLED:-true}
+      Security__SecureCookies: ${SECURE_COOKIES_ENABLED:-false}
       DataProtection__KeysPath: /app/data-protection-keys
     volumes:
       - escape-room-uploads:/app/uploads

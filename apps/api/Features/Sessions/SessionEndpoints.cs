@@ -102,7 +102,7 @@ public static partial class SessionEndpoints
             .Include(candidate => candidate.Game)
             .Include(candidate => candidate.Options)
             .SingleAsync(candidate => candidate.Id == session.CurrentChallengeId, cancellationToken);
-        var limit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
+        var limit = GetTimeLimitSeconds(challenge);
         var now = timeProvider.GetUtcNow();
         var awaitingNext = session.CurrentChallengeStartedAtUtc is null;
         var startedAt = session.CurrentChallengeStartedAtUtc ?? now;
@@ -285,7 +285,7 @@ public static partial class SessionEndpoints
             .Include(candidate => candidate.Game)
             .SingleAsync(candidate => candidate.Id == request.ChallengeId, cancellationToken);
         var now = timeProvider.GetUtcNow();
-        var limit = challenge.TimeLimitSeconds ?? challenge.Game.DefaultTimeLimitSeconds;
+        var limit = GetTimeLimitSeconds(challenge);
         var elapsed = now - session.CurrentChallengeStartedAtUtc.Value +
             TimeSpan.FromMilliseconds(session.CurrentChallengePenaltyMilliseconds);
         var secondsRemaining = limit - elapsed.TotalSeconds;
@@ -444,6 +444,11 @@ public static partial class SessionEndpoints
         var totalMilliseconds = (long)(end - session.StartedAtUtc).TotalMilliseconds;
         return Math.Max(0, totalMilliseconds - pausedMilliseconds + session.TotalPenaltyMilliseconds);
     }
+
+    private static int GetTimeLimitSeconds(Challenge challenge) =>
+        // Admin exposes one time per game. Ignore legacy per-question values that
+        // can still exist in databases created by earlier versions.
+        challenge.Game.DefaultTimeLimitSeconds;
 
     private static string NormalizeHangmanAnswer(string answer) => answer.Trim().ToUpperInvariant();
 

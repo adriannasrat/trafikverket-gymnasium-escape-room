@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using EscapeRoom.Api.Domain;
 using EscapeRoom.Api.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -467,7 +468,7 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         var expectedLimits = new Dictionary<Guid, int>();
         foreach (var (game, index) in games.OrderBy(game => game.SortOrder).Select((game, index) => (game, index)))
         {
-            var expectedLimit = 41 + index;
+            var expectedLimit = game.Type == "Sorting" ? 120 : 41 + index;
             expectedLimits[game.Id] = expectedLimit;
             using var updateRequest = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/games/{game.Id}")
             {
@@ -500,6 +501,7 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var persistedGames = await db.Games
             .Include(game => game.Challenges.Where(challenge => challenge.IsActive))
+                .ThenInclude(challenge => challenge.Options)
             .OrderBy(game => game.SortOrder)
             .ToListAsync();
         var persistedSession = await db.GameSessions.SingleAsync(candidate => candidate.Id == session.Id);
@@ -510,7 +512,11 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
             Assert.Equal(expectedLimit, game.DefaultTimeLimitSeconds);
             Assert.All(game.Challenges, challenge => Assert.Null(challenge.TimeLimitSeconds));
 
-            persistedSession.CurrentChallengeId = game.Challenges.OrderBy(challenge => challenge.SortOrder).First().Id;
+            var firstChallenge = game.Challenges.OrderBy(challenge => challenge.SortOrder).First();
+            // Existing installations can still contain these old per-question values.
+            // The public game flow must ignore them and use the time shown in admin.
+            firstChallenge.TimeLimitSeconds = 60;
+            persistedSession.CurrentChallengeId = firstChallenge.Id;
             persistedSession.CurrentChallengeStartedAtUtc = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
 
@@ -518,6 +524,30 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
                 $"/api/sessions/{session.Id}/current-challenge");
             Assert.NotNull(current);
             Assert.Equal(expectedLimit, current.Challenge.TimeLimitSeconds);
+
+            if (game.Type == GameType.Sorting)
+            {
+                persistedSession.CurrentChallengeStartedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-70);
+                await db.SaveChangesAsync();
+
+                var sortingResponse = await client.PostAsJsonAsync(
+                    $"/api/sessions/{session.Id}/sorting",
+                    new
+                    {
+                        challengeId = firstChallenge.Id,
+                        placements = firstChallenge.Options.Select(option => new
+                        {
+                            optionId = option.Id,
+                            category = (string?)null
+                        })
+                    });
+                sortingResponse.EnsureSuccessStatusCode();
+                var sortingResult = await sortingResponse.Content.ReadFromJsonAsync<SortingTimerResponse>();
+                Assert.NotNull(sortingResult);
+                Assert.False(sortingResult.Expired);
+                Assert.Equal(120, sortingResult.TimeLimitSeconds);
+                Assert.InRange(sortingResult.SecondsRemaining, 39, 41);
+            }
         }
     }
 
@@ -554,6 +584,10 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
     private sealed record ImageResponse(string ImagePath);
     private sealed record SessionResponse(Guid Id);
     private sealed record SessionStatusResponse(string Status, long ElapsedMilliseconds);
+    private sealed record SortingTimerResponse(
+        bool Expired,
+        int TimeLimitSeconds,
+        double SecondsRemaining);
     private sealed record AddedOptionsResponse(List<AddedOptionResponse> Options);
     private sealed record AddedOptionResponse(
         Guid ChallengeId,

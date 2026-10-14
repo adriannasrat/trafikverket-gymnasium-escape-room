@@ -43,7 +43,6 @@ public sealed class DatabaseInitializer(
             {
                 Prompt = "Vad står IKT för i Trafikverkets verksamhet?",
                 SortOrder = 1,
-                TimeLimitSeconds = 30,
                 Options =
                 [
                     new ChallengeOption { Text = "Intern kontroll av transporter", SortOrder = 1 },
@@ -142,7 +141,6 @@ public sealed class DatabaseInitializer(
                 {
                     Prompt = prompt,
                     SortOrder = sortOrder,
-                    TimeLimitSeconds = 15,
                     Options =
                     [
                         new ChallengeOption
@@ -204,7 +202,6 @@ public sealed class DatabaseInitializer(
                     Prompt = prompt,
                     ImagePath = imagePath,
                     SortOrder = sortOrder,
-                    TimeLimitSeconds = 30,
                     Options = answers.Select((text, index) => new ChallengeOption
                     {
                         Text = text,
@@ -295,7 +292,6 @@ public sealed class DatabaseInitializer(
                     {
                         Prompt = "Sortera begreppen till rätt område. Tre kort hör inte hemma någonstans och ska lämnas kvar.",
                         SortOrder = 1,
-                        TimeLimitSeconds = 60,
                         Options =
                         [
                             CreateSortingCard("Serverhall", 1, "IKT"),
@@ -322,7 +318,6 @@ public sealed class DatabaseInitializer(
             {
                 Prompt = "Dra orddelarna så att de bildar ett korrekt sammansatt ord.",
                 SortOrder = sortOrder,
-                TimeLimitSeconds = 30,
                 Options = parts.Select((text, index) => new ChallengeOption
                 {
                     Text = text,
@@ -366,7 +361,6 @@ public sealed class DatabaseInitializer(
                     {
                         Prompt = "En svensk myndighet som planerar och ansvarar för långsiktig infrastruktur för väg och järnväg.",
                         SortOrder = 1,
-                        TimeLimitSeconds = 90,
                         Options =
                         [
                             new ChallengeOption { Text = "TRAFIKVERKET", SortOrder = 1 }

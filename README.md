@@ -41,6 +41,11 @@ The administrator username and password are the `ADMIN_USERNAME` and `ADMIN_PASS
 values in `.env`. After changing either value, run `docker compose up -d api` to apply
 the new credentials without deleting games or event results.
 
+Image uploads are enabled for the local event stack. A hosted demo without
+persistent file storage can set `Features__ChallengeImageUploads=false`. Existing
+project images remain playable, while administration clearly marks image replacement
+as unavailable instead of saving files that would disappear after a restart.
+
 Stop the stack without deleting event data:
 
 ```sh

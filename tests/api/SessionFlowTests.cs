@@ -142,11 +142,11 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.NotNull(pixelHunt);
         Assert.Equal("PixelHunt", pixelHunt.Game.Type);
         Assert.Equal(4, pixelHunt.Challenge.Number);
-        Assert.Equal(3, pixelHunt.Challenge.QuestionTotal);
+        Assert.Equal(4, pixelHunt.Challenge.QuestionTotal);
         Assert.Equal(0, pixelHunt.Challenge.PixelRevealCount);
         Assert.Equal(4, pixelHunt.Challenge.Options.Count);
 
-        for (var question = 0; question < 3; question++)
+        for (var question = 0; question < 4; question++)
         {
             Guid pixelOptionId;
             await using (var scope = factory.Services.CreateAsyncScope())
@@ -168,7 +168,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
 
             var advanceResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
             Assert.Equal(HttpStatusCode.NoContent, advanceResponse.StatusCode);
-            if (question < 2)
+            if (question < 3)
             {
                 pixelHunt = await client.GetFromJsonAsync<ChallengeResponse>(
                     $"/api/sessions/{session.Id}/current-challenge");

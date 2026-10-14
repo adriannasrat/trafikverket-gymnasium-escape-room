@@ -37,6 +37,7 @@ export function ScenarioCard({
   selected,
   disabled,
   mutating,
+  imageUploadsEnabled,
   canDelete,
   onNode,
   onSelect,
@@ -56,6 +57,7 @@ export function ScenarioCard({
   selected: boolean;
   disabled: boolean;
   mutating: string | null;
+  imageUploadsEnabled: boolean;
   canDelete: boolean;
   onNode: (node: HTMLElement | null) => void;
   onSelect: () => void;
@@ -218,25 +220,31 @@ export function ScenarioCard({
         </span>
       </label>
 
-      <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 border border-[#bdbdbd] bg-white px-3 text-[8px] font-extrabold tracking-[0.07em] text-[#555] uppercase focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[rgba(215,0,0,0.25)]">
-        <ImagePlus size={14} />
-        {mutating === `image-${challenge.id}`
-          ? "Laddar upp…"
-          : challenge.imagePath
-            ? "Byt bild"
-            : "Lägg till bild"}
-        <input
-          className="absolute size-px opacity-0"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          disabled={disabled}
-          onChange={(event) => {
-            const image = event.target.files?.[0];
-            event.target.value = "";
-            onUploadImage(image);
-          }}
-        />
-      </label>
+      {imageUploadsEnabled ? (
+        <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 border border-[#bdbdbd] bg-white px-3 text-[8px] font-extrabold tracking-[0.07em] text-[#555] uppercase focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[rgba(215,0,0,0.25)]">
+          <ImagePlus size={14} />
+          {mutating === `image-${challenge.id}`
+            ? "Laddar upp…"
+            : challenge.imagePath
+              ? "Byt bild"
+              : "Lägg till bild"}
+          <input
+            className="absolute size-px opacity-0"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={disabled}
+            onChange={(event) => {
+              const image = event.target.files?.[0];
+              event.target.value = "";
+              onUploadImage(image);
+            }}
+          />
+        </label>
+      ) : (
+        <p className="m-0 border-l-[3px] border-[#d70000] bg-[#fff4f3] px-3 py-2 text-[8px] leading-[1.5] font-bold text-[#8f211c]">
+          Demoläge: Bildbyte är avstängt i onlineversionen.
+        </p>
+      )}
     </article>
   );
 }

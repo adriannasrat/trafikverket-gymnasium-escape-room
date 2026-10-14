@@ -192,6 +192,7 @@ export function AdminPage() {
                     game={game}
                     disabled={mutating !== null}
                     mutating={mutating}
+                    imageUploadsEnabled={game.allowsChallengeImageUploads}
                     onAddDestination={() => void addMatchingDestination()}
                     onAddScenario={() => void addChallenge()}
                     onUpdate={updateGame}
@@ -220,12 +221,17 @@ export function AdminPage() {
                       disabled={
                         mutating !== null ||
                         Boolean(
+                          isPixelHunt && !game.allowsChallengeImageUploads,
+                        ) ||
+                        Boolean(
                           isMatching &&
                           game.challenges.length >= (game.challenges[0]?.options.length ?? 0),
                         )
                       }
                       title={
-                        isMatching && game.challenges.length >= (game.challenges[0]?.options.length ?? 0)
+                        isPixelHunt && !game.allowsChallengeImageUploads
+                          ? "Nya bildfrågor är avstängda i onlineversionens demoläge"
+                          : isMatching && game.challenges.length >= (game.challenges[0]?.options.length ?? 0)
                           ? "Lägg till en riskzon först"
                           : undefined
                       }
@@ -366,7 +372,7 @@ export function AdminPage() {
                               JPG, PNG eller WebP · högst 5 MB. {isPixelHunt ? "Förhandsvisningen är skarp; deltagaren ser den pixlad." : "Hela bilden visas utan beskärning."}
                             </p>
                           </div>
-                          {canManageQuestions && (
+                          {canManageQuestions && game.allowsChallengeImageUploads && (
                             <label className={`inline-flex min-h-9 cursor-pointer items-center gap-[7px] border border-[#777] bg-white px-[11px] text-[9px] font-extrabold tracking-[0.06em] text-[#202020] uppercase focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[rgba(215,0,0,0.25)]`}>
                               <ImagePlus size={15} />
                               {mutating === `image-${challenge.id}`
@@ -386,6 +392,11 @@ export function AdminPage() {
                                 }}
                               />
                             </label>
+                          )}
+                          {canManageQuestions && !game.allowsChallengeImageUploads && (
+                            <p className="m-0 border-l-[3px] border-[#d70000] bg-[#fff4f3] px-3 py-2 text-[9px] leading-[1.5] font-bold text-[#8f211c]">
+                              Demoläge: Bildbyte är avstängt i onlineversionen. De permanenta bilderna fortsätter att användas.
+                            </p>
                           )}
                         </div>
                       </section>}

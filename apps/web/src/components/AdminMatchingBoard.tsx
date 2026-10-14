@@ -23,6 +23,7 @@ type AdminMatchingBoardProps = {
   challenges: AdminChallenge[];
   disabled: boolean;
   mutating: string | null;
+  imageUploadsEnabled: boolean;
   onAddDestination: () => void;
   onAddScenario: () => void;
   onRenameDestination: (sortOrder: number, text: string) => void;
@@ -51,6 +52,7 @@ export function AdminMatchingBoard({
   challenges,
   disabled,
   mutating,
+  imageUploadsEnabled,
   onAddDestination,
   onAddScenario,
   onRenameDestination,
@@ -275,6 +277,7 @@ export function AdminMatchingBoard({
                     selected={selectedChallengeId === challenge.id}
                     disabled={disabled}
                     mutating={mutating}
+                    imageUploadsEnabled={imageUploadsEnabled}
                     canDelete={orderedChallenges.length > 1}
                     onNode={(node) => {
                       if (node) scenarioRefs.current.set(challenge.id, node);

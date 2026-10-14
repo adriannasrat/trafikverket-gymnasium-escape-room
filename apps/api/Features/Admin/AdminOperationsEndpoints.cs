@@ -27,6 +27,14 @@ public static partial class AdminEndpoints
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        if (!configuration.GetValue("Features:ChallengeImageUploads", true))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Bilduppladdning är avstängd",
+                detail: "Onlineversionen använder de permanenta demobilderna. Bilduppladdning är tillgänglig vid lokal drift eller med beständig fillagring.");
+        }
+
         const long maximumBytes = 5 * 1024 * 1024;
         if (image.Length is <= 0 or > maximumBytes)
         {

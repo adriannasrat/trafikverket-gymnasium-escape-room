@@ -94,6 +94,9 @@ public static partial class AdminEndpoints
             var challenge = game.Challenges.Single(candidate => candidate.Id == challengeUpdate.Id);
             challenge.Prompt = challengeUpdate.Prompt.Trim();
             challenge.SortOrder = challengeUpdate.SortOrder;
+            challenge.IsEnabled = game.Type.SupportsChallengeActivation()
+                ? challengeUpdate.IsEnabled ?? true
+                : true;
             // Administration exposes one timer per game. Clear legacy per-challenge
             // overrides so the saved game value is authoritative for every round.
             challenge.TimeLimitSeconds = null;
@@ -145,6 +148,9 @@ public static partial class AdminEndpoints
         game.IsActive,
         game.DefaultTimeLimitSeconds,
         game.SuccessMessage,
+        supportsChallengeImages = game.Type.SupportsChallengeImages(),
+        requiresChallengeImages = game.Type.RequiresChallengeImages(),
+        supportsChallengeActivation = game.Type.SupportsChallengeActivation(),
         challenges = game.Challenges
             .Where(challenge => challenge.IsActive)
             .OrderBy(challenge => challenge.SortOrder)
@@ -156,6 +162,7 @@ public static partial class AdminEndpoints
         challenge.Id,
         challenge.Prompt,
         challenge.ImagePath,
+        challenge.IsEnabled,
         challenge.SortOrder,
         challenge.TimeLimitSeconds,
         options = challenge.Options.OrderBy(option => option.SortOrder).Select(ToAdminOption)
@@ -188,6 +195,7 @@ public static partial class AdminEndpoints
     public sealed record UpdateChallengeRequest(
         Guid Id,
         string Prompt,
+        bool? IsEnabled,
         int SortOrder,
         int? TimeLimitSeconds,
         List<UpdateOptionRequest> Options);

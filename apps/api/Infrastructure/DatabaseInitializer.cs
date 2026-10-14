@@ -55,7 +55,7 @@ public sealed class DatabaseInitializer(
             db.Games.Add(new Game
             {
                 Slug = "trafikverket-uppdraget",
-                Title = "Trafikverket – Uppdraget",
+                Title = "Uppdraget",
                 Summary = "Upptäck hur digital teknik håller Sveriges vägar och järnvägar i rörelse.",
                 Type = GameType.Quiz,
                 SortOrder = 1,

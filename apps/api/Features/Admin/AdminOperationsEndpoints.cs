@@ -28,13 +28,7 @@ public static partial class AdminEndpoints
         CancellationToken cancellationToken)
     {
         const long maximumBytes = 5 * 1024 * 1024;
-        var allowedTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["image/jpeg"] = ".jpg",
-            ["image/png"] = ".png",
-            ["image/webp"] = ".webp"
-        };
-        if (image.Length is <= 0 or > maximumBytes || !allowedTypes.TryGetValue(image.ContentType, out var extension))
+        if (image.Length is <= 0 or > maximumBytes)
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>
             {
@@ -42,35 +36,92 @@ public static partial class AdminEndpoints
             });
         }
 
-        var challenge = await db.Challenges.SingleOrDefaultAsync(
-            candidate => candidate.Id == challengeId && candidate.IsActive,
-            cancellationToken);
+        var extension = await DetectImageExtensionAsync(image, cancellationToken);
+        if (extension is null)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["image"] = ["Filen är inte en giltig JPG-, PNG- eller WebP-bild."]
+            });
+        }
+
+        var challenge = await db.Challenges
+            .Include(candidate => candidate.Game)
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == challengeId && candidate.IsActive,
+                cancellationToken);
         if (challenge is null)
         {
             return Results.NotFound();
+        }
+
+        if (!challenge.Game.Type.SupportsChallengeImages())
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["image"] = ["Den här speltypen använder inte bilder."]
+            });
         }
 
         var uploadPath = configuration["Uploads:Path"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
         Directory.CreateDirectory(uploadPath);
         var fileName = $"{Guid.NewGuid():N}{extension}";
         var destination = Path.Combine(uploadPath, fileName);
-        await using (var stream = File.Create(destination))
+        try
         {
-            await image.CopyToAsync(stream, cancellationToken);
+            await using (var stream = File.Create(destination))
+            {
+                await image.CopyToAsync(stream, cancellationToken);
+            }
+
+            challenge.ImagePath = $"/uploads/{fileName}";
+            db.AuditEntries.Add(new AuditEntry
+            {
+                OccurredAtUtc = timeProvider.GetUtcNow(),
+                Actor = principal.Identity?.Name ?? "unknown",
+                Action = "uploaded-image",
+                EntityType = "challenge",
+                EntityId = challenge.Id.ToString(),
+                Summary = "Uploaded a new challenge image."
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            File.Delete(destination);
+            throw;
         }
 
-        challenge.ImagePath = $"/uploads/{fileName}";
-        db.AuditEntries.Add(new AuditEntry
-        {
-            OccurredAtUtc = timeProvider.GetUtcNow(),
-            Actor = principal.Identity?.Name ?? "unknown",
-            Action = "uploaded-image",
-            EntityType = "challenge",
-            EntityId = challenge.Id.ToString(),
-            Summary = "Uploaded a new challenge image."
-        });
-        await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(new { challenge.ImagePath });
+    }
+
+    private static async Task<string?> DetectImageExtensionAsync(
+        IFormFile image,
+        CancellationToken cancellationToken)
+    {
+        var header = new byte[12];
+        await using var stream = image.OpenReadStream();
+        var bytesRead = await stream.ReadAsync(header, cancellationToken);
+
+        if (bytesRead >= 8 && header.AsSpan(0, 8).SequenceEqual(
+                new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
+        {
+            return ".png";
+        }
+
+        if (bytesRead >= 3 && header[0] == 0xff && header[1] == 0xd8 && header[2] == 0xff)
+        {
+            return ".jpg";
+        }
+
+        if (bytesRead >= 12 &&
+            header.AsSpan(0, 4).SequenceEqual("RIFF"u8) &&
+            header.AsSpan(8, 4).SequenceEqual("WEBP"u8))
+        {
+            return ".webp";
+        }
+
+        return null;
     }
 }
 

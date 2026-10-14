@@ -221,9 +221,17 @@ export function AdminPage() {
                   {game.challenges.map((challenge, challengeIndex) => {
                     const isOpen = openChallengeIds.has(challenge.id);
                     const contentId = `challenge-content-${challenge.id}`;
+                    const canDeleteChallenge = game.challenges.some(
+                      (candidate) => candidate.id !== challenge.id && candidate.isEnabled,
+                    );
+                    const isOnlyEnabledChallenge = challenge.isEnabled &&
+                      game.challenges.filter((candidate) => candidate.isEnabled).length === 1;
                     return (
                     <article
-                      className="overflow-hidden border border-[#dedede] bg-white"
+                      className={cx(
+                        "overflow-hidden border border-[#dedede] bg-white",
+                        !challenge.isEnabled && "border-dashed bg-[#fafafa]",
+                      )}
                       key={challenge.id}
                     >
                       <header className="flex items-center border-t-[3px] border-t-[#d70000] border-b border-b-[#dedede] bg-[#fafafa] text-[#202020]">
@@ -253,13 +261,43 @@ export function AdminPage() {
                             aria-hidden="true"
                           />
                         </button>
+                        {game.supportsChallengeActivation && (
+                          <label
+                            className="mr-2 inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 px-2 text-[9px] font-bold tracking-[0.08em] text-[#555] uppercase has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-45"
+                            title={isOnlyEnabledChallenge
+                              ? "Spelet måste ha minst en aktiv fråga"
+                              : challenge.isEnabled
+                                ? "Inaktivera frågan"
+                                : "Aktivera frågan"}
+                          >
+                            <input
+                              className="peer absolute size-px opacity-0"
+                              type="checkbox"
+                              checked={challenge.isEnabled}
+                              disabled={isOnlyEnabledChallenge || mutating !== null || saving}
+                              onChange={(event) =>
+                                updateGame({
+                                  challenges: game.challenges.map((candidate) =>
+                                    candidate.id === challenge.id
+                                      ? { ...candidate, isEnabled: event.target.checked }
+                                      : candidate,
+                                  ),
+                                })
+                              }
+                            />
+                            <i className="relative h-[19px] w-[35px] rounded-full bg-[#aaa] after:absolute after:top-[3px] after:left-[3px] after:size-[13px] after:rounded-full after:bg-white after:transition-transform after:duration-150 after:content-[''] peer-focus-visible:outline-3 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[rgba(215,0,0,0.25)] peer-checked:bg-[#23845e] peer-checked:after:translate-x-4" />
+                            <span className="max-[720px]:hidden">
+                              {challenge.isEnabled ? "Aktiv" : "Inaktiv"}
+                            </span>
+                          </label>
+                        )}
                         {canManageQuestions && (
                           <button
                             className={`mr-[10px] inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-[6px] border border-[#c9c9c9] bg-white px-[10px] text-[9px] font-bold tracking-[0.08em] text-[#8f2424] uppercase disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
                             type="button"
                             aria-label={`Ta bort uppdrag ${challengeIndex + 1}`}
-                            title={game.challenges.length <= 1 ? `Spelet måste ha minst ${gameCopy.minimumItem}` : `Ta bort ${gameCopy.definiteItem}`}
-                            disabled={game.challenges.length <= 1 || mutating !== null || saving}
+                            title={!canDeleteChallenge ? "Spelet måste ha minst en aktiv fråga" : `Ta bort ${gameCopy.definiteItem}`}
+                            disabled={!canDeleteChallenge || mutating !== null || saving}
                             onClick={() => deleteChallenge(challenge.id)}
                           >
                             <Trash2 size={14} />
@@ -285,7 +323,7 @@ export function AdminPage() {
                           }
                         />
                       </label>
-                      {!isHangman && <section className="mx-5 mt-4 grid grid-cols-[150px_minmax(0,1fr)] items-center gap-4 border border-[#dedede] bg-[#fafafa] p-3 max-[720px]:mx-3 max-[720px]:grid-cols-1">
+                      {game.supportsChallengeImages && <section className="mx-5 mt-4 grid grid-cols-[150px_minmax(0,1fr)] items-center gap-4 border border-[#dedede] bg-[#fafafa] p-3 max-[720px]:mx-3 max-[720px]:grid-cols-1">
                         {challenge.imagePath ? (
                           <img
                             className="h-[105px] w-full bg-white object-contain p-1"
@@ -300,7 +338,7 @@ export function AdminPage() {
                         <div className="grid justify-items-start gap-2">
                           <div>
                             <p className="m-0 text-[9px] font-extrabold tracking-[0.12em] text-[#555]">
-                              BILD TILL {isMatching ? "SCENARIOT" : "FRÅGAN"} {!isPixelHunt && <span className="font-normal tracking-normal text-[#777]">(VALFRI)</span>}
+                              BILD TILL FRÅGAN {!game.requiresChallengeImages && <span className="font-normal tracking-normal text-[#777]">(VALFRI)</span>}
                             </p>
                             <p className="mt-1 mb-0 text-[10px] leading-[1.5] text-[#777]">
                               JPG, PNG eller WebP · högst 5 MB. {isPixelHunt ? "Förhandsvisningen är skarp; deltagaren ser den pixlad." : "Hela bilden visas utan beskärning."}

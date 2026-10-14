@@ -47,6 +47,12 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         Assert.Equal(HttpStatusCode.OK, uploadResponse.StatusCode);
         var uploaded = await uploadResponse.Content.ReadFromJsonAsync<ImageResponse>();
         Assert.StartsWith("/uploads/", uploaded?.ImagePath);
+        var storedImageResponse = await client.GetAsync(uploaded!.ImagePath);
+        Assert.Equal(HttpStatusCode.OK, storedImageResponse.StatusCode);
+        Assert.Equal("image/png", storedImageResponse.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(
+            [137, 80, 78, 71, 13, 10, 26, 10],
+            await storedImageResponse.Content.ReadAsByteArrayAsync());
 
         var started = await client.PostAsJsonAsync("/api/sessions/", new { playerName = "Bildtestaren" });
         Assert.Equal(HttpStatusCode.Created, started.StatusCode);
@@ -123,6 +129,120 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
             .SingleAsync(challenge => challenge.Id == created.Id);
         Assert.False(deletedChallenge.IsActive);
         Assert.NotNull(deletedChallenge.ImagePath);
+    }
+
+    [Fact]
+    public async Task ChallengeImagesAreAvailableOnlyForSupportedGameTypes()
+    {
+        await LoginAsync();
+        var games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        Assert.NotNull(games);
+
+        var supportedTypes = new HashSet<string>
+        {
+            "Quiz", "Matching", "PixelHunt", "Hangman"
+        };
+
+        foreach (var game in games)
+        {
+            var expectedSupport = supportedTypes.Contains(game.Type);
+            Assert.Equal(expectedSupport, game.SupportsChallengeImages);
+            Assert.Equal(game.Type == "PixelHunt", game.RequiresChallengeImages);
+
+            var challenge = game.Challenges.OrderBy(candidate => candidate.SortOrder).First();
+            using var image = new ByteArrayContent([137, 80, 78, 71, 13, 10, 26, 10]);
+            // Deliberately use a generic browser content type. The server should
+            // inspect the file itself instead of trusting this header.
+            image.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            using var form = new MultipartFormDataContent();
+            form.Add(image, "image", "skylt.bin");
+            using var uploadRequest = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"/api/admin/challenges/{challenge.Id}/image")
+            {
+                Content = form
+            };
+            await AddAntiforgeryTokenAsync(uploadRequest);
+
+            var response = await client.SendAsync(uploadRequest);
+            Assert.Equal(
+                expectedSupport ? HttpStatusCode.OK : HttpStatusCode.BadRequest,
+                response.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task AdminCanDisableSupportedQuestionsWithoutRemovingThemFromAdmin()
+    {
+        await LoginAsync();
+        var games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        Assert.NotNull(games);
+
+        var supportedTypes = new HashSet<string>
+        {
+            "Quiz", "TrueFalse", "PixelHunt", "WordAssembly"
+        };
+        Assert.All(
+            games,
+            game => Assert.Equal(
+                supportedTypes.Contains(game.Type),
+                game.SupportsChallengeActivation));
+
+        var sorting = games.Single(candidate => candidate.Type == "Sorting");
+        var unsupportedResponse = await UpdateChallengeAvailabilityAsync(
+            sorting,
+            sorting.Challenges[0].Id,
+            false);
+        Assert.Equal(HttpStatusCode.BadRequest, unsupportedResponse.StatusCode);
+
+        var quiz = games.Single(candidate => candidate.Type == "Quiz");
+        Assert.Equal("Uppdraget", quiz.Title);
+        using var addRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/admin/games/{quiz.Id}/challenges");
+        await AddAntiforgeryTokenAsync(addRequest);
+        var addResponse = await client.SendAsync(addRequest);
+        Assert.Equal(HttpStatusCode.Created, addResponse.StatusCode);
+        var added = await addResponse.Content.ReadFromJsonAsync<AdminChallengeResponse>();
+        Assert.NotNull(added);
+
+        games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        quiz = games!.Single(candidate => candidate.Id == quiz.Id);
+        var disabledId = quiz.Challenges.OrderBy(challenge => challenge.SortOrder).First().Id;
+
+        var disableResponse = await UpdateChallengeAvailabilityAsync(quiz, disabledId, false);
+        Assert.Equal(HttpStatusCode.OK, disableResponse.StatusCode);
+        var updatedQuiz = await disableResponse.Content.ReadFromJsonAsync<AdminGameResponse>();
+        Assert.NotNull(updatedQuiz);
+        Assert.False(updatedQuiz.Challenges.Single(challenge => challenge.Id == disabledId).IsEnabled);
+
+        var adminGames = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        Assert.Contains(
+            adminGames!.Single(game => game.Id == quiz.Id).Challenges,
+            challenge => challenge.Id == disabledId && !challenge.IsEnabled);
+
+        var disableLastResponse = await UpdateChallengeAvailabilityAsync(
+            updatedQuiz,
+            added.Id,
+            false);
+        Assert.Equal(HttpStatusCode.BadRequest, disableLastResponse.StatusCode);
+
+        var started = await client.PostAsJsonAsync("/api/sessions/", new { playerName = "Aktiveringstest" });
+        Assert.Equal(HttpStatusCode.Created, started.StatusCode);
+        var session = await started.Content.ReadFromJsonAsync<SessionResponse>();
+        var current = await client.GetFromJsonAsync<ChallengeEnvelope>(
+            $"/api/sessions/{session!.Id}/current-challenge");
+        Assert.NotEqual(disabledId, current!.Challenge.Id);
+
+        var enableResponse = await UpdateChallengeAvailabilityAsync(updatedQuiz, disabledId, true);
+        Assert.Equal(HttpStatusCode.OK, enableResponse.StatusCode);
+
+        using var deleteRequest = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/admin/challenges/{added.Id}");
+        await AddAntiforgeryTokenAsync(deleteRequest);
+        var deleteResponse = await client.SendAsync(deleteRequest);
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
     }
 
     [Fact]
@@ -572,6 +692,35 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    private async Task<HttpResponseMessage> UpdateChallengeAvailabilityAsync(
+        AdminGameResponse game,
+        Guid challengeId,
+        bool isEnabled)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/games/{game.Id}")
+        {
+            Content = JsonContent.Create(new
+            {
+                game.Title,
+                game.Summary,
+                game.IsActive,
+                game.DefaultTimeLimitSeconds,
+                game.SuccessMessage,
+                challenges = game.Challenges.Select(challenge => new
+                {
+                    challenge.Id,
+                    challenge.Prompt,
+                    IsEnabled = challenge.Id == challengeId ? isEnabled : challenge.IsEnabled,
+                    challenge.SortOrder,
+                    challenge.TimeLimitSeconds,
+                    challenge.Options
+                })
+            })
+        };
+        await AddAntiforgeryTokenAsync(request);
+        return await client.SendAsync(request);
+    }
+
     private async Task AddAntiforgeryTokenAsync(HttpRequestMessage request)
     {
         var antiforgery = await client.GetFromJsonAsync<AntiforgeryResponse>("/api/auth/csrf");
@@ -607,11 +756,15 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         int SortOrder,
         int DefaultTimeLimitSeconds,
         string SuccessMessage,
+        bool SupportsChallengeImages,
+        bool RequiresChallengeImages,
+        bool SupportsChallengeActivation,
         List<AdminChallengeResponse> Challenges);
     private sealed record AdminChallengeResponse(
         Guid Id,
         string Prompt,
         string? ImagePath,
+        bool IsEnabled,
         int SortOrder,
         int? TimeLimitSeconds,
         List<AdminOptionResponse> Options);

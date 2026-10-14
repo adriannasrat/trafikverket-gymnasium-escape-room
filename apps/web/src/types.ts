@@ -126,8 +126,11 @@ export type AdminOption = {
 export type AddedMatchingOption = AdminOption & { challengeId: string }
 export type AdminChallenge = {
   id: string; prompt: string; imagePath: string | null; sortOrder: number
-  timeLimitSeconds: number | null; options: AdminOption[]
+  isEnabled: boolean; timeLimitSeconds: number | null; options: AdminOption[]
 }
 export type AdminGame = GameSummary & {
-  isActive: boolean; defaultTimeLimitSeconds: number; successMessage: string; challenges: AdminChallenge[]
+  isActive: boolean; defaultTimeLimitSeconds: number; successMessage: string
+  supportsChallengeImages: boolean; requiresChallengeImages: boolean
+  supportsChallengeActivation: boolean
+  challenges: AdminChallenge[]
 }

@@ -44,7 +44,10 @@ public static partial class SessionEndpoints
         }
 
         var scenarios = await db.Challenges
-            .Where(candidate => candidate.GameId == currentChallenge.GameId && candidate.IsActive)
+            .Where(candidate =>
+                candidate.GameId == currentChallenge.GameId &&
+                candidate.IsActive &&
+                candidate.IsEnabled)
             .Include(candidate => candidate.Options)
             .OrderBy(candidate => candidate.SortOrder)
             .ToListAsync(cancellationToken);

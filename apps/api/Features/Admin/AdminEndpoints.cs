@@ -46,6 +46,7 @@ public static partial class AdminEndpoints
 
     private static async Task<IResult> GetGamesAsync(
         AppDbContext db,
+        IConfiguration configuration,
         CancellationToken cancellationToken)
     {
         var games = await db.Games.AsNoTracking()
@@ -55,7 +56,8 @@ public static partial class AdminEndpoints
             .OrderBy(game => game.SortOrder)
             .ToListAsync(cancellationToken);
 
-        return Results.Ok(games.Select(ToAdminGame));
+        var imageUploadsEnabled = configuration.GetValue("Features:ChallengeImageUploads", true);
+        return Results.Ok(games.Select(game => ToAdminGame(game, imageUploadsEnabled)));
     }
 
 
@@ -64,6 +66,7 @@ public static partial class AdminEndpoints
         UpdateGameRequest request,
         ClaimsPrincipal principal,
         AppDbContext db,
+        IConfiguration configuration,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -128,7 +131,9 @@ public static partial class AdminEndpoints
         });
         await db.SaveChangesAsync(cancellationToken);
 
-        return Results.Ok(ToAdminGame(game));
+        return Results.Ok(ToAdminGame(
+            game,
+            configuration.GetValue("Features:ChallengeImageUploads", true)));
     }
 
 
@@ -137,7 +142,7 @@ public static partial class AdminEndpoints
 
 
 
-    private static object ToAdminGame(Game game) => new
+    private static object ToAdminGame(Game game, bool imageUploadsEnabled) => new
     {
         game.Id,
         game.Slug,
@@ -149,6 +154,8 @@ public static partial class AdminEndpoints
         game.DefaultTimeLimitSeconds,
         game.SuccessMessage,
         supportsChallengeImages = game.Type.SupportsChallengeImages(),
+        allowsChallengeImageUploads =
+            imageUploadsEnabled && game.Type.SupportsChallengeImages(),
         requiresChallengeImages = game.Type.RequiresChallengeImages(),
         supportsChallengeActivation = game.Type.SupportsChallengeActivation(),
         challenges = game.Challenges

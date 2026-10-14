@@ -147,6 +147,7 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         {
             var expectedSupport = supportedTypes.Contains(game.Type);
             Assert.Equal(expectedSupport, game.SupportsChallengeImages);
+            Assert.Equal(expectedSupport, game.AllowsChallengeImageUploads);
             Assert.Equal(game.Type == "PixelHunt", game.RequiresChallengeImages);
 
             var challenge = game.Challenges.OrderBy(candidate => candidate.SortOrder).First();
@@ -169,6 +170,49 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
                 expectedSupport ? HttpStatusCode.OK : HttpStatusCode.BadRequest,
                 response.StatusCode);
         }
+    }
+
+    [Fact]
+    public async Task HostedDemoKeepsPixelImagesButRejectsImageChanges()
+    {
+        using var hostedFactory = factory.WithWebHostBuilder(builder =>
+            builder.UseSetting("Features:ChallengeImageUploads", "false"));
+        using var hostedClient = hostedFactory.CreateClient();
+        await LoginAsync(hostedClient);
+
+        var games = await hostedClient.GetFromJsonAsync<List<AdminGameResponse>>(
+            "/api/admin/games");
+        Assert.NotNull(games);
+        Assert.All(games, game => Assert.False(game.AllowsChallengeImageUploads));
+
+        var pixelGame = games.Single(game => game.Type == "PixelHunt");
+        Assert.True(pixelGame.IsActive);
+        Assert.Equal(4, pixelGame.Challenges.Count);
+        Assert.Equal(
+            "/assets/images/pixel/roundabout.jpg",
+            pixelGame.Challenges.Single(challenge =>
+                challenge.Prompt == "Vad visar bilden?").ImagePath);
+
+        var challenge = pixelGame.Challenges[0];
+        using var image = new ByteArrayContent([137, 80, 78, 71, 13, 10, 26, 10]);
+        using var form = new MultipartFormDataContent();
+        form.Add(image, "image", "skylt.png");
+        using var uploadRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/admin/challenges/{challenge.Id}/image")
+        {
+            Content = form
+        };
+        await AddAntiforgeryTokenAsync(uploadRequest, hostedClient);
+        var uploadResponse = await hostedClient.SendAsync(uploadRequest);
+        Assert.Equal(HttpStatusCode.Conflict, uploadResponse.StatusCode);
+
+        using var addRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/admin/games/{pixelGame.Id}/challenges");
+        await AddAntiforgeryTokenAsync(addRequest, hostedClient);
+        var addResponse = await hostedClient.SendAsync(addRequest);
+        Assert.Equal(HttpStatusCode.Conflict, addResponse.StatusCode);
     }
 
     [Fact]
@@ -671,9 +715,11 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         }
     }
 
-    private async Task LoginAsync()
+    private Task LoginAsync() => LoginAsync(client);
+
+    private static async Task LoginAsync(HttpClient targetClient)
     {
-        var status = await client.GetFromJsonAsync<AuthStatusResponse>("/api/auth/me");
+        var status = await targetClient.GetFromJsonAsync<AuthStatusResponse>("/api/auth/me");
         if (status?.Authenticated == true)
         {
             return;
@@ -687,8 +733,8 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
                 password = "a-long-test-password"
             })
         };
-        await AddAntiforgeryTokenAsync(request);
-        var response = await client.SendAsync(request);
+        await AddAntiforgeryTokenAsync(request, targetClient);
+        var response = await targetClient.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
@@ -721,9 +767,14 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         return await client.SendAsync(request);
     }
 
-    private async Task AddAntiforgeryTokenAsync(HttpRequestMessage request)
+    private Task AddAntiforgeryTokenAsync(HttpRequestMessage request) =>
+        AddAntiforgeryTokenAsync(request, client);
+
+    private static async Task AddAntiforgeryTokenAsync(
+        HttpRequestMessage request,
+        HttpClient targetClient)
     {
-        var antiforgery = await client.GetFromJsonAsync<AntiforgeryResponse>("/api/auth/csrf");
+        var antiforgery = await targetClient.GetFromJsonAsync<AntiforgeryResponse>("/api/auth/csrf");
         Assert.NotNull(antiforgery);
         request.Headers.Add("X-CSRF-TOKEN", antiforgery.Token);
     }
@@ -757,6 +808,7 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         int DefaultTimeLimitSeconds,
         string SuccessMessage,
         bool SupportsChallengeImages,
+        bool AllowsChallengeImageUploads,
         bool RequiresChallengeImages,
         bool SupportsChallengeActivation,
         List<AdminChallengeResponse> Challenges);

@@ -130,7 +130,8 @@ export type AdminChallenge = {
 }
 export type AdminGame = GameSummary & {
   isActive: boolean; defaultTimeLimitSeconds: number; successMessage: string
-  supportsChallengeImages: boolean; requiresChallengeImages: boolean
+  supportsChallengeImages: boolean; allowsChallengeImageUploads: boolean
+  requiresChallengeImages: boolean
   supportsChallengeActivation: boolean
   challenges: AdminChallenge[]
 }

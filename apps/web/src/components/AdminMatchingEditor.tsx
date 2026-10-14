@@ -5,6 +5,7 @@ type AdminMatchingEditorProps = {
   game: AdminGame;
   disabled: boolean;
   mutating: string | null;
+  imageUploadsEnabled: boolean;
   onUpdate: (change: Partial<AdminGame>) => void;
   onAddDestination: () => void;
   onAddScenario: () => void;
@@ -17,6 +18,7 @@ export function AdminMatchingEditor({
   game,
   disabled,
   mutating,
+  imageUploadsEnabled,
   onUpdate,
   onAddDestination,
   onAddScenario,
@@ -29,6 +31,7 @@ export function AdminMatchingEditor({
       challenges={game.challenges}
       disabled={disabled}
       mutating={mutating}
+      imageUploadsEnabled={imageUploadsEnabled}
       onAddDestination={onAddDestination}
       onAddScenario={onAddScenario}
       onRenameDestination={(sortOrder, text) =>

@@ -11,6 +11,7 @@ public static partial class AdminEndpoints
         Guid gameId,
         ClaimsPrincipal principal,
         AppDbContext db,
+        IConfiguration configuration,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -22,6 +23,15 @@ public static partial class AdminEndpoints
         if (game is null)
         {
             return Results.NotFound();
+        }
+
+        if (game.Type.RequiresChallengeImages() &&
+            !configuration.GetValue("Features:ChallengeImageUploads", true))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Nya bildfrågor är avstängda",
+                detail: "Onlineversionen använder de permanenta demobilderna. Nya bildfrågor kan skapas vid lokal drift eller med beständig fillagring.");
         }
 
         if (game.Type == GameType.Matching &&

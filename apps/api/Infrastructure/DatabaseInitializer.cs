@@ -238,10 +238,26 @@ public sealed class DatabaseInitializer(
                         "/assets/images/pixel/cone.jpg",
                         3,
                         "Vägkon",
-                        "Vägkon", "Hinder", "Stolpe", "Vägbom")
+                        "Vägkon", "Hinder", "Stolpe", "Vägbom"),
+                    CreatePixelChallenge(
+                        "Vad visar bilden?",
+                        "/assets/images/pixel/roundabout.jpg",
+                        4,
+                        "Cirkulationsplats",
+                        "Busshållsplats", "Övergångsställe", "Cirkulationsplats", "Parkeringsvakt")
                 ]
             };
             db.Games.Add(pixelHunt);
+        }
+
+        var roundaboutChallenge = pixelHunt.Challenges.SingleOrDefault(challenge =>
+            challenge.SortOrder == 4 &&
+            challenge.Prompt == "Vad visar bilden?" &&
+            challenge.Options.Any(option =>
+                option.IsCorrect && option.Text == "Cirkulationsplats"));
+        if (roundaboutChallenge?.ImagePath?.StartsWith("/uploads/", StringComparison.Ordinal) == true)
+        {
+            roundaboutChallenge.ImagePath = "/assets/images/pixel/roundabout.jpg";
         }
 
         foreach (var challenge in pixelHunt.Challenges.Where(challenge => challenge.Options.Count < 4))

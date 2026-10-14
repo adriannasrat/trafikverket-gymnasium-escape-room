@@ -112,6 +112,9 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Prompt")
                         .IsRequired()
                         .HasMaxLength(1200)

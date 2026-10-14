@@ -21,6 +21,7 @@ internal static class GameConfigurationValidator
         }
 
         ValidateChallengeOrder(request, errors);
+        ValidateChallengeAvailability(request, game, errors);
         ValidateSharedChallengeFields(request, game, errors);
         ValidateGameSpecificFields(request, game, errors);
         return errors;
@@ -73,6 +74,26 @@ internal static class GameConfigurationValidator
         }
     }
 
+    private static void ValidateChallengeAvailability(
+        AdminEndpoints.UpdateGameRequest request,
+        Game game,
+        Dictionary<string, string[]> errors)
+    {
+        if (!game.Type.SupportsChallengeActivation())
+        {
+            if (request.Challenges.Any(challenge => challenge.IsEnabled == false))
+            {
+                errors["challengeAvailability"] = ["Frågor kan inte inaktiveras i den här speltypen."];
+            }
+            return;
+        }
+
+        if (request.Challenges.All(challenge => challenge.IsEnabled == false))
+        {
+            errors["challengeAvailability"] = ["Spelet måste ha minst en aktiv fråga."];
+        }
+    }
+
     private static void ValidateSharedChallengeFields(
         AdminEndpoints.UpdateGameRequest request,
         Game game,
@@ -81,7 +102,9 @@ internal static class GameConfigurationValidator
         foreach (var update in request.Challenges)
         {
             var challenge = game.Challenges.Single(candidate => candidate.Id == update.Id);
-            if (game.Type.RequiresChallengeImages() && string.IsNullOrWhiteSpace(challenge.ImagePath))
+            if (game.Type.RequiresChallengeImages() &&
+                update.IsEnabled != false &&
+                string.IsNullOrWhiteSpace(challenge.ImagePath))
             {
                 errors[$"challenges.{update.Id}.image"] = ["Ladda upp en bild till pixeljakten."];
             }

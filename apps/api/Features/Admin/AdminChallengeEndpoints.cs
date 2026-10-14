@@ -162,17 +162,18 @@ public static partial class AdminEndpoints
                 candidate.Id != challenge.Id)
             .OrderBy(candidate => candidate.SortOrder)
             .ToListAsync(cancellationToken);
-        if (remainingChallenges.Count == 0)
+        if (!remainingChallenges.Any(candidate => candidate.IsEnabled))
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>
             {
-                ["challenge"] = ["Spelet måste innehålla minst en fråga."]
+                ["challenge"] = ["Spelet måste innehålla minst en aktiv fråga."]
             });
         }
 
         var nextChallengeId = await db.Challenges
             .Where(candidate =>
                 candidate.IsActive &&
+                candidate.IsEnabled &&
                 candidate.Id != challenge.Id &&
                 candidate.Game.IsActive &&
                 (candidate.Game.SortOrder > challenge.Game.SortOrder ||

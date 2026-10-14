@@ -111,12 +111,16 @@ public static partial class SessionEndpoints
             ? session.CurrentChallengePenaltyMilliseconds
             : 0;
         var challengeIds = await db.Challenges.AsNoTracking()
-            .Where(candidate => candidate.GameId == challenge.GameId && candidate.IsActive)
+            .Where(candidate =>
+                candidate.GameId == challenge.GameId &&
+                candidate.IsActive &&
+                candidate.IsEnabled)
             .OrderBy(candidate => candidate.SortOrder)
             .Select(candidate => candidate.Id)
             .ToListAsync(cancellationToken);
         var activeGameIds = await db.Games.AsNoTracking()
-            .Where(game => game.IsActive && game.Challenges.Any(candidate => candidate.IsActive))
+            .Where(game => game.IsActive && game.Challenges.Any(candidate =>
+                candidate.IsActive && candidate.IsEnabled))
             .OrderBy(game => game.SortOrder)
             .Select(game => game.Id)
             .ToListAsync(cancellationToken);
@@ -127,7 +131,10 @@ public static partial class SessionEndpoints
         if (challenge.Game.Type == GameType.Matching)
         {
             var scenarios = await db.Challenges.AsNoTracking()
-                .Where(candidate => candidate.GameId == challenge.GameId && candidate.IsActive)
+                .Where(candidate =>
+                    candidate.GameId == challenge.GameId &&
+                    candidate.IsActive &&
+                    candidate.IsEnabled)
                 .OrderBy(candidate => candidate.SortOrder)
                 .Select(candidate => new MatchingScenarioResponse(
                     candidate.Id,
@@ -420,7 +427,10 @@ public static partial class SessionEndpoints
 
     private static IQueryable<Challenge> LoadOrderedChallenges(AppDbContext db) =>
         db.Challenges
-            .Where(challenge => challenge.Game.IsActive && challenge.IsActive)
+            .Where(challenge =>
+                challenge.Game.IsActive &&
+                challenge.IsActive &&
+                challenge.IsEnabled)
             .OrderBy(challenge => challenge.Game.SortOrder)
             .ThenBy(challenge => challenge.SortOrder);
 

@@ -11,7 +11,8 @@ public static class GameEndpoints
         {
             var games = await db.Games
                 .AsNoTracking()
-                .Where(game => game.IsActive)
+                .Where(game => game.IsActive && game.Challenges.Any(challenge =>
+                    challenge.IsActive && challenge.IsEnabled))
                 .OrderBy(game => game.SortOrder)
                 .Select(game => new
                 {

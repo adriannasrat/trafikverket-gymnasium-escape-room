@@ -172,6 +172,80 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
     }
 
     [Fact]
+    public async Task AdminCanDisableSupportedQuestionsWithoutRemovingThemFromAdmin()
+    {
+        await LoginAsync();
+        var games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        Assert.NotNull(games);
+
+        var supportedTypes = new HashSet<string>
+        {
+            "Quiz", "TrueFalse", "PixelHunt", "WordAssembly"
+        };
+        Assert.All(
+            games,
+            game => Assert.Equal(
+                supportedTypes.Contains(game.Type),
+                game.SupportsChallengeActivation));
+
+        var sorting = games.Single(candidate => candidate.Type == "Sorting");
+        var unsupportedResponse = await UpdateChallengeAvailabilityAsync(
+            sorting,
+            sorting.Challenges[0].Id,
+            false);
+        Assert.Equal(HttpStatusCode.BadRequest, unsupportedResponse.StatusCode);
+
+        var quiz = games.Single(candidate => candidate.Type == "Quiz");
+        Assert.Equal("Uppdraget", quiz.Title);
+        using var addRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/admin/games/{quiz.Id}/challenges");
+        await AddAntiforgeryTokenAsync(addRequest);
+        var addResponse = await client.SendAsync(addRequest);
+        Assert.Equal(HttpStatusCode.Created, addResponse.StatusCode);
+        var added = await addResponse.Content.ReadFromJsonAsync<AdminChallengeResponse>();
+        Assert.NotNull(added);
+
+        games = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        quiz = games!.Single(candidate => candidate.Id == quiz.Id);
+        var disabledId = quiz.Challenges.OrderBy(challenge => challenge.SortOrder).First().Id;
+
+        var disableResponse = await UpdateChallengeAvailabilityAsync(quiz, disabledId, false);
+        Assert.Equal(HttpStatusCode.OK, disableResponse.StatusCode);
+        var updatedQuiz = await disableResponse.Content.ReadFromJsonAsync<AdminGameResponse>();
+        Assert.NotNull(updatedQuiz);
+        Assert.False(updatedQuiz.Challenges.Single(challenge => challenge.Id == disabledId).IsEnabled);
+
+        var adminGames = await client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
+        Assert.Contains(
+            adminGames!.Single(game => game.Id == quiz.Id).Challenges,
+            challenge => challenge.Id == disabledId && !challenge.IsEnabled);
+
+        var disableLastResponse = await UpdateChallengeAvailabilityAsync(
+            updatedQuiz,
+            added.Id,
+            false);
+        Assert.Equal(HttpStatusCode.BadRequest, disableLastResponse.StatusCode);
+
+        var started = await client.PostAsJsonAsync("/api/sessions/", new { playerName = "Aktiveringstest" });
+        Assert.Equal(HttpStatusCode.Created, started.StatusCode);
+        var session = await started.Content.ReadFromJsonAsync<SessionResponse>();
+        var current = await client.GetFromJsonAsync<ChallengeEnvelope>(
+            $"/api/sessions/{session!.Id}/current-challenge");
+        Assert.NotEqual(disabledId, current!.Challenge.Id);
+
+        var enableResponse = await UpdateChallengeAvailabilityAsync(updatedQuiz, disabledId, true);
+        Assert.Equal(HttpStatusCode.OK, enableResponse.StatusCode);
+
+        using var deleteRequest = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/admin/challenges/{added.Id}");
+        await AddAntiforgeryTokenAsync(deleteRequest);
+        var deleteResponse = await client.SendAsync(deleteRequest);
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task AdminCanAddAndRemoveAMatchingDestination()
     {
         await LoginAsync();
@@ -618,6 +692,35 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    private async Task<HttpResponseMessage> UpdateChallengeAvailabilityAsync(
+        AdminGameResponse game,
+        Guid challengeId,
+        bool isEnabled)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/games/{game.Id}")
+        {
+            Content = JsonContent.Create(new
+            {
+                game.Title,
+                game.Summary,
+                game.IsActive,
+                game.DefaultTimeLimitSeconds,
+                game.SuccessMessage,
+                challenges = game.Challenges.Select(challenge => new
+                {
+                    challenge.Id,
+                    challenge.Prompt,
+                    IsEnabled = challenge.Id == challengeId ? isEnabled : challenge.IsEnabled,
+                    challenge.SortOrder,
+                    challenge.TimeLimitSeconds,
+                    challenge.Options
+                })
+            })
+        };
+        await AddAntiforgeryTokenAsync(request);
+        return await client.SendAsync(request);
+    }
+
     private async Task AddAntiforgeryTokenAsync(HttpRequestMessage request)
     {
         var antiforgery = await client.GetFromJsonAsync<AntiforgeryResponse>("/api/auth/csrf");
@@ -655,11 +758,13 @@ public sealed class AdminChallengeManagementTests(ApiFactory factory) : IClassFi
         string SuccessMessage,
         bool SupportsChallengeImages,
         bool RequiresChallengeImages,
+        bool SupportsChallengeActivation,
         List<AdminChallengeResponse> Challenges);
     private sealed record AdminChallengeResponse(
         Guid Id,
         string Prompt,
         string? ImagePath,
+        bool IsEnabled,
         int SortOrder,
         int? TimeLimitSeconds,
         List<AdminOptionResponse> Options);

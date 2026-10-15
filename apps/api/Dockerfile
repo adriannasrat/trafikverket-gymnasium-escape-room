@@ -1,4 +1,13 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+FROM node:22-alpine AS web-build
+WORKDIR /src/apps/web
+
+COPY apps/web/package.json apps/web/package-lock.json ./
+RUN npm ci
+
+COPY apps/web/ ./
+RUN npm run build
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS api-build
 WORKDIR /src
 
 COPY global.json Directory.Build.props EscapeRoom.sln ./
@@ -15,6 +24,7 @@ RUN apk add --no-cache krb5-libs \
     && mkdir -p /app/uploads /app/data-protection-keys \
     && chown -R escape-room:escape-room /app
 USER escape-room
-COPY --from=build --chown=escape-room:escape-room /app/publish .
+COPY --from=api-build --chown=escape-room:escape-room /app/publish .
+COPY --from=web-build --chown=escape-room:escape-room /src/apps/web/dist ./wwwroot
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "EscapeRoom.Api.dll"]

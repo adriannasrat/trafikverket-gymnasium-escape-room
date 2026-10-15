@@ -7,7 +7,9 @@ npm install
 npm run dev
 ```
 
-The development server proxies API and health requests to `http://localhost:8080`.
+The development server proxies API, health and uploaded file requests through
+the local application at `http://localhost:8088`. Override this with
+`API_PROXY_TARGET` when another local address is required.
 
 Quality checks:
 

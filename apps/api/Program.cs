@@ -104,6 +104,31 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Response.Headers["X-Frame-Options"] = "DENY";
+        context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+        context.Response.Headers["Permissions-Policy"] =
+            "camera=(), microphone=(), geolocation=()";
+        return Task.CompletedTask;
+    });
+    await next();
+});
+
+// Public assets are handled before endpoint routing so a backend catch-all
+// cannot shadow an uploaded image or the compiled web application.
+app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadPath),
+    RequestPath = "/uploads"
+});
+
+app.UseRouting();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseCors("development");
@@ -113,11 +138,6 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(uploadPath),
-    RequestPath = "/uploads"
-});
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "healthy" }));
 app.MapHealthChecks("/health/ready");
@@ -126,6 +146,13 @@ app.MapAuthEndpoints();
 app.MapGameEndpoints();
 app.MapSessionEndpoints();
 app.MapAdminEndpoints();
+
+// Preserve backend semantics for missing routes. All other non-file routes
+// belong to the client-side router and receive the React application shell.
+app.Map("/api/{**path}", () => Results.NotFound());
+app.Map("/health/{**path}", () => Results.NotFound());
+app.Map("/uploads/{**path}", () => Results.NotFound());
+app.MapFallbackToFile("index.html");
 
 if (!app.Environment.IsEnvironment("Testing"))
 {

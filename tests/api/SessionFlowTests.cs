@@ -18,6 +18,15 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
     }
 
     [Fact]
+    public async Task UnknownApiRouteReturnsNotFoundInsteadOfTheWebApplication()
+    {
+        var response = await client.GetAsync("/api/does-not-exist");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.NotEqual("text/html", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
     public async Task PlayerCanCompleteActiveGameAndReachLeaderboard()
     {
         var started = await client.PostAsJsonAsync("/api/sessions/", new { playerName = "Testspelaren" });

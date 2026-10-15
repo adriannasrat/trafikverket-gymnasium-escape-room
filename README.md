@@ -38,7 +38,7 @@ docker compose up --build -d
 
 Open `http://localhost:8088` for the player experience and `http://localhost:8088/admin` for administration.
 The administrator username and password are the `ADMIN_USERNAME` and `ADMIN_PASSWORD`
-values in `.env`. After changing either value, run `docker compose up -d api` to apply
+values in `.env`. After changing either value, run `docker compose up -d app` to apply
 the new credentials without deleting games or event results.
 
 Image uploads are enabled for the local event stack. A hosted demo without
@@ -59,10 +59,10 @@ docker compose down
 
 ## Development
 
-Start PostgreSQL and the API with Docker:
+Start PostgreSQL and the application server with Docker:
 
 ```sh
-docker compose up db api
+docker compose up db app
 ```
 
 Then run the web application with hot reload:
@@ -73,7 +73,9 @@ npm install
 npm run dev
 ```
 
-The Vite development server proxies `/api` to the local API.
+The Vite development server proxies backend requests through the same local
+application address at `http://localhost:8088`. The API has no separate public
+host port.
 
 Run all frontend checks with `npm run lint`, `npm run test` and `npm run build`. The API integration suite runs with `dotnet test EscapeRoom.sln` when .NET 10 is installed, or through the SDK container used by CI.
 

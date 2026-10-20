@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../lib/api";
-import { getAdminGameCopy, manageableGameTypes } from "../lib/gameCatalog";
+import { getAdminGameCopy } from "../lib/gameCatalog";
 import type { AdminGame } from "../types";
 import { useAdminAutosave } from "./useAdminAutosave";
 
@@ -15,12 +15,8 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
   const game =
     games?.find((candidate) => candidate.id === selectedId) ?? games?.[0];
   const isMatching = game?.type === "Matching";
-  const isTrueFalse = game?.type === "TrueFalse";
-  const isPixelHunt = game?.type === "PixelHunt";
   const isSorting = game?.type === "Sorting";
   const isWordAssembly = game?.type === "WordAssembly";
-  const isHangman = game?.type === "Hangman";
-  const canManageQuestions = game ? manageableGameTypes.has(game.type) : false;
   const gameCopy = getAdminGameCopy(game?.type ?? "Quiz");
   const gamesRef = useRef<AdminGame[] | null>(null);
   const {
@@ -100,7 +96,7 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
   }
 
   async function addChallenge() {
-    if (!game || !canManageQuestions) return;
+    if (!game) return;
     beginMutation(game.id, "add");
     setStatus("");
     try {
@@ -124,7 +120,7 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
   }
 
   async function deleteChallenge(challengeId: string) {
-    if (!game || !canManageQuestions || game.challenges.length <= 1) return;
+    if (!game || game.challenges.length <= 1) return;
     const challenge = game.challenges.find((item) => item.id === challengeId);
     if (!challenge) return;
     if (!window.confirm(`Ta bort ${gameCopy.definiteItem} ”${challenge.prompt}”?`)) return;
@@ -368,14 +364,6 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     autosaveState,
     mutating,
     openChallengeIds,
-    isMatching,
-    isTrueFalse,
-    isPixelHunt,
-    isSorting,
-    isWordAssembly,
-    isHangman,
-    canManageQuestions,
-    gameCopy,
     selectGame,
     toggleChallenge,
     updateGame,
@@ -391,4 +379,6 @@ export function useAdminGameEditor(onUnauthorized: () => void) {
     uploadImage,
   };
 }
+
+export type AdminGameEditorController = ReturnType<typeof useAdminGameEditor>;
 

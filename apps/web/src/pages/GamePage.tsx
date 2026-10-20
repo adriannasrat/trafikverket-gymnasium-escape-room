@@ -1,766 +1,131 @@
-import { ArrowRight, CheckCircle2, RotateCcw, Trophy } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback } from "react";
+import { useParams } from "react-router-dom";
 import { BrandHeader } from "../components/BrandHeader";
-import { AnswerChoiceBoard } from "../components/AnswerChoiceBoard";
-import { ChallengeTimer } from "../components/ChallengeTimer";
-import { HangmanBoard } from "../components/HangmanBoard";
 import { LoadingScreen } from "../components/LoadingScreen";
-import { MatchingBoard } from "../components/MatchingBoard";
 import { MissionRoute } from "../components/MissionRoute";
-import { PixelRevealBoard } from "../components/PixelRevealBoard";
-import { SortingBoard } from "../components/SortingBoard";
-import { WordAssemblyBoard } from "../components/WordAssemblyBoard";
-import { api } from "../lib/api";
+import { GameCompletion } from "../features/gameplay/components/GameCompletion";
+import { GameError } from "../features/gameplay/components/GameError";
+import { GameHeading } from "../features/gameplay/components/GameHeading";
+import { GameRenderer } from "../features/gameplay/games/GameRenderer";
+import { useChallengeTimeout } from "../features/gameplay/hooks/useChallengeTimeout";
+import { useChallengeTimer } from "../features/gameplay/hooks/useChallengeTimer";
+import { useGameNavigation } from "../features/gameplay/hooks/useGameNavigation";
+import { useGameNotice } from "../features/gameplay/hooks/useGameNotice";
+import { useGameSession } from "../features/gameplay/hooks/useGameSession";
+import type { ChallengeRestart, GameFeedbackMessage } from "../features/gameplay/types";
 import { formatElapsed } from "../lib/time";
-import type { Challenge } from "../types";
-import { barlow, cx, eyebrow, focusRing, primaryButton, secondaryButton } from "../uiStyles";
 
 export function GamePage() {
   const { sessionId = "" } = useParams();
-  const [data, setData] = useState<Challenge | null>(null);
-  const [selected, setSelected] = useState("");
-  const [feedback, setFeedback] = useState<{
-    correct: boolean;
-    text: string;
-  } | null>(null);
-  const [completed, setCompleted] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [remaining, setRemaining] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
-  const [timingOut, setTimingOut] = useState(false);
-  const [awaitingNext, setAwaitingNext] = useState(false);
-  const [pixelRevealCount, setPixelRevealCount] = useState(0);
-  const [revealingPixel, setRevealingPixel] = useState(false);
-  const [connections, setConnections] = useState<Record<string, string>>({});
-  const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
-  const [lockedScenarioIds, setLockedScenarioIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [invalidScenarioIds, setInvalidScenarioIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [sortingPlacements, setSortingPlacements] = useState<Record<string, string | null>>({});
-  const [correctSortingIds, setCorrectSortingIds] = useState<Set<string>>(() => new Set());
-  const [incorrectSortingIds, setIncorrectSortingIds] = useState<Set<string>>(() => new Set());
-  const [wordOrder, setWordOrder] = useState<string[]>([]);
-  const [correctWordPartIds, setCorrectWordPartIds] = useState<Set<string>>(() => new Set());
-  const [incorrectWordPartIds, setIncorrectWordPartIds] = useState<Set<string>>(() => new Set());
-  const [error, setError] = useState("");
+  const session = useGameSession(sessionId);
+  const timer = useChallengeTimer({
+    data: session.data,
+    completed: session.completed,
+    revision: session.revision,
+  });
+  const timeout = useChallengeTimeout({
+    sessionId,
+    data: session.data,
+    completed: session.completed,
+    awaitingNext: timer.awaitingNext,
+    remaining: timer.remaining,
+    reloadChallenge: session.loadChallenge,
+  });
+  const notice = useGameNotice();
 
-  const loadChallenge = useCallback(async () => {
-    const result = await api.currentChallenge(sessionId);
-    if (result.completed) {
-      setCompleted(true);
-      return;
-    }
-    setData(result);
-    setElapsed(result.elapsedMilliseconds);
-    setRemaining(result.challenge.secondsRemaining);
-    setPixelRevealCount(result.challenge.pixelRevealCount);
-    setSelected("");
-    setConnections({});
-    setActiveScenarioId(null);
-    setLockedScenarioIds(new Set());
-    setInvalidScenarioIds(new Set());
-    setSortingPlacements(Object.fromEntries(
-      (result.sorting?.cards ?? []).map((card) => [card.id, null]),
-    ));
-    setCorrectSortingIds(new Set());
-    setIncorrectSortingIds(new Set());
-    const wordPartIds = result.wordAssembly?.parts.map((part) => part.id) ?? [];
-    setWordOrder(wordPartIds);
-    setCorrectWordPartIds(result.challenge.awaitingNext ? new Set(wordPartIds) : new Set());
-    setIncorrectWordPartIds(new Set());
-    setAwaitingNext(result.challenge.awaitingNext);
-    const isMatchingChallenge = result.game.type === "Matching";
-    setFeedback(
-      result.challenge.awaitingNext
-        ? {
-            correct: true,
-            text: isMatchingChallenge
-              ? "Alla kopplingar är klara. Gå vidare när du är redo."
-              : result.game.type === "Sorting"
-                ? "Alla kort är rätt sorterade. Gå vidare när du är redo."
-              : result.game.type === "WordAssembly"
-                  ? "Ordet är rätt byggt. Gå vidare när du är redo."
-                : result.game.type === "Hangman"
-                  ? "Signalordet är löst. Gå vidare när du är redo."
-                : "Frågan är klar. Gå vidare när du är redo.",
-          }
-        : null,
-    );
-    window.scrollTo(0, 0);
-  }, [sessionId]);
+  const clearBeforeNavigation = useCallback(() => {
+    timeout.clearFeedback();
+    notice.clearFeedback();
+  }, [notice, timeout]);
+  const navigation = useGameNavigation({
+    sessionId,
+    data: session.data,
+    awaitingNext: timer.awaitingNext,
+    reloadChallenge: session.loadChallenge,
+    onBeforeNavigate: clearBeforeNavigation,
+  });
 
-  useEffect(() => {
-    // oxlint-disable-next-line react/set-state-in-effect -- load and synchronize the UI with the current server session.
-    loadChallenge().catch(() => setError("Uppdraget kunde inte laddas."));
-  }, [loadChallenge]);
-  useEffect(() => {
-    if (!data || completed) return;
-    let previousTick = performance.now();
-    const tick = () => {
-      const now = performance.now();
-      const delta = now - previousTick;
-      previousTick = now;
-      if (!awaitingNext) setElapsed((current) => current + delta);
-      if (awaitingNext) return;
-      const challengeElapsed =
-        (Date.now() -
-          new Date(data.challenge.challengeStartedAtUtc).getTime()) /
-        1000 + data.challenge.currentChallengePenaltyMilliseconds / 1000;
-      setRemaining(
-        Math.max(0, data.challenge.timeLimitSeconds - challengeElapsed),
-      );
-    };
-    tick();
-    const timer = window.setInterval(tick, 100);
-    return () => window.clearInterval(timer);
-  }, [data, completed, awaitingNext]);
+  const clearExternalFeedback = useCallback(() => {
+    timeout.clearFeedback();
+    navigation.clearFeedback();
+    notice.clearFeedback();
+  }, [navigation, notice, timeout]);
 
-  useEffect(() => {
-    const challengeId = data?.challenge.id;
-    if (!challengeId || completed || awaitingNext || timingOut || remaining > 0) return;
-    // oxlint-disable-next-line react/set-state-in-effect -- zero on the visible server timer triggers one timeout registration.
-    setTimingOut(true);
-    api
-      .timeout(sessionId, challengeId)
-      .then(async (result) => {
-        if (result.expired && (data.wordAssembly || data.hangman)) {
-          await loadChallenge();
-          setFeedback({
-            correct: false,
-            text: result.message ?? "Tiden tog slut. Försök igen.",
-          });
-          return;
-        }
-        setData((current) =>
-          current?.challenge.id === challengeId
-            ? {
-                ...current,
-                challenge: {
-                  ...current.challenge,
-                  challengeStartedAtUtc: result.challengeStartedAtUtc,
-                  currentChallengePenaltyMilliseconds:
-                    result.currentChallengePenaltyMilliseconds ?? 0,
-                },
-              }
-            : current,
-        );
-        setRemaining(
-          result.secondsRemaining ?? result.timeLimitSeconds,
-        );
-        if (result.expired) {
-          setSelected("");
-          setPixelRevealCount(0);
-          setConnections({});
-          setActiveScenarioId(null);
-          setLockedScenarioIds(new Set());
-          setInvalidScenarioIds(new Set());
-          setSortingPlacements(Object.fromEntries(
-            (data.sorting?.cards ?? []).map((card) => [card.id, null]),
-          ));
-          setCorrectSortingIds(new Set());
-          setIncorrectSortingIds(new Set());
-          setWordOrder([]);
-          setCorrectWordPartIds(new Set());
-          setIncorrectWordPartIds(new Set());
-          setFeedback({
-            correct: false,
-            text: result.message ?? "Tiden tog slut. Försök igen.",
-          });
-        }
-      })
-      .catch((caught) => {
-        setFeedback({
-          correct: false,
-          text:
-            caught instanceof Error
-              ? caught.message
-              : "Tiden kunde inte registreras.",
-        });
-      })
-      .finally(() => setTimingOut(false));
-  }, [awaitingNext, completed, data?.challenge.id, data?.hangman, data?.sorting?.cards, data?.wordAssembly, loadChallenge, remaining, sessionId, timingOut]);
+  const restartChallenge = useCallback((restart: ChallengeRestart) => {
+    const fallbackLimit = session.data?.challenge.timeLimitSeconds ?? 0;
+    const secondsRemaining = restart.secondsRemaining
+      ?? restart.timeLimitSeconds
+      ?? fallbackLimit;
 
-  async function submit() {
-    if (!data || !selected || awaitingNext || timingOut) return;
-    setSubmitting(true);
-    setFeedback(null);
-    try {
-      const result = await api.answer(sessionId, data.challenge.id, selected);
-      setFeedback({
-        correct: result.correct,
-        text: result.successMessage ?? result.message ?? "",
-      });
-      if (result.elapsedMilliseconds !== undefined) {
-        setElapsed(result.elapsedMilliseconds);
-      }
-      if (result.completed) {
-        setCompleted(true);
-      } else if (result.correct) {
-        setAwaitingNext(true);
-        setRemaining(0);
-      } else if (result.challengeStartedAtUtc) {
-        setPixelRevealCount(0);
-        setData({
-          ...data,
-          challenge: {
-            ...data.challenge,
-            challengeStartedAtUtc: result.challengeStartedAtUtc,
-          },
-        });
-        setRemaining(
-          result.timeLimitSeconds ?? data.challenge.timeLimitSeconds,
-        );
-        setSelected("");
-      }
-    } catch (caught) {
-      setFeedback({
-        correct: false,
-        text:
-          caught instanceof Error
-            ? caught.message
-            : "Svaret kunde inte skickas.",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  }
+    session.updateData((current) => current ? {
+      ...current,
+      challenge: {
+        ...current.challenge,
+        challengeStartedAtUtc: restart.challengeStartedAtUtc
+          ?? current.challenge.challengeStartedAtUtc,
+        timeLimitSeconds: restart.timeLimitSeconds
+          ?? current.challenge.timeLimitSeconds,
+        currentChallengePenaltyMilliseconds:
+          restart.currentChallengePenaltyMilliseconds
+          ?? current.challenge.currentChallengePenaltyMilliseconds,
+        secondsRemaining,
+      },
+    } : current);
+    timer.restartChallenge(secondsRemaining);
+  }, [session, timer]);
 
-  async function revealPixel() {
-    if (!data || awaitingNext || revealingPixel || submitting || timingOut || remaining <= 0) return;
-    setRevealingPixel(true);
-    try {
-      const result = await api.revealPixel(sessionId, data.challenge.id);
-      setElapsed(result.elapsedMilliseconds);
-      setPixelRevealCount(result.pixelRevealCount);
-      if (result.expired && result.challengeStartedAtUtc) {
-        setSelected("");
-        setData({
-          ...data,
-          challenge: {
-            ...data.challenge,
-            challengeStartedAtUtc: result.challengeStartedAtUtc,
-          },
-        });
-        setRemaining(result.timeLimitSeconds ?? data.challenge.timeLimitSeconds);
-        setFeedback({ correct: false, text: result.message ?? "Tiden tog slut. Försök igen." });
-      }
-    } catch (caught) {
-      setFeedback({
-        correct: false,
-        text: caught instanceof Error ? caught.message : "Bilden kunde inte skärpas.",
-      });
-    } finally {
-      setRevealingPixel(false);
-    }
-  }
+  const reloadChallenge = useCallback(async (feedback?: GameFeedbackMessage) => {
+    await session.loadChallenge();
+    if (feedback) notice.showFeedback(feedback);
+  }, [notice, session]);
 
-  function selectScenario(scenarioId: string) {
-    if (lockedScenarioIds.has(scenarioId) || awaitingNext) return;
-    if (invalidScenarioIds.has(scenarioId)) {
-      setConnections((current) => {
-        const next = { ...current };
-        delete next[scenarioId];
-        return next;
-      });
-      setInvalidScenarioIds((current) => {
-        const next = new Set(current);
-        next.delete(scenarioId);
-        return next;
-      });
-    }
-    setActiveScenarioId((current) => current === scenarioId ? null : scenarioId);
-    setFeedback(null);
-  }
-
-  function selectDestination(destination: string) {
-    if (!activeScenarioId || awaitingNext) return;
-    setConnections((current) => {
-      const next = { ...current };
-      const previousScenario = Object.entries(next)
-        .find(([, target]) => target === destination)?.[0];
-      if (previousScenario && !lockedScenarioIds.has(previousScenario)) {
-        delete next[previousScenario];
-      }
-      next[activeScenarioId] = destination;
-      return next;
-    });
-    setInvalidScenarioIds((current) => {
-      const next = new Set(current);
-      next.delete(activeScenarioId);
-      return next;
-    });
-    setActiveScenarioId(null);
-    setFeedback(null);
-  }
-
-  async function submitMatches() {
-    if (!data?.matching || awaitingNext || timingOut) return;
-    const selections = data.matching.scenarios.flatMap((scenario) => {
-      const destination = connections[scenario.id];
-      const option = scenario.options.find(candidate => candidate.text === destination);
-      return option ? [{ challengeId: scenario.id, optionId: option.id }] : [];
-    });
-    if (selections.length !== data.matching.scenarios.length) return;
-
-    setSubmitting(true);
-    setFeedback(null);
-    try {
-      const result = await api.submitMatches(sessionId, data.challenge.id, selections);
-      setFeedback({
-        correct: result.correct,
-        text: result.successMessage ?? result.message ?? "",
-      });
-      if (result.elapsedMilliseconds !== undefined) {
-        setElapsed(result.elapsedMilliseconds);
-      }
-      if (result.expired) {
-        setConnections({});
-        setLockedScenarioIds(new Set());
-        setInvalidScenarioIds(new Set());
-        setActiveScenarioId(null);
-        if (result.challengeStartedAtUtc) {
-          setData({
-            ...data,
-            challenge: {
-              ...data.challenge,
-              challengeStartedAtUtc: result.challengeStartedAtUtc,
-            },
-          });
-        }
-        setRemaining(result.timeLimitSeconds ?? data.challenge.timeLimitSeconds);
-      } else if (result.correct) {
-        setLockedScenarioIds(new Set(data.matching.scenarios.map(scenario => scenario.id)));
-        setInvalidScenarioIds(new Set());
-        setAwaitingNext(true);
-        setRemaining(0);
-      } else {
-        const invalid = new Set(result.incorrectChallengeIds);
-        setInvalidScenarioIds(invalid);
-        setLockedScenarioIds(new Set(
-          data.matching.scenarios
-            .filter(scenario => !invalid.has(scenario.id))
-            .map(scenario => scenario.id),
-        ));
-      }
-    } catch (caught) {
-      setFeedback({
-        correct: false,
-        text: caught instanceof Error ? caught.message : "Kopplingarna kunde inte kontrolleras.",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function moveSortingCard(cardId: string, category: string | null) {
-    if (correctSortingIds.has(cardId) || awaitingNext) return;
-    setSortingPlacements((current) => ({ ...current, [cardId]: category }));
-    setIncorrectSortingIds((current) => {
-      const next = new Set(current);
-      next.delete(cardId);
-      return next;
-    });
-    setFeedback(null);
-  }
-
-  async function submitSorting() {
-    if (!data?.sorting || awaitingNext || timingOut) return;
-    const placements = data.sorting.cards.map((card) => ({
-      optionId: card.id,
-      category: sortingPlacements[card.id] ?? null,
-    }));
-    setSubmitting(true);
-    setFeedback(null);
-    try {
-      const result = await api.submitSorting(sessionId, data.challenge.id, placements);
-      setFeedback({
-        correct: result.correct,
-        text: result.successMessage ?? result.message ?? "",
-      });
-      if (result.elapsedMilliseconds !== undefined) setElapsed(result.elapsedMilliseconds);
-
-      if (result.expired) {
-        setSortingPlacements(Object.fromEntries(data.sorting.cards.map((card) => [card.id, null])));
-        setCorrectSortingIds(new Set());
-        setIncorrectSortingIds(new Set());
-        setData({
-          ...data,
-          challenge: {
-            ...data.challenge,
-            challengeStartedAtUtc: result.challengeStartedAtUtc ?? data.challenge.challengeStartedAtUtc,
-            currentChallengePenaltyMilliseconds: 0,
-          },
-        });
-        setRemaining(result.secondsRemaining ?? result.timeLimitSeconds ?? data.challenge.timeLimitSeconds);
-      } else if (result.correct) {
-        setCorrectSortingIds(new Set(data.sorting.cards.map((card) => card.id)));
-        setIncorrectSortingIds(new Set());
-        setAwaitingNext(true);
-        setRemaining(0);
-      } else {
-        const incorrect = new Set(result.incorrectOptionIds);
-        setIncorrectSortingIds(incorrect);
-        setCorrectSortingIds(new Set(
-          data.sorting.cards.filter((card) => !incorrect.has(card.id)).map((card) => card.id),
-        ));
-        setData({
-          ...data,
-          challenge: {
-            ...data.challenge,
-            currentChallengePenaltyMilliseconds: result.currentChallengePenaltyMilliseconds,
-          },
-        });
-        if (result.secondsRemaining !== undefined) setRemaining(result.secondsRemaining);
-      }
-    } catch (caught) {
-      setFeedback({
-        correct: false,
-        text: caught instanceof Error ? caught.message : "Sorteringen kunde inte kontrolleras.",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function reorderWordParts(order: string[]) {
-    if (awaitingNext) return;
-    setWordOrder(order);
-    setCorrectWordPartIds(new Set());
-    setIncorrectWordPartIds(new Set());
-    setFeedback(null);
-  }
-
-  async function submitWordAssembly() {
-    if (!data?.wordAssembly || awaitingNext || timingOut || wordOrder.length === 0) return;
-    setSubmitting(true);
-    setFeedback(null);
-    try {
-      const result = await api.submitWordAssembly(sessionId, data.challenge.id, wordOrder);
-      setFeedback({
-        correct: result.correct,
-        text: result.successMessage ?? result.message ?? "",
-      });
-      if (result.elapsedMilliseconds !== undefined) setElapsed(result.elapsedMilliseconds);
-
-      if (result.expired) {
-        await loadChallenge();
-        setFeedback({
-          correct: false,
-          text: result.message ?? "Tiden tog slut. Försök igen.",
-        });
-      } else if (result.correct) {
-        setCorrectWordPartIds(new Set(wordOrder));
-        setIncorrectWordPartIds(new Set());
-        setAwaitingNext(true);
-        setRemaining(0);
-      } else {
-        const incorrect = new Set(result.incorrectOptionIds);
-        setIncorrectWordPartIds(incorrect);
-        setCorrectWordPartIds(new Set(wordOrder.filter((id) => !incorrect.has(id))));
-      }
-    } catch (caught) {
-      setFeedback({
-        correct: false,
-        text: caught instanceof Error ? caught.message : "Orddelarna kunde inte kontrolleras.",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function guessHangmanLetter(letter: string) {
-    if (!data?.hangman || awaitingNext || timingOut || submitting || remaining <= 0) return;
-    setSubmitting(true);
-    setFeedback(null);
-    try {
-      const result = await api.submitHangmanGuess(sessionId, data.challenge.id, letter);
-      const resetPattern = result.roundReset
-        ? result.hangman.pattern.map((character) => character === " " || character === "-" ? character : null)
-        : result.hangman.pattern;
-      setData({
-        ...data,
-        challenge: {
-          ...data.challenge,
-          challengeStartedAtUtc: result.challengeStartedAtUtc ?? data.challenge.challengeStartedAtUtc,
-        },
-        hangman: result.roundReset
-          ? { ...result.hangman, pattern: resetPattern, guessedLetters: [] }
-          : result.hangman,
-      });
-      setFeedback({
-        correct: result.correct,
-        text: result.successMessage ?? result.message ?? "",
-      });
-      if (result.elapsedMilliseconds !== undefined) setElapsed(result.elapsedMilliseconds);
-      if (result.roundReset) {
-        setRemaining(result.timeLimitSeconds ?? data.challenge.timeLimitSeconds);
-      } else if (result.solved) {
-        setAwaitingNext(true);
-        setRemaining(0);
-      }
-    } catch (caught) {
-      setFeedback({
-        correct: false,
-        text: caught instanceof Error ? caught.message : "Bokstaven kunde inte skickas.",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function goToNextChallenge() {
-    if (!awaitingNext || submitting) return;
-    setSubmitting(true);
-    try {
-      await api.nextChallenge(sessionId);
-      await loadChallenge();
-    } catch (caught) {
-      setFeedback({
-        correct: false,
-        text:
-          caught instanceof Error
-            ? caught.message
-            : "Nästa fråga kunde inte laddas.",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (error)
+  if (session.error) return <GameError message={session.error} />;
+  if (session.completed) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-white text-[#666]">
-        <h1 className={`${barlow} text-[#202020] uppercase`}>Kontakten bröts</h1>
-        <p>{error}</p>
-        <Link className={`font-bold text-[#d70000] ${focusRing}`} to="/">Till startsidan</Link>
-      </div>
+      <GameCompletion
+        playerName={session.data?.playerName}
+        elapsed={timer.elapsed}
+      />
     );
-  if (completed)
-    return (
-      <div className="min-h-screen overflow-hidden bg-white">
-        <BrandHeader
-          playerName={data?.playerName}
-          elapsed={formatElapsed(elapsed)}
-        />
-        <main className="relative flex min-h-[calc(100vh-72px)] flex-col items-center justify-center px-[30px] py-12 text-center before:absolute before:top-[18%] before:left-[8%] before:size-[150px] before:rotate-8 before:border before:border-[#eee] before:content-[''] after:absolute after:right-[8%] after:bottom-[15%] after:size-[150px] after:-rotate-8 after:border after:border-[#eee] after:content-[''] max-[720px]:min-h-[calc(100vh-66px)] max-[720px]:px-5 max-[720px]:py-10 max-[720px]:before:hidden max-[720px]:after:hidden">
-          <span className="mb-[30px] grid size-[76px] place-items-center rounded-full bg-[#23845e] text-white shadow-[0_0_0_12px_rgba(35,132,94,0.1)] [&>svg]:size-[38px]">
-            <CheckCircle2 />
-          </span>
-          <p className={`${eyebrow} justify-center`}>UPPDRAG SLUTFÖRT</p>
-          <h1 className={`${barlow} mb-3 text-[clamp(50px,6vw,70px)] text-[#202020] uppercase`}>Systemet är säkrat.</h1>
-          <p className="text-[#606060]">
-            Bra jobbat, <strong>{data?.playerName}</strong>! Din totaltid är
-            registrerad.
-          </p>
-          <div className="my-[35px] grid">
-            <small className="tracking-[0.2em] text-[#777]">SLUTTID</small>
-            <strong className={`${barlow} text-[70px] tracking-[0.05em] text-[#d70000]`}>{formatElapsed(elapsed)}</strong>
-          </div>
-          <div className="relative z-1 flex gap-3 max-[720px]:w-[min(100%,320px)] max-[720px]:flex-col">
-            <Link
-              className={primaryButton}
-              to="/leaderboard"
-            >
-              <Trophy size={18} /> Visa topplistan
-            </Link>
-            <Link
-              className={secondaryButton}
-              to="/"
-            >
-              <RotateCcw size={17} /> Nästa spelare
-            </Link>
-          </div>
-        </main>
-      </div>
-    );
-  if (!data) return <LoadingScreen />;
-  const isMatching = data.game.type === "Matching" && data.matching !== null;
-  const isTrueFalse = data.game.type === "TrueFalse";
-  const isPixelHunt = data.game.type === "PixelHunt";
-  const isSorting = data.game.type === "Sorting" && data.sorting !== null;
-  const isWordAssembly = data.game.type === "WordAssembly" && data.wordAssembly !== null;
-  const isHangman = data.game.type === "Hangman" && data.hangman !== null;
-  const allScenariosConnected = isMatching &&
-    data.matching!.scenarios.every(scenario => Boolean(connections[scenario.id]));
-  const isLastQuestion = data.challenge.questionNumber === data.challenge.questionTotal;
-  const isLastGame = data.challenge.number === data.challenge.total;
-  const nextActionLabel = isMatching
-    ? isLastGame
-      ? "Slutför uppdraget"
-      : "Nästa spel"
-    : isLastQuestion
-      ? isLastGame
-        ? "Slutför uppdraget"
-        : "Nästa spel"
-      : isPixelHunt
-        ? "Nästa bild"
-        : isWordAssembly
-          ? "Nästa ord"
-        : isHangman
-          ? "Nästa signalord"
-        : "Nästa fråga";
+  }
+  if (!session.data) return <LoadingScreen />;
+
+  const externalFeedback = notice.feedback
+    ?? navigation.feedback
+    ?? timeout.feedback;
 
   return (
     <div className="min-h-screen bg-[#f5f5f5]">
       <BrandHeader
-        playerName={data.playerName}
-        elapsed={formatElapsed(elapsed)}
+        playerName={session.data.playerName}
+        elapsed={formatElapsed(timer.elapsed)}
       />
       <div className="grid min-h-[calc(100vh-72px)] grid-cols-[280px_minmax(0,1fr)] max-[980px]:grid-cols-[230px_minmax(0,1fr)] max-[720px]:block max-[720px]:min-h-[calc(100vh-66px)]">
         <MissionRoute
-          current={data.challenge.number}
-          total={data.challenge.total}
+          current={session.data.challenge.number}
+          total={session.data.challenge.total}
         />
         <main className="mx-auto w-full max-w-[1120px] p-[clamp(34px,4.5vw,68px)] max-[720px]:px-5 max-[720px]:pt-[34px] max-[720px]:pb-[42px]">
-          <div className="flex justify-between gap-10 border-b border-[#dedede] pb-[25px] max-[720px]:gap-[10px]">
-            <div>
-              <p className={eyebrow}>
-                {isMatching ? "ETAPP" : isPixelHunt ? "BILD" : isSorting ? "SORTERING" : isWordAssembly ? "ORD" : isHangman ? "SIGNALORD" : "FRÅGA"} {(
-                  isMatching ? data.challenge.number : data.challenge.questionNumber
-                ).toString().padStart(2, "0")} ·{" "}
-                {data.game.title.toUpperCase()}
-              </p>
-              <h1 className={`${barlow} m-0 max-w-[820px] text-[clamp(33px,3.4vw,50px)] leading-[1.05] text-[#202020] uppercase max-[420px]:text-[31px]`}>
-                {isMatching ? data.game.summary : data.challenge.prompt}
-              </h1>
-            </div>
-            <span className={`${barlow} text-[49px] font-bold text-[#d70000] max-[720px]:hidden`}>
-              {(isMatching ? data.challenge.number : data.challenge.questionNumber).toString().padStart(2, "0")}
-              <span className="text-[20px] text-[#999]">/{(
-                isMatching ? data.challenge.total : data.challenge.questionTotal
-              ).toString().padStart(2, "0")}</span>
-            </span>
-          </div>
-          {!isMatching && !isPixelHunt && data.challenge.imagePath && (
-            <img
-              className="mt-[22px] block max-h-[360px] w-full bg-white object-contain p-3"
-              src={data.challenge.imagePath}
-              alt="Ledtråd till uppdraget"
-            />
-          )}
-          <ChallengeTimer
-            remaining={remaining}
-            total={data.challenge.timeLimitSeconds}
-            complete={awaitingNext}
-            completeLabel={isMatching ? "KOPPLINGARNA ÄR KLARA" : isSorting ? "SORTERINGEN ÄR KLAR" : isWordAssembly ? "ORDET ÄR KLART" : isHangman ? "SIGNALORDET ÄR LÖST" : undefined}
+          <GameHeading data={session.data} />
+          <GameRenderer
+            key={session.revision}
+            data={session.data}
+            sessionId={sessionId}
+            remaining={timer.remaining}
+            awaitingNext={timer.awaitingNext}
+            timingOut={timeout.timingOut}
+            externalFeedback={externalFeedback}
+            nextActionLabel={navigation.nextActionLabel}
+            navigating={navigation.navigating}
+            onClearExternalFeedback={clearExternalFeedback}
+            onElapsedChange={timer.setElapsed}
+            onChallengeComplete={timer.completeChallenge}
+            onSessionComplete={session.markCompleted}
+            onRestartChallenge={restartChallenge}
+            onUpdateData={session.updateData}
+            onReloadChallenge={reloadChallenge}
+            onNextChallenge={navigation.goToNextChallenge}
           />
-          {isPixelHunt && (
-            <PixelRevealBoard
-              key={data.challenge.id}
-              imagePath={data.challenge.imagePath}
-              revealCount={awaitingNext ? 5 : pixelRevealCount}
-              disabled={awaitingNext || revealingPixel || submitting || timingOut || remaining <= 0}
-              onReveal={revealPixel}
-            />
-          )}
-          {isMatching ? (
-            <MatchingBoard
-              scenarios={data.matching!.scenarios}
-              destinations={data.matching!.destinations}
-              connections={connections}
-              activeScenarioId={activeScenarioId}
-              lockedIds={lockedScenarioIds}
-              invalidIds={invalidScenarioIds}
-              disabled={awaitingNext || submitting || timingOut}
-              onSelectScenario={selectScenario}
-              onSelectDestination={selectDestination}
-            />
-          ) : isSorting ? (
-            <SortingBoard
-              key={data.challenge.id}
-              cards={data.sorting!.cards}
-              categories={data.sorting!.categories}
-              placements={sortingPlacements}
-              correctIds={correctSortingIds}
-              incorrectIds={incorrectSortingIds}
-              disabled={awaitingNext || submitting || timingOut || remaining <= 0}
-              onMove={moveSortingCard}
-            />
-          ) : isWordAssembly ? (
-            <WordAssemblyBoard
-              key={data.challenge.id}
-              parts={data.wordAssembly!.parts}
-              order={wordOrder}
-              correctIds={correctWordPartIds}
-              incorrectIds={incorrectWordPartIds}
-              disabled={awaitingNext || submitting || timingOut || remaining <= 0}
-              onReorder={reorderWordParts}
-            />
-          ) : isHangman ? (
-            <HangmanBoard
-              key={data.challenge.id}
-              pattern={data.hangman!.pattern}
-              guessedLetters={data.hangman!.guessedLetters}
-              mistakes={data.hangman!.mistakes}
-              maxMistakes={data.hangman!.maxMistakes}
-              disabled={awaitingNext || timingOut || remaining <= 0}
-              submitting={submitting}
-              onGuess={guessHangmanLetter}
-            />
-          ) : (
-            <AnswerChoiceBoard
-              options={data.challenge.options}
-              selectedId={selected}
-              variant={isTrueFalse ? "true-false" : "multiple-choice"}
-              disabled={awaitingNext || submitting || timingOut}
-              completed={awaitingNext}
-              onSelect={(optionId) => {
-                setSelected(optionId);
-                setFeedback(null);
-              }}
-            />
-          )}
-          <div className="mt-[22px] grid min-h-[52px] grid-cols-[1fr_auto] items-center gap-5 max-[720px]:grid-cols-1">
-            <div>
-              {feedback && (
-                <p
-                  className={cx(
-                    'm-0 border-l-[3px] px-[13px] py-[11px] text-[13px]',
-                    feedback.correct ? 'border-[#23845e] bg-[#eaf8f2] text-[#116e4c]' : 'border-[#c7352d] bg-[#fff0ef] text-[#9f302b]',
-                  )}
-                  role="status"
-                >
-                  {feedback.text}
-                </p>
-              )}
-            </div>
-            {(!isHangman || awaitingNext) && <button
-              className={`${primaryButton} max-[720px]:w-full`}
-              disabled={
-                awaitingNext
-                  ? submitting
-                  : isMatching
-                    ? !allScenariosConnected || submitting || timingOut
-                    : isSorting
-                      ? submitting || timingOut
-                      : isWordAssembly
-                        ? wordOrder.length === 0 || submitting || timingOut
-                      : !selected || submitting || timingOut || revealingPixel
-              }
-              onClick={awaitingNext ? goToNextChallenge : isMatching ? submitMatches : isSorting ? submitSorting : isWordAssembly ? submitWordAssembly : submit}
-            >
-              {submitting
-                ? awaitingNext
-                  ? `${nextActionLabel}…`
-                  : "Kontrollerar…"
-                : awaitingNext
-                  ? nextActionLabel
-                  : timingOut
-                    ? "Tiden registreras…"
-                    : isMatching
-                      ? "Kontrollera kopplingar"
-                      : isSorting
-                        ? "Kontrollera sortering"
-                        : isWordAssembly
-                          ? "Kontrollera ordning"
-                      : "Bekräfta svar"}{" "}
-              <ArrowRight size={18} />
-            </button>}
-          </div>
         </main>
       </div>
     </div>

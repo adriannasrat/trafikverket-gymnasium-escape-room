@@ -45,7 +45,7 @@ public static partial class SessionEndpoints
         }
 
         var letter = request.Letter.Trim().ToUpperInvariant();
-        if (letter.Length != 1 || !char.IsLetter(letter[0]) || !HangmanAlphabet.Contains(letter, StringComparison.Ordinal))
+        if (letter.Length != 1 || !char.IsLetter(letter[0]) || !HangmanRules.Alphabet.Contains(letter, StringComparison.Ordinal))
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>
             {
@@ -68,9 +68,9 @@ public static partial class SessionEndpoints
         }
 
         var now = timeProvider.GetUtcNow();
-        var timeLimit = GetTimeLimitSeconds(challenge);
+        var timeLimit = SessionTimeCalculator.GetTimeLimitSeconds(challenge);
         var expired = now - roundStartedAt >= TimeSpan.FromSeconds(timeLimit);
-        var answer = NormalizeHangmanAnswer(challenge.Options.Single().Text);
+        var answer = HangmanRules.NormalizeAnswer(challenge.Options.Single().Text);
         var letterIsCorrect = answer.Contains(letter, StringComparison.Ordinal);
         db.ChallengeAttempts.Add(new ChallengeAttempt
         {
@@ -95,12 +95,12 @@ public static partial class SessionEndpoints
                 message = "Tiden tog slut. Bokstäverna har återställts – försök igen.",
                 challengeStartedAtUtc = now,
                 timeLimitSeconds = timeLimit,
-                hangman = BuildHangmanState(answer, [])
+                hangman = HangmanRules.BuildState(answer, [])
             });
         }
 
         var guesses = previousGuesses.Append(letter).Distinct(StringComparer.Ordinal).ToList();
-        var state = BuildHangmanState(answer, guesses);
+        var state = HangmanRules.BuildState(answer, guesses);
         if (state.Solved)
         {
             session.CurrentChallengeStartedAtUtc = null;
@@ -113,12 +113,12 @@ public static partial class SessionEndpoints
                 expired = false,
                 roundReset = false,
                 challenge.Game.SuccessMessage,
-                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now),
+                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
                 hangman = state
             });
         }
 
-        if (state.Mistakes >= HangmanMaximumMistakes)
+        if (state.Mistakes >= HangmanRules.MaximumMistakes)
         {
             const int penaltyMilliseconds = 10_000;
             session.TotalPenaltyMilliseconds += penaltyMilliseconds;
@@ -133,7 +133,7 @@ public static partial class SessionEndpoints
                 message = "Signalen visar stopp. Bokstäverna återställs och 10 sekunder läggs till på totaltiden.",
                 challengeStartedAtUtc = now,
                 timeLimitSeconds = timeLimit,
-                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now),
+                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
                 hangman = state
             });
         }
@@ -146,7 +146,7 @@ public static partial class SessionEndpoints
             expired = false,
             roundReset = false,
             message = letterIsCorrect ? "Bokstaven finns i ordet." : "Bokstaven finns inte i ordet.",
-            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now),
+            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
             hangman = state
         });
     }

@@ -40,7 +40,7 @@ public static partial class SessionEndpoints
         }
 
         var now = timeProvider.GetUtcNow();
-        var timeLimit = GetTimeLimitSeconds(challenge);
+        var timeLimit = SessionTimeCalculator.GetTimeLimitSeconds(challenge);
         if (now - session.CurrentChallengeStartedAtUtc.Value >= TimeSpan.FromSeconds(timeLimit))
         {
             db.ChallengeAttempts.Add(new ChallengeAttempt
@@ -62,7 +62,7 @@ public static partial class SessionEndpoints
                 penaltySeconds = session.TotalPenaltyMilliseconds / 1000,
                 challengeStartedAtUtc = now,
                 timeLimitSeconds = timeLimit,
-                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
             });
         }
 
@@ -80,7 +80,7 @@ public static partial class SessionEndpoints
             expired = false,
             pixelRevealCount = session.PixelRevealCount,
             penaltySeconds = session.TotalPenaltyMilliseconds / 1000,
-            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
         });
     }
 
@@ -125,7 +125,7 @@ public static partial class SessionEndpoints
 
         var now = timeProvider.GetUtcNow();
         var challengeStartedAt = session.CurrentChallengeStartedAtUtc.Value;
-        var timeLimit = GetTimeLimitSeconds(challenge);
+        var timeLimit = SessionTimeCalculator.GetTimeLimitSeconds(challenge);
         var expired = now - challengeStartedAt > TimeSpan.FromSeconds(timeLimit);
 
         db.ChallengeAttempts.Add(new ChallengeAttempt
@@ -162,7 +162,7 @@ public static partial class SessionEndpoints
             correct = true,
             completed = false,
             challenge.Game.SuccessMessage,
-            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
         });
     }
 }

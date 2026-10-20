@@ -59,7 +59,7 @@ public static partial class SessionEndpoints
         }
 
         var now = timeProvider.GetUtcNow();
-        var timeLimit = GetTimeLimitSeconds(challenge);
+        var timeLimit = SessionTimeCalculator.GetTimeLimitSeconds(challenge);
         var expired = now - session.CurrentChallengeStartedAtUtc.Value >= TimeSpan.FromSeconds(timeLimit);
         var incorrectOptionIds = request.OrderedOptionIds
             .Where((optionId, index) => optionId != correctOrder[index])
@@ -86,7 +86,7 @@ public static partial class SessionEndpoints
                 incorrectOptionIds = correctOrder,
                 challengeStartedAtUtc = now,
                 timeLimitSeconds = timeLimit,
-                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
             });
         }
 
@@ -99,7 +99,7 @@ public static partial class SessionEndpoints
                 expired = false,
                 message = "Orddelarna ligger inte i rätt ordning ännu. Försök igen.",
                 incorrectOptionIds,
-                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
             });
         }
 
@@ -112,7 +112,7 @@ public static partial class SessionEndpoints
             completed = false,
             challenge.Game.SuccessMessage,
             incorrectOptionIds,
-            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
         });
     }
 }

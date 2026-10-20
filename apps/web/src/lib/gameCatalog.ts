@@ -118,8 +118,6 @@ export const gameCatalog: Record<GameType, AdminGameCopy> = {
   },
 };
 
-export const manageableGameTypes = new Set<GameType>(gameTypeOrder);
-
 export function getAdminGameCopy(type: GameType): AdminGameCopy {
   return gameCatalog[type];
 }

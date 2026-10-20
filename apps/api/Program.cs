@@ -25,6 +25,8 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("database");
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<DatabaseInitializer>();
+builder.Services.AddScoped<SessionService>();
+builder.Services.AddScoped<CurrentChallengeResponseBuilder>();
 
 var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
 var dataProtection = builder.Services

@@ -85,7 +85,7 @@ public static partial class SessionEndpoints
         }
 
         var now = timeProvider.GetUtcNow();
-        var timeLimit = GetTimeLimitSeconds(currentChallenge);
+        var timeLimit = SessionTimeCalculator.GetTimeLimitSeconds(currentChallenge);
         var expired = now - session.CurrentChallengeStartedAtUtc.Value > TimeSpan.FromSeconds(timeLimit);
         foreach (var selected in selectedOptions)
         {
@@ -140,7 +140,7 @@ public static partial class SessionEndpoints
             completed = false,
             currentChallenge.Game.SuccessMessage,
             incorrectChallengeIds,
-            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
         });
     }
 }

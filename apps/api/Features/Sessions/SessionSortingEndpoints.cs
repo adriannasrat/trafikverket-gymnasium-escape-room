@@ -69,7 +69,7 @@ public static partial class SessionEndpoints
         }
 
         var now = timeProvider.GetUtcNow();
-        var timeLimit = GetTimeLimitSeconds(challenge);
+        var timeLimit = SessionTimeCalculator.GetTimeLimitSeconds(challenge);
         var elapsed = now - session.CurrentChallengeStartedAtUtc.Value +
             TimeSpan.FromMilliseconds(session.CurrentChallengePenaltyMilliseconds);
         if (elapsed >= TimeSpan.FromSeconds(timeLimit))
@@ -94,7 +94,7 @@ public static partial class SessionEndpoints
                 challengeStartedAtUtc = now,
                 timeLimitSeconds = timeLimit,
                 currentChallengePenaltyMilliseconds = 0,
-                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
             });
         }
 
@@ -146,7 +146,7 @@ public static partial class SessionEndpoints
                 timeLimitSeconds = timeLimit,
                 currentChallengePenaltyMilliseconds = session.CurrentChallengePenaltyMilliseconds,
                 secondsRemaining = penaltyExpired ? timeLimit : Math.Max(0, secondsRemaining),
-                elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
             });
         }
 
@@ -161,7 +161,7 @@ public static partial class SessionEndpoints
             challenge.Game.SuccessMessage,
             incorrectOptionIds,
             currentChallengePenaltyMilliseconds = 0,
-            elapsedMilliseconds = CalculateElapsedMilliseconds(session, now)
+            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
         });
     }
 }

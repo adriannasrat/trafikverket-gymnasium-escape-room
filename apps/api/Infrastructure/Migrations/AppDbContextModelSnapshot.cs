@@ -263,6 +263,9 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
                     b.Property<Guid?>("CurrentChallengeId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ExperienceMode")
+                        .HasColumnType("integer");
+
                     b.Property<long>("CurrentChallengePenaltyMilliseconds")
                         .HasColumnType("bigint");
 
@@ -296,7 +299,7 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
 
                     b.HasIndex("CurrentChallengeId");
 
-                    b.HasIndex("Status", "CompletedAtUtc");
+                    b.HasIndex("ExperienceMode", "Status", "CompletedAtUtc");
 
                     b.ToTable("GameSessions");
                 });

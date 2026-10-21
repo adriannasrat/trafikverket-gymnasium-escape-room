@@ -11,9 +11,10 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { BrandHeader } from "../components/BrandHeader";
+import { PrivacyNotice } from "../components/PrivacyNotice";
 import { api } from "../lib/api";
 import { formatElapsed } from "../lib/time";
-import type { GameSummary, LeaderboardEntry } from "../types";
+import type { GameSummary, LeaderboardEntry, PrivacySettings } from "../types";
 import {
   barlow,
   eventFooter,
@@ -28,6 +29,10 @@ export function StartPage() {
   const [playerName, setPlayerName] = useState("");
   const [game, setGame] = useState<GameSummary | null>(null);
   const [leaders, setLeaders] = useState<LeaderboardEntry[] | null>(null);
+  const [privacy, setPrivacy] = useState<PrivacySettings>({
+    mode: "Event",
+    retentionDays: 30,
+  });
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
   const navigate = useNavigate();
@@ -41,6 +46,7 @@ export function StartPage() {
       .leaderboard()
       .then((entries) => setLeaders(entries.slice(0, 3)))
       .catch(() => setLeaders([]));
+    api.privacy().then(setPrivacy).catch(() => undefined);
   }, []);
 
   async function start(event: FormEvent) {
@@ -103,7 +109,7 @@ export function StartPage() {
             onSubmit={start}
           >
             <label className={`${fieldLabel} mb-2`} htmlFor="playerName">
-              DITT NAMN
+              DITT SMEKNAMN
             </label>
             <div className="grid grid-cols-[minmax(0,1fr)_auto] border border-[#9a9a9a] bg-white p-[5px] shadow-[0_8px_24px_rgba(30,30,30,0.06)] focus-within:border-[#d70000] focus-within:shadow-[0_0_0_3px_rgba(215,0,0,0.09)] max-[720px]:grid-cols-1 max-[720px]:gap-[5px]">
               <input
@@ -111,11 +117,12 @@ export function StartPage() {
                 id="playerName"
                 value={playerName}
                 onChange={(event) => setPlayerName(event.target.value)}
-                placeholder="Skriv ditt namn"
+                placeholder="Välj ett smeknamn"
                 minLength={2}
                 maxLength={80}
                 autoComplete="off"
                 autoFocus
+                aria-describedby="player-privacy"
               />
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_auto] bg-white pt-[5px] shadow-[0_8px_24px_rgba(30,30,30,0.06)]">
@@ -132,6 +139,14 @@ export function StartPage() {
                 {error}
               </p>
             )}
+            <div className="mt-3">
+              <PrivacyNotice
+                id="player-privacy"
+                mode={privacy.mode}
+                retentionDays={privacy.retentionDays}
+                compact
+              />
+            </div>
             <small className="mt-3 flex items-center justify-center gap-[6px] text-[10px] text-[#747474]">
               <Clock3 size={14} /> Totaltiden börjar när du startar.
             </small>

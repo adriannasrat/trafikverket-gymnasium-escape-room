@@ -14,6 +14,7 @@ public sealed record PixelRevealRequest(Guid ChallengeId);
 public sealed record SessionResponse(
     Guid Id,
     string PlayerName,
+    string ExperienceMode,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? CompletedAtUtc,
     string Status,
@@ -99,7 +100,8 @@ public sealed record LeaderboardEntryResponse(
     Guid Id,
     string PlayerName,
     long ElapsedMilliseconds,
-    DateTimeOffset? CompletedAtUtc);
+    DateTimeOffset? CompletedAtUtc,
+    string ExperienceMode);
 
 public sealed record ErrorResponse(string Message);
 

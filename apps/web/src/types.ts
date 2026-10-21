@@ -9,6 +9,12 @@ export const gameTypes = [
 ] as const
 
 export type GameType = (typeof gameTypes)[number]
+export type ExperienceMode = "Event" | "Demo"
+
+export type PrivacySettings = {
+  mode: ExperienceMode
+  retentionDays: number
+}
 
 export type GameSummary<TType extends GameType = GameType> = {
   id: string
@@ -20,7 +26,8 @@ export type GameSummary<TType extends GameType = GameType> = {
 }
 
 export type Session = {
-  id: string; playerName: string; startedAtUtc: string; completedAtUtc: string | null
+  id: string; playerName: string; experienceMode: ExperienceMode
+  startedAtUtc: string; completedAtUtc: string | null
   status: 'InProgress' | 'Completed' | 'Abandoned'; elapsedMilliseconds: number
 }
 
@@ -178,6 +185,7 @@ export type TimeoutResult = {
 
 export type LeaderboardEntry = {
   rank: number; id: string; playerName: string; elapsedMilliseconds: number; completedAtUtc: string
+  experienceMode: ExperienceMode
 }
 
 export type AdminResult = LeaderboardEntry & {

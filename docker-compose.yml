@@ -30,6 +30,9 @@ services:
       Admin__Username: ${ADMIN_USERNAME:-admin}
       Admin__Password: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
       Features__ChallengeImageUploads: ${IMAGE_UPLOADS_ENABLED:-true}
+      Experience__Mode: ${EXPERIENCE_MODE:-Event}
+      DataRetention__RetentionDays: ${DATA_RETENTION_DAYS:-30}
+      DataRetention__CleanupIntervalHours: ${DATA_RETENTION_CLEANUP_HOURS:-6}
       Security__SecureCookies: ${SECURE_COOKIES_ENABLED:-false}
       DataProtection__KeysPath: /app/data-protection-keys
     volumes:

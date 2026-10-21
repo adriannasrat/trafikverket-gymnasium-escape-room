@@ -48,7 +48,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<GameSession>(entity =>
         {
             entity.Property(session => session.PlayerName).HasMaxLength(80);
-            entity.HasIndex(session => new { session.Status, session.CompletedAtUtc });
+            entity.HasIndex(session => new
+            {
+                session.ExperienceMode,
+                session.Status,
+                session.CompletedAtUtc
+            });
             entity.HasOne(session => session.CurrentChallenge)
                 .WithMany()
                 .HasForeignKey(session => session.CurrentChallengeId)

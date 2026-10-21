@@ -2,7 +2,7 @@ import { Check, Clock3, RotateCcw, Trash2, Trophy } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "../lib/api";
 import { formatElapsed } from "../lib/time";
-import type { AdminResult } from "../types";
+import type { AdminResult, ExperienceMode } from "../types";
 import { barlow, eyebrow, focusRing } from "../uiStyles";
 
 type AdminResultsPanelProps = {
@@ -11,13 +11,15 @@ type AdminResultsPanelProps = {
 
 export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
   const [results, setResults] = useState<AdminResult[] | null>(null);
+  const [mode, setMode] = useState<ExperienceMode>("Event");
+  const [retentionDays, setRetentionDays] = useState(30);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
-  const loadResults = useCallback(async () => {
+  const loadResults = useCallback(async (selectedMode: ExperienceMode) => {
     try {
-      setResults(await api.adminResults());
+      setResults(await api.adminResults(selectedMode));
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         onUnauthorized();
@@ -33,9 +35,30 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
   }, [onUnauthorized]);
 
   useEffect(() => {
-    // oxlint-disable-next-line react/set-state-in-effect -- load and synchronize the admin list with persisted results.
-    void loadResults();
+    void api.privacy()
+      .then((settings) => {
+        setMode(settings.mode);
+        setRetentionDays(settings.retentionDays);
+        return loadResults(settings.mode);
+      })
+      .catch((caught) => {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Resultattypen kunde inte fastställas.",
+        );
+        setResults([]);
+      });
   }, [loadResults]);
+
+  function selectMode(selectedMode: ExperienceMode) {
+    if (selectedMode === mode) return;
+    setMode(selectedMode);
+    setResults(null);
+    setStatus("");
+    setError("");
+    void loadResults(selectedMode);
+  }
 
   async function deleteResult(result: AdminResult) {
     if (
@@ -74,7 +97,7 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
     if (!results?.length) return;
     if (
       !window.confirm(
-        `Töm alla ${results.length} slutförda spelresultat? Alla tider och registrerade svar tas bort permanent. Pågående spel påverkas inte.`,
+        `Töm alla ${results.length} slutförda ${mode === "Demo" ? "demo" : "event"}resultat? Alla tider och registrerade svar tas bort permanent. Pågående spel påverkas inte.`,
       )
     ) return;
 
@@ -82,9 +105,9 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
     setStatus("");
     setError("");
     try {
-      await api.deleteAllAdminResults();
+      await api.deleteAllAdminResults(mode);
       setResults([]);
-      setStatus("Alla slutförda spelresultat har tagits bort.");
+      setStatus(`Alla slutförda ${mode === "Demo" ? "demo" : "event"}resultat har tagits bort.`);
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         onUnauthorized();
@@ -120,7 +143,7 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
             Spelresultat
           </h1>
           <p className="m-0 text-[13px] text-[#686868]">
-            Hantera slutförda rundor som visas på topplistan.
+            Event- och demoresultat hålls åtskilda och raderas automatiskt efter {retentionDays} dagar.
           </p>
         </div>
         <button
@@ -129,8 +152,24 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
           disabled={!results.length || deleting !== null}
           onClick={deleteAllResults}
         >
-          <RotateCcw size={16} /> {deleting === "all" ? "Tömmer…" : "Töm alla resultat"}
+          <RotateCcw size={16} /> {deleting === "all"
+            ? "Tömmer…"
+            : `Töm alla ${mode === "Demo" ? "demo" : "event"}resultat`}
         </button>
+      </div>
+
+      <div className="mb-5 grid w-fit grid-cols-2 border border-[#bdbdbd] bg-white max-[520px]:w-full" role="group" aria-label="Välj resultattyp">
+        {(["Event", "Demo"] as const).map((candidate) => (
+          <button
+            className={`min-h-10 px-5 text-[10px] font-extrabold tracking-[0.08em] uppercase ${candidate === mode ? "bg-[#d70000] text-white" : "bg-white text-[#555] hover:bg-[#f5f5f5]"} ${focusRing}`}
+            type="button"
+            key={candidate}
+            aria-pressed={candidate === mode}
+            onClick={() => selectMode(candidate)}
+          >
+            {candidate === "Event" ? "Eventresultat" : "Demoresultat"}
+          </button>
+        ))}
       </div>
 
       {status && (
@@ -155,7 +194,7 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
           <div>
             <p className={`${eyebrow} mb-1`}>TOPPLISTEDATA</p>
             <h2 className={`${barlow} text-[28px] text-[#202020] uppercase`}>
-              {results.length} resultat
+              {results.length} {mode === "Demo" ? "demoresultat" : "eventresultat"}
             </h2>
           </div>
           <span className="grid size-11 place-items-center rounded-full bg-[#f9eeee] text-[#d70000]">

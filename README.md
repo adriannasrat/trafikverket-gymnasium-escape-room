@@ -104,6 +104,11 @@ Session creation is limited per client address. The default is five new sessions
 per minute and can be adjusted with `SESSION_STARTS_PER_MINUTE`. This is an abuse
 control, not a replacement for provider-level DDoS protection.
 
+The public configuration uses `EXPERIENCE_MODE=Demo`. Local event installations
+use `EXPERIENCE_MODE=Event`. New sessions and their leaderboard results are tagged
+with that server-controlled mode; the administration can view and clear demo and
+event results independently. Changing the mode does not relabel existing data.
+
 Inspect the deployment without exposing secrets:
 
 ```sh
@@ -123,6 +128,23 @@ The repository includes consistent backup, guarded restore and isolated recovery
 test scripts for PostgreSQL, uploaded images and authentication keys. See the
 [backup and restore runbook](docs/backup-and-restore.md) before operating on a
 production environment.
+
+## Privacy and result retention
+
+Players are asked to choose a nickname instead of entering their full name. The
+nickname, elapsed time and registered answers are stored to run the game and
+produce its leaderboard. Only the nickname and completion time are shown on the
+public leaderboard.
+
+Sessions and their answers are deleted automatically after 30 days by default,
+including incomplete sessions. Configure the period with `DATA_RETENTION_DAYS`
+and the cleanup interval with `DATA_RETENTION_CLEANUP_HOURS`. The default cleanup
+interval is six hours. These settings apply to both event and demo data; the
+administration also retains its existing manual deletion controls.
+
+The selected retention period should be reviewed for the actual deployment and
+its documented purpose. Restoring an older backup can temporarily reintroduce
+expired rows; the cleanup worker runs when the restored application starts.
 
 ## Development
 

@@ -21,6 +21,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Admin:Password", "a-long-test-password");
         builder.UseSetting("RateLimiting:LoginPermitLimit", "1000");
         builder.UseSetting("RateLimiting:SessionStartPermitLimit", "1000");
+        builder.UseSetting("Experience:Mode", "Event");
+        builder.UseSetting("DataRetention:Enabled", "false");
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<AppDbContext>>();

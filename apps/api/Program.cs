@@ -29,6 +29,23 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<CurrentChallengeResponseBuilder>();
+builder.Services.AddScoped<SessionRetentionService>();
+builder.Services.AddHostedService<SessionRetentionWorker>();
+builder.Services.AddOptions<ExperienceOptions>()
+    .BindConfiguration("Experience")
+    .Validate(
+        options => Enum.IsDefined(options.Mode),
+        "Experience:Mode must be Event or Demo.")
+    .ValidateOnStart();
+builder.Services.AddOptions<DataRetentionOptions>()
+    .BindConfiguration("DataRetention")
+    .Validate(
+        options => options.RetentionDays is >= 1 and <= 3650,
+        "DataRetention:RetentionDays must be between 1 and 3650.")
+    .Validate(
+        options => options.CleanupIntervalHours is >= 1 and <= 168,
+        "DataRetention:CleanupIntervalHours must be between 1 and 168.")
+    .ValidateOnStart();
 
 var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
 var dataProtection = builder.Services
@@ -226,6 +243,7 @@ app.MapHealthChecks("/health/ready");
 
 app.MapAuthEndpoints();
 app.MapGameEndpoints();
+app.MapPrivacyEndpoints();
 app.MapSessionEndpoints();
 app.MapAdminEndpoints();
 

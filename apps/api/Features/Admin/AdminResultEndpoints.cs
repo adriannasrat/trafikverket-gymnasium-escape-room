@@ -2,17 +2,22 @@ using System.Security.Claims;
 using EscapeRoom.Api.Domain;
 using EscapeRoom.Api.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace EscapeRoom.Api.Features.Admin;
 
 public static partial class AdminEndpoints
 {
     private static async Task<IResult> GetResultsAsync(
+        ExperienceMode? mode,
         AppDbContext db,
+        IOptions<ExperienceOptions> experienceOptions,
         CancellationToken cancellationToken)
     {
+        var selectedMode = mode ?? experienceOptions.Value.Mode;
         var sessions = await db.GameSessions.AsNoTracking()
             .Where(session =>
+                session.ExperienceMode == selectedMode &&
                 session.Status == SessionStatus.Completed &&
                 session.CompletedAtUtc != null)
             .ToListAsync(cancellationToken);
@@ -22,6 +27,7 @@ public static partial class AdminEndpoints
             {
                 session.Id,
                 session.PlayerName,
+                session.ExperienceMode,
                 session.StartedAtUtc,
                 completedAtUtc = session.CompletedAtUtc!.Value,
                 elapsedMilliseconds = CalculateElapsedMilliseconds(session)
@@ -33,6 +39,7 @@ public static partial class AdminEndpoints
                 rank = index + 1,
                 result.Id,
                 result.PlayerName,
+                experienceMode = result.ExperienceMode.ToString(),
                 result.StartedAtUtc,
                 result.completedAtUtc,
                 result.elapsedMilliseconds
@@ -75,14 +82,19 @@ public static partial class AdminEndpoints
     }
 
     private static async Task<IResult> DeleteAllResultsAsync(
+        ExperienceMode? mode,
         ClaimsPrincipal principal,
         AppDbContext db,
+        IOptions<ExperienceOptions> experienceOptions,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        var selectedMode = mode ?? experienceOptions.Value.Mode;
         var sessions = await db.GameSessions
             .Include(session => session.Attempts)
-            .Where(session => session.Status == SessionStatus.Completed)
+            .Where(session =>
+                session.ExperienceMode == selectedMode &&
+                session.Status == SessionStatus.Completed)
             .ToListAsync(cancellationToken);
 
         db.GameSessions.RemoveRange(sessions);
@@ -93,7 +105,7 @@ public static partial class AdminEndpoints
             Action = "cleared",
             EntityType = "game-results",
             EntityId = "all",
-            Summary = $"Deleted all {sessions.Count} completed game results."
+            Summary = $"Deleted all {sessions.Count} completed {selectedMode} game results."
         });
         await db.SaveChangesAsync(cancellationToken);
         return Results.NoContent();

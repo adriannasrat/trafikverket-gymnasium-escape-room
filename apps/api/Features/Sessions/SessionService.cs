@@ -1,13 +1,15 @@
 using EscapeRoom.Api.Domain;
 using EscapeRoom.Api.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace EscapeRoom.Api.Features.Sessions;
 
 public sealed class SessionService(
     AppDbContext db,
     TimeProvider timeProvider,
-    CurrentChallengeResponseBuilder challengeResponseBuilder)
+    CurrentChallengeResponseBuilder challengeResponseBuilder,
+    IOptions<ExperienceOptions> experienceOptions)
 {
     public async Task<SessionResult<SessionResponse>> StartAsync(
         StartSessionRequest request,
@@ -18,7 +20,7 @@ public sealed class SessionService(
         {
             return SessionResults.Validation<SessionResponse>(new Dictionary<string, string[]>
             {
-                ["playerName"] = ["Namnet måste innehålla mellan 2 och 80 tecken."]
+                ["playerName"] = ["Smeknamnet måste innehålla mellan 2 och 80 tecken."]
             });
         }
 
@@ -35,6 +37,7 @@ public sealed class SessionService(
         var session = new GameSession
         {
             PlayerName = playerName,
+            ExperienceMode = experienceOptions.Value.Mode,
             StartedAtUtc = now,
             CurrentChallengeId = firstChallenge.Id,
             CurrentChallengeStartedAtUtc = now
@@ -219,6 +222,7 @@ public sealed class SessionService(
     {
         var sessions = await db.GameSessions.AsNoTracking()
             .Where(session =>
+                session.ExperienceMode == experienceOptions.Value.Mode &&
                 session.Status == SessionStatus.Completed &&
                 session.CompletedAtUtc != null)
             .OrderBy(session => session.CompletedAtUtc)
@@ -241,7 +245,8 @@ public sealed class SessionService(
                 result.Session.Id,
                 result.Session.PlayerName,
                 result.ElapsedMilliseconds,
-                result.Session.CompletedAtUtc))
+                result.Session.CompletedAtUtc,
+                result.Session.ExperienceMode.ToString()))
             .ToList();
     }
 
@@ -256,6 +261,7 @@ public sealed class SessionService(
     private static SessionResponse ToSessionResponse(GameSession session, DateTimeOffset now) => new(
         session.Id,
         session.PlayerName,
+        session.ExperienceMode.ToString(),
         session.StartedAtUtc,
         session.CompletedAtUtc,
         session.Status.ToString(),

@@ -1,0 +1,108 @@
+name: trafikverket-escape-room
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-escape_room}
+      POSTGRES_USER: ${POSTGRES_USER:-escape_room}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets:
+      - postgres-password
+    volumes:
+      - escape-room-data:/var/lib/postgresql/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  app:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env.production}
+      Deployment__Public: "true"
+      Deployment__PublicDomain: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env.production}
+      AllowedHosts: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env.production}
+      Database__Host: db
+      Database__Port: "5432"
+      Database__Name: ${POSTGRES_DB:-escape_room}
+      Database__Username: ${POSTGRES_USER:-escape_room}
+      Secrets__DatabasePasswordFile: /run/secrets/postgres-password
+      Admin__Username: ${ADMIN_USERNAME:?Set ADMIN_USERNAME in .env.production}
+      Secrets__AdminPasswordFile: /run/secrets/admin-password
+      Features__ChallengeImageUploads: ${IMAGE_UPLOADS_ENABLED:-false}
+      Security__SecureCookies: "true"
+      Security__RequireHttps: "true"
+      Security__HstsMaxAgeDays: ${HSTS_MAX_AGE_DAYS:-30}
+      DataProtection__KeysPath: /app/data-protection-keys
+      ReverseProxy__KnownProxies__0: 172.29.0.2
+      RateLimiting__SessionStartPermitLimit: ${SESSION_STARTS_PER_MINUTE:-5}
+      RateLimiting__SessionStartWindowSeconds: "60"
+    secrets:
+      - postgres-password
+      - admin-password
+    volumes:
+      - escape-room-uploads:/app/uploads
+      - escape-room-data-protection:/app/data-protection-keys
+    networks:
+      - edge
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        ["CMD-SHELL", "wget --header=Host:$${PUBLIC_DOMAIN} --spider -q http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  web:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env.production}
+    volumes:
+      - ./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    networks:
+      edge:
+        ipv4_address: 172.29.0.2
+    depends_on:
+      app:
+        condition: service_healthy
+
+secrets:
+  postgres-password:
+    file: ${POSTGRES_PASSWORD_FILE:?Set POSTGRES_PASSWORD_FILE in .env.production}
+  admin-password:
+    file: ${ADMIN_PASSWORD_FILE:?Set ADMIN_PASSWORD_FILE in .env.production}
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+  data:
+    internal: true
+
+volumes:
+  escape-room-data:
+  escape-room-uploads:
+  escape-room-data-protection:
+  caddy-data:

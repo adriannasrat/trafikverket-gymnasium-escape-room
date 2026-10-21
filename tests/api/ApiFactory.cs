@@ -20,6 +20,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Admin:Username", "event-admin");
         builder.UseSetting("Admin:Password", "a-long-test-password");
         builder.UseSetting("RateLimiting:LoginPermitLimit", "1000");
+        builder.UseSetting("RateLimiting:SessionStartPermitLimit", "1000");
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<AppDbContext>>();

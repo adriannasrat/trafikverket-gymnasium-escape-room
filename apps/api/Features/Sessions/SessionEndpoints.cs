@@ -5,7 +5,8 @@ public static partial class SessionEndpoints
     public static IEndpointRouteBuilder MapSessionEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/sessions").WithTags("Sessions");
-        group.MapPost("/", StartSessionAsync);
+        group.MapPost("/", StartSessionAsync)
+            .RequireRateLimiting("session-start");
         group.MapGet("/{sessionId:guid}", GetSessionAsync);
         group.MapGet("/{sessionId:guid}/current-challenge", GetCurrentChallengeAsync);
         group.MapPost("/{sessionId:guid}/answers", SubmitAnswerAsync);

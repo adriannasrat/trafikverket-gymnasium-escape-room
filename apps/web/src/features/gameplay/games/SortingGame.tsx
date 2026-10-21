@@ -1,13 +1,9 @@
 import { useState } from "react";
 import { SortingBoard } from "../../../components/SortingBoard";
 import { api } from "../../../lib/api";
-import type { GameRuntimeProps, SortingChallenge } from "../types";
+import type { GameRuntimeProps } from "../types";
 import { GameActionArea } from "../components/GameFeedback";
 import { GameChallengeTimer } from "../components/GameChallengeTimer";
-
-type SortingGameProps = Omit<GameRuntimeProps, "data"> & {
-  data: SortingChallenge;
-};
 
 export function SortingGame({
   data,
@@ -22,9 +18,9 @@ export function SortingGame({
   onElapsedChange,
   onChallengeComplete,
   onRestartChallenge,
-  onUpdateData,
+  onUpdateProgress,
   onNextChallenge,
-}: SortingGameProps) {
+}: GameRuntimeProps<"Sorting">) {
   const emptyPlacements = () => Object.fromEntries(
     data.sorting.cards.map((card) => [card.id, null]),
   );
@@ -69,15 +65,6 @@ export function SortingGame({
         setPlacements(emptyPlacements());
         setCorrectIds(new Set());
         setIncorrectIds(new Set());
-        onUpdateData((current) => current ? {
-          ...current,
-          challenge: {
-            ...current.challenge,
-            challengeStartedAtUtc: result.challengeStartedAtUtc
-              ?? current.challenge.challengeStartedAtUtc,
-            currentChallengePenaltyMilliseconds: 0,
-          },
-        } : current);
         onRestartChallenge({
           ...result,
           currentChallengePenaltyMilliseconds: 0,
@@ -94,13 +81,9 @@ export function SortingGame({
             .filter((card) => !incorrect.has(card.id))
             .map((card) => card.id),
         ));
-        onUpdateData((current) => current ? {
-          ...current,
-          challenge: {
-            ...current.challenge,
-            currentChallengePenaltyMilliseconds: result.currentChallengePenaltyMilliseconds,
-          },
-        } : current);
+        onUpdateProgress({
+          currentChallengePenaltyMilliseconds: result.currentChallengePenaltyMilliseconds,
+        });
         if (result.secondsRemaining !== undefined) {
           onRestartChallenge({
             secondsRemaining: result.secondsRemaining,

@@ -1,5 +1,9 @@
-import type { Dispatch, SetStateAction } from "react";
-import type { Challenge } from "../../types";
+import type {
+  Challenge,
+  ChallengeOf,
+  ChallengeProgress,
+  GameType,
+} from "../../types";
 
 export type GameFeedbackMessage = {
   correct: boolean;
@@ -13,8 +17,7 @@ export type ChallengeRestart = {
   secondsRemaining?: number;
 };
 
-export type GameRuntimeProps = {
-  data: Challenge;
+type SharedGameRuntimeProps = {
   sessionId: string;
   remaining: number;
   awaitingNext: boolean;
@@ -27,23 +30,13 @@ export type GameRuntimeProps = {
   onChallengeComplete: () => void;
   onSessionComplete: () => void;
   onRestartChallenge: (restart: ChallengeRestart) => void;
-  onUpdateData: Dispatch<SetStateAction<Challenge | null>>;
+  onUpdateProgress: (update: Partial<ChallengeProgress>) => void;
+  onReplaceData: (data: Challenge) => void;
   onReloadChallenge: (feedback?: GameFeedbackMessage) => Promise<void>;
   onNextChallenge: () => Promise<void>;
 };
 
-export type MatchingChallenge = Challenge & {
-  matching: NonNullable<Challenge["matching"]>;
-};
-
-export type SortingChallenge = Challenge & {
-  sorting: NonNullable<Challenge["sorting"]>;
-};
-
-export type WordAssemblyChallenge = Challenge & {
-  wordAssembly: NonNullable<Challenge["wordAssembly"]>;
-};
-
-export type HangmanChallenge = Challenge & {
-  hangman: NonNullable<Challenge["hangman"]>;
-};
+export type GameRuntimeProps<TType extends GameType = GameType> =
+  SharedGameRuntimeProps & {
+    data: ChallengeOf<TType>;
+  };

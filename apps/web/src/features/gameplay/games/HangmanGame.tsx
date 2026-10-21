@@ -1,13 +1,9 @@
 import { useState } from "react";
 import { HangmanBoard } from "../../../components/HangmanBoard";
 import { api } from "../../../lib/api";
-import type { GameRuntimeProps, HangmanChallenge } from "../types";
+import type { GameRuntimeProps } from "../types";
 import { GameActionArea } from "../components/GameFeedback";
 import { GameChallengeTimer } from "../components/GameChallengeTimer";
-
-type HangmanGameProps = Omit<GameRuntimeProps, "data"> & {
-  data: HangmanChallenge;
-};
 
 export function HangmanGame({
   data,
@@ -22,9 +18,9 @@ export function HangmanGame({
   onElapsedChange,
   onChallengeComplete,
   onRestartChallenge,
-  onUpdateData,
+  onReplaceData,
   onNextChallenge,
-}: HangmanGameProps) {
+}: GameRuntimeProps<"Hangman">) {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(() => awaitingNext
     ? { correct: true, text: "Signalordet är löst. Gå vidare när du är redo." }
@@ -41,17 +37,17 @@ export function HangmanGame({
         ? result.hangman.pattern.map((character) =>
             character === " " || character === "-" ? character : null)
         : result.hangman.pattern;
-      onUpdateData((current) => current ? {
-        ...current,
+      onReplaceData({
+        ...data,
         challenge: {
-          ...current.challenge,
+          ...data.challenge,
           challengeStartedAtUtc: result.challengeStartedAtUtc
-            ?? current.challenge.challengeStartedAtUtc,
+            ?? data.challenge.challengeStartedAtUtc,
         },
         hangman: result.roundReset
           ? { ...result.hangman, pattern: resetPattern, guessedLetters: [] }
           : result.hangman,
-      } : current);
+      });
       setFeedback({
         correct: result.correct,
         text: result.successMessage ?? result.message ?? "",

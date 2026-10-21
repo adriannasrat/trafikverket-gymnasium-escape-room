@@ -5,7 +5,7 @@ import type { GameRuntimeProps } from "../types";
 import { GameActionArea } from "../components/GameFeedback";
 import { GameChallengeTimer } from "../components/GameChallengeTimer";
 
-type ChoiceGameProps = GameRuntimeProps & {
+type ChoiceGameProps = GameRuntimeProps<"Quiz" | "TrueFalse"> & {
   variant: "multiple-choice" | "true-false";
 };
 
@@ -66,13 +66,6 @@ export function ChoiceGame({
 
   return (
     <>
-      {data.challenge.imagePath && (
-        <img
-          className="mt-[22px] block max-h-[360px] w-full bg-white object-contain p-3"
-          src={data.challenge.imagePath}
-          alt="Ledtråd till uppdraget"
-        />
-      )}
       <GameChallengeTimer
         remaining={remaining}
         total={data.challenge.timeLimitSeconds}

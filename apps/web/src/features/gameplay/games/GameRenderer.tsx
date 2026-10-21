@@ -1,5 +1,4 @@
 import type { GameRuntimeProps } from "../types";
-import { GameFeedback } from "../components/GameFeedback";
 import { HangmanGame } from "./HangmanGame";
 import { MatchingGame } from "./MatchingGame";
 import { PixelHuntGame } from "./PixelHuntGame";
@@ -9,28 +8,22 @@ import { TrueFalseGame } from "./TrueFalseGame";
 import { WordAssemblyGame } from "./WordAssemblyGame";
 
 export function GameRenderer(props: GameRuntimeProps) {
-  switch (props.data.game.type) {
+  const { data, ...runtime } = props;
+
+  switch (data.type) {
     case "Quiz":
-      return <QuizGame {...props} />;
+      return <QuizGame {...runtime} data={data} />;
     case "TrueFalse":
-      return <TrueFalseGame {...props} />;
+      return <TrueFalseGame {...runtime} data={data} />;
     case "PixelHunt":
-      return <PixelHuntGame {...props} />;
+      return <PixelHuntGame {...runtime} data={data} />;
     case "Matching":
-      return props.data.matching
-        ? <MatchingGame {...props} data={{ ...props.data, matching: props.data.matching }} />
-        : <GameFeedback feedback={{ correct: false, text: "Matchningsspelet kunde inte laddas." }} />;
+      return <MatchingGame {...runtime} data={data} />;
     case "Sorting":
-      return props.data.sorting
-        ? <SortingGame {...props} data={{ ...props.data, sorting: props.data.sorting }} />
-        : <GameFeedback feedback={{ correct: false, text: "Sorteringsspelet kunde inte laddas." }} />;
+      return <SortingGame {...runtime} data={data} />;
     case "WordAssembly":
-      return props.data.wordAssembly
-        ? <WordAssemblyGame {...props} data={{ ...props.data, wordAssembly: props.data.wordAssembly }} />
-        : <GameFeedback feedback={{ correct: false, text: "Ordspelet kunde inte laddas." }} />;
+      return <WordAssemblyGame {...runtime} data={data} />;
     case "Hangman":
-      return props.data.hangman
-        ? <HangmanGame {...props} data={{ ...props.data, hangman: props.data.hangman }} />
-        : <GameFeedback feedback={{ correct: false, text: "Signalordet kunde inte laddas." }} />;
+      return <HangmanGame {...runtime} data={data} />;
   }
 }

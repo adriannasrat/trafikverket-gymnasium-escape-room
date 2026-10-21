@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState, type SetStateAction } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { updateChallengeProgress } from "../../../lib/challenge";
 import { api } from "../../../lib/api";
-import type { Challenge } from "../../../types";
+import type { Challenge, ChallengeProgress } from "../../../types";
 
 export function useGameSession(sessionId: string) {
   const [data, setData] = useState<Challenge | null>(null);
@@ -28,8 +29,10 @@ export function useGameSession(sessionId: string) {
     loadChallenge().catch(() => setError("Uppdraget kunde inte laddas."));
   }, [loadChallenge]);
 
-  const updateData = useCallback((update: SetStateAction<Challenge | null>) => {
-    setData(update);
+  const updateProgress = useCallback((update: Partial<ChallengeProgress>) => {
+    setData((current) => current
+      ? updateChallengeProgress(current, update)
+      : current);
   }, []);
 
   return {
@@ -39,6 +42,7 @@ export function useGameSession(sessionId: string) {
     revision,
     loadChallenge,
     markCompleted: useCallback(() => setCompleted(true), []),
-    updateData,
+    updateProgress,
+    replaceData: useCallback((next: Challenge) => setData(next), []),
   };
 }

@@ -1,13 +1,9 @@
 import { useState } from "react";
 import { WordAssemblyBoard } from "../../../components/WordAssemblyBoard";
 import { api } from "../../../lib/api";
-import type { GameRuntimeProps, WordAssemblyChallenge } from "../types";
+import type { GameRuntimeProps } from "../types";
 import { GameActionArea } from "../components/GameFeedback";
 import { GameChallengeTimer } from "../components/GameChallengeTimer";
-
-type WordAssemblyGameProps = Omit<GameRuntimeProps, "data"> & {
-  data: WordAssemblyChallenge;
-};
 
 export function WordAssemblyGame({
   data,
@@ -23,7 +19,7 @@ export function WordAssemblyGame({
   onChallengeComplete,
   onReloadChallenge,
   onNextChallenge,
-}: WordAssemblyGameProps) {
+}: GameRuntimeProps<"WordAssembly">) {
   const initialOrder = data.wordAssembly.parts.map((part) => part.id);
   const [order, setOrder] = useState(initialOrder);
   const [correctIds, setCorrectIds] = useState<Set<string>>(

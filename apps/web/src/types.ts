@@ -10,13 +10,13 @@ export const gameTypes = [
 
 export type GameType = (typeof gameTypes)[number]
 
-export type GameSummary = {
+export type GameSummary<TType extends GameType = GameType> = {
   id: string
   slug: string
   title: string
   summary: string
   sortOrder: number
-  type: GameType
+  type: TType
 }
 
 export type Session = {
@@ -29,34 +29,6 @@ export type AnswerOption = {
   text: string
 }
 
-export type Challenge = {
-  completed: false; sessionId: string; playerName: string; startedAtUtc: string; elapsedMilliseconds: number; game: GameSummary
-  challenge: {
-    id: string; prompt: string; imagePath: string | null; number: number; total: number; timeLimitSeconds: number
-    questionNumber: number; questionTotal: number
-    pixelRevealCount: number
-    currentChallengePenaltyMilliseconds: number
-    awaitingNext: boolean
-    challengeStartedAtUtc: string; secondsRemaining: number
-    options: AnswerOption[]
-  }
-  matching: null | {
-    scenarios: Array<{
-      id: string; prompt: string; imagePath: string | null
-      options: AnswerOption[]
-    }>
-    destinations: Array<{ text: string; iconKey: string }>
-  }
-  sorting: null | {
-    cards: Array<{ id: string; text: string }>
-    categories: string[]
-  }
-  wordAssembly: null | {
-    parts: Array<{ id: string; text: string }>
-  }
-  hangman: null | HangmanState
-}
-
 export type HangmanState = {
   pattern: Array<string | null>
   guessedLetters: string[]
@@ -64,6 +36,109 @@ export type HangmanState = {
   maxMistakes: number
   solved: boolean
 }
+
+export type ChallengeProgress = {
+  id: string
+  prompt: string
+  number: number
+  total: number
+  timeLimitSeconds: number
+  questionNumber: number
+  questionTotal: number
+  currentChallengePenaltyMilliseconds: number
+  awaitingNext: boolean
+  challengeStartedAtUtc: string
+  secondsRemaining: number
+}
+
+export type ChoiceChallengeProgress = ChallengeProgress & {
+  imagePath: string | null
+  options: AnswerOption[]
+}
+
+export type PixelHuntChallengeProgress = ChallengeProgress & {
+  imagePath: string
+  pixelRevealCount: number
+  options: AnswerOption[]
+}
+
+export type MatchingPayload = {
+  scenarios: Array<{
+    id: string
+    prompt: string
+    imagePath: string | null
+    options: Array<AnswerOption & { iconKey: string }>
+  }>
+  destinations: Array<{ text: string; iconKey: string }>
+}
+
+export type SortingPayload = {
+  cards: AnswerOption[]
+  categories: string[]
+}
+
+export type WordAssemblyPayload = {
+  parts: AnswerOption[]
+}
+
+export type ChallengeBase<
+  TType extends GameType,
+  TProgress extends ChallengeProgress,
+> = {
+  type: TType
+  completed: false
+  sessionId: string
+  playerName: string
+  startedAtUtc: string
+  elapsedMilliseconds: number
+  game: GameSummary<TType>
+  challenge: TProgress
+}
+
+export type ChallengeByType = {
+  Quiz: ChallengeBase<"Quiz", ChoiceChallengeProgress>
+  Matching: ChallengeBase<"Matching", ChallengeProgress> & {
+    matching: MatchingPayload
+  }
+  TrueFalse: ChallengeBase<"TrueFalse", ChallengeProgress & {
+    options: AnswerOption[]
+  }>
+  PixelHunt: ChallengeBase<"PixelHunt", PixelHuntChallengeProgress>
+  Sorting: ChallengeBase<"Sorting", ChallengeProgress> & {
+    sorting: SortingPayload
+  }
+  WordAssembly: ChallengeBase<"WordAssembly", ChallengeProgress> & {
+    wordAssembly: WordAssemblyPayload
+  }
+  Hangman: ChallengeBase<"Hangman", ChallengeProgress & {
+    imagePath: string | null
+  }> & {
+    hangman: HangmanState
+  }
+}
+
+export type ChallengeOf<TType extends GameType> = ChallengeByType[TType]
+export type Challenge = ChallengeByType[GameType]
+
+export type ChallengeResponse = {
+  completed: false
+  sessionId: string
+  playerName: string
+  startedAtUtc: string
+  elapsedMilliseconds: number
+  game: GameSummary
+  challenge: ChallengeProgress & {
+    imagePath: string | null
+    pixelRevealCount: number
+    options: AnswerOption[]
+  }
+  matching: MatchingPayload | null
+  sorting: SortingPayload | null
+  wordAssembly: WordAssemblyPayload | null
+  hangman: HangmanState | null
+}
+
+export type CurrentChallengeResponse = ChallengeResponse | { completed: true }
 
 export type AnswerResult = {
   correct: boolean; expired?: boolean; completed?: boolean; message?: string; successMessage?: string

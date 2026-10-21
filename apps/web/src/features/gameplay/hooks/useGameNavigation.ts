@@ -66,7 +66,7 @@ export function useGameNavigation({
 
   return {
     nextActionLabel: useMemo(() => getNextActionLabel(data ? {
-      gameType: data.game.type,
+      gameType: data.type,
       gameNumber: data.challenge.number,
       gameTotal: data.challenge.total,
       questionNumber: data.challenge.questionNumber,

@@ -12,7 +12,7 @@ const itemLabels: Record<GameType, string> = {
 };
 
 export function GameHeading({ data }: { data: Challenge }) {
-  const isMatching = data.game.type === "Matching";
+  const isMatching = data.type === "Matching";
   const current = isMatching ? data.challenge.number : data.challenge.questionNumber;
   const total = isMatching ? data.challenge.total : data.challenge.questionTotal;
 
@@ -20,7 +20,7 @@ export function GameHeading({ data }: { data: Challenge }) {
     <div className="flex justify-between gap-10 border-b border-[#dedede] pb-[25px] max-[720px]:gap-[10px]">
       <div>
         <p className={eyebrow}>
-          {itemLabels[data.game.type]} {current.toString().padStart(2, "0")} ·{" "}
+          {itemLabels[data.type]} {current.toString().padStart(2, "0")} ·{" "}
           {data.game.title.toUpperCase()}
         </p>
         <h1 className={`${barlow} m-0 max-w-[820px] text-[clamp(33px,3.4vw,50px)] leading-[1.05] text-[#202020] uppercase max-[420px]:text-[31px]`}>

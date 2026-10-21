@@ -21,7 +21,7 @@ export function PixelHuntGame({
   onSessionComplete,
   onRestartChallenge,
   onNextChallenge,
-}: GameRuntimeProps) {
+}: GameRuntimeProps<"PixelHunt">) {
   const [selected, setSelected] = useState("");
   const [revealCount, setRevealCount] = useState(data.challenge.pixelRevealCount);
   const [revealing, setRevealing] = useState(false);

@@ -6,6 +6,7 @@ import type {
   AuditEntry,
   AnswerResult,
   Challenge,
+  CurrentChallengeResponse,
   GameSummary,
   HangmanResult,
   LeaderboardEntry,
@@ -16,6 +17,7 @@ import type {
   TimeoutResult,
   WordAssemblyResult,
 } from "../types";
+import { normalizeChallengeResponse } from "./challenge";
 
 export class ApiError extends Error {
   public readonly status: number;
@@ -90,10 +92,12 @@ export const api = {
       body: JSON.stringify({ playerName }),
     }),
   session: (id: string) => request<Session>(`/api/sessions/${id}`),
-  currentChallenge: (id: string) =>
-    request<Challenge | { completed: true }>(
+  currentChallenge: async (id: string): Promise<Challenge | { completed: true }> => {
+    const response = await request<CurrentChallengeResponse>(
       `/api/sessions/${id}/current-challenge`,
-    ),
+    );
+    return response.completed ? response : normalizeChallengeResponse(response);
+  },
   answer: (sessionId: string, challengeId: string, optionId: string) =>
     request<AnswerResult>(`/api/sessions/${sessionId}/answers`, {
       method: "POST",

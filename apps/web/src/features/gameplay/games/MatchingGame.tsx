@@ -1,13 +1,9 @@
 import { useState } from "react";
 import { MatchingBoard } from "../../../components/MatchingBoard";
 import { api } from "../../../lib/api";
-import type { GameRuntimeProps, MatchingChallenge } from "../types";
+import type { GameRuntimeProps } from "../types";
 import { GameActionArea } from "../components/GameFeedback";
 import { GameChallengeTimer } from "../components/GameChallengeTimer";
-
-type MatchingGameProps = Omit<GameRuntimeProps, "data"> & {
-  data: MatchingChallenge;
-};
 
 export function MatchingGame({
   data,
@@ -22,9 +18,8 @@ export function MatchingGame({
   onElapsedChange,
   onChallengeComplete,
   onRestartChallenge,
-  onUpdateData,
   onNextChallenge,
-}: MatchingGameProps) {
+}: GameRuntimeProps<"Matching">) {
   const [connections, setConnections] = useState<Record<string, string>>({});
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
   const [lockedScenarioIds, setLockedScenarioIds] = useState<Set<string>>(() => new Set());
@@ -100,15 +95,6 @@ export function MatchingGame({
         setLockedScenarioIds(new Set());
         setInvalidScenarioIds(new Set());
         setActiveScenarioId(null);
-        if (result.challengeStartedAtUtc) {
-          onUpdateData((current) => current ? {
-            ...current,
-            challenge: {
-              ...current.challenge,
-              challengeStartedAtUtc: result.challengeStartedAtUtc!,
-            },
-          } : current);
-        }
         onRestartChallenge(result);
       } else if (result.correct) {
         setLockedScenarioIds(new Set(data.matching.scenarios.map((scenario) => scenario.id)));

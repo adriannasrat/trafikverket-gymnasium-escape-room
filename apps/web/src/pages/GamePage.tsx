@@ -52,25 +52,24 @@ export function GamePage() {
   }, [navigation, notice, timeout]);
 
   const restartChallenge = useCallback((restart: ChallengeRestart) => {
-    const fallbackLimit = session.data?.challenge.timeLimitSeconds ?? 0;
+    const current = session.data;
+    if (!current) return;
+
+    const fallbackLimit = current.challenge.timeLimitSeconds;
     const secondsRemaining = restart.secondsRemaining
       ?? restart.timeLimitSeconds
       ?? fallbackLimit;
 
-    session.updateData((current) => current ? {
-      ...current,
-      challenge: {
-        ...current.challenge,
-        challengeStartedAtUtc: restart.challengeStartedAtUtc
-          ?? current.challenge.challengeStartedAtUtc,
-        timeLimitSeconds: restart.timeLimitSeconds
-          ?? current.challenge.timeLimitSeconds,
-        currentChallengePenaltyMilliseconds:
-          restart.currentChallengePenaltyMilliseconds
-          ?? current.challenge.currentChallengePenaltyMilliseconds,
-        secondsRemaining,
-      },
-    } : current);
+    session.updateProgress({
+      challengeStartedAtUtc: restart.challengeStartedAtUtc
+        ?? current.challenge.challengeStartedAtUtc,
+      timeLimitSeconds: restart.timeLimitSeconds
+        ?? current.challenge.timeLimitSeconds,
+      currentChallengePenaltyMilliseconds:
+        restart.currentChallengePenaltyMilliseconds
+        ?? current.challenge.currentChallengePenaltyMilliseconds,
+      secondsRemaining,
+    });
     timer.restartChallenge(secondsRemaining);
   }, [session, timer]);
 
@@ -122,7 +121,8 @@ export function GamePage() {
             onChallengeComplete={timer.completeChallenge}
             onSessionComplete={session.markCompleted}
             onRestartChallenge={restartChallenge}
-            onUpdateData={session.updateData}
+            onUpdateProgress={session.updateProgress}
+            onReplaceData={session.replaceData}
             onReloadChallenge={reloadChallenge}
             onNextChallenge={navigation.goToNextChallenge}
           />

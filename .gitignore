@@ -10,6 +10,9 @@ coverage/
 bin/
 obj/
 TestResults/
+playwright-report/
+test-results/
+blob-report/
 
 .idea/
 .vscode/

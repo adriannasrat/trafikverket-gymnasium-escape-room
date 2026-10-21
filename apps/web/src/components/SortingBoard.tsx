@@ -109,6 +109,7 @@ function SortingZone({
   return (
     <section
       ref={setNodeRef}
+      aria-label={isPool ? "Startyta för sorteringskort" : `Sorteringsområde ${category}`}
       className={cx(
         "min-h-[190px] border-2 bg-white p-4",
         isPool ? "col-span-full border-dashed border-[#bdbdbd] bg-[#fafafa]" : "border-[#d5d5d5]",

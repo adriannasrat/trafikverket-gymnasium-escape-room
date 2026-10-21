@@ -37,6 +37,9 @@ docker compose up --build -d
 ```
 
 Open `http://localhost:8088` for the player experience and `http://localhost:8088/admin` for administration.
+The local port is bound to `127.0.0.1`, so this development/event configuration is
+only reachable from the computer that runs Docker and must not be used as an
+internet-facing deployment.
 The administrator username and password are the `ADMIN_USERNAME` and `ADMIN_PASSWORD`
 values in `.env`. After changing either value, run `docker compose up -d app` to apply
 the new credentials without deleting games or event results.
@@ -48,13 +51,70 @@ as unavailable instead of saving files that would disappear after a restart.
 
 Production environments use secure authentication and antiforgery cookies by
 default. The local Docker stack explicitly keeps `SECURE_COOKIES_ENABLED=false`
-because it is served over `http://localhost`. Set `Security__SecureCookies=true`
-for a hosted environment and only expose it through an HTTPS endpoint.
+because it is served over `http://localhost`.
 
 Stop the stack without deleting event data:
 
 ```sh
 docker compose down
+```
+
+## Public deployment on a VPS
+
+The public stack is deliberately separate from the local stack. Caddy is the only
+service that publishes host ports. It obtains and renews the HTTPS certificate,
+redirects HTTP to HTTPS and forwards requests to the application over an internal
+Docker network. PostgreSQL and application port `8080` are never published.
+
+Prerequisites:
+
+- a Linux VPS with Docker Compose and inbound ports 80 and 443 available,
+- a domain whose DNS record points to the VPS,
+- no other service listening on ports 80 or 443.
+
+Create the untracked production configuration and secret files:
+
+```sh
+cp .env.production.example .env.production
+mkdir -p secrets
+openssl rand -base64 32 > secrets/postgres-password.txt
+openssl rand -base64 32 > secrets/admin-password.txt
+chmod 600 secrets/*.txt
+```
+
+Replace `PUBLIC_DOMAIN` and `ADMIN_USERNAME` in `.env.production`. Do not put a
+protocol or path in `PUBLIC_DOMAIN`. The `.env.production` file and the entire
+`secrets/` directory are ignored by Git; never add their contents to source
+control, screenshots or logs.
+
+Validate and start the standalone production stack:
+
+```sh
+docker compose --env-file .env.production -f docker-compose.production.yml config
+docker compose --env-file .env.production -f docker-compose.production.yml up --build -d
+```
+
+Open `https://<PUBLIC_DOMAIN>`. The application refuses to start a public
+deployment if HTTPS, secure cookies, explicit host filtering, persistent data
+protection keys, a trusted reverse proxy or a sufficiently long administrator
+password is missing. The initial HSTS lifetime is 30 days and can be adjusted
+with `HSTS_MAX_AGE_DAYS` after HTTPS has been verified in production.
+
+Session creation is limited per client address. The default is five new sessions
+per minute and can be adjusted with `SESSION_STARTS_PER_MINUTE`. This is an abuse
+control, not a replacement for provider-level DDoS protection.
+
+Inspect the deployment without exposing secrets:
+
+```sh
+docker compose --env-file .env.production -f docker-compose.production.yml ps
+docker compose --env-file .env.production -f docker-compose.production.yml logs app web
+```
+
+Stop it without deleting persistent data or TLS state:
+
+```sh
+docker compose --env-file .env.production -f docker-compose.production.yml down
 ```
 
 ## Development

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net;
 using System.Threading.RateLimiting;
 using EscapeRoom.Api.Features.Admin;
 using EscapeRoom.Api.Features.Auth;
@@ -11,15 +13,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
-var secureCookies = builder.Configuration.GetValue<bool?>("Security:SecureCookies")
-    ?? (!builder.Environment.IsDevelopment() &&
-        !builder.Environment.IsEnvironment("Testing"));
-var cookieSecurePolicy = secureCookies
+DeploymentSecurity.LoadFileSecrets(builder.Configuration);
+var deploymentSecurity = DeploymentSecurity.ReadAndValidate(
+    builder.Configuration,
+    builder.Environment);
+var cookieSecurePolicy = deploymentSecurity.SecureCookies
     ? CookieSecurePolicy.Always
     : CookieSecurePolicy.SameAsRequest;
 
-var connectionString = builder.Configuration.GetConnectionString("Database")
-    ?? throw new InvalidOperationException("ConnectionStrings:Database must be configured.");
+var connectionString = DeploymentSecurity.ResolveDatabaseConnectionString(builder.Configuration);
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("database");
@@ -61,6 +63,20 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddHsts(options =>
+{
+    options.MaxAge = TimeSpan.FromDays(
+        builder.Configuration.GetValue("Security:HstsMaxAgeDays", 30));
+    options.IncludeSubDomains = builder.Configuration.GetValue(
+        "Security:HstsIncludeSubDomains",
+        false);
+    options.Preload = false;
+});
+builder.Services.AddHttpsRedirection(options =>
+{
+    options.HttpsPort = 443;
+    options.RedirectStatusCode = StatusCodes.Status308PermanentRedirect;
+});
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-CSRF-TOKEN";
@@ -73,7 +89,30 @@ builder.Services.AddAntiforgery(options =>
 builder.Services.AddRateLimiter(options =>
 {
     var loginPermitLimit = builder.Configuration.GetValue("RateLimiting:LoginPermitLimit", 8);
+    var sessionStartPermitLimit = builder.Configuration.GetValue(
+        "RateLimiting:SessionStartPermitLimit",
+        5);
+    var sessionStartWindowSeconds = builder.Configuration.GetValue(
+        "RateLimiting:SessionStartWindowSeconds",
+        60);
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds)
+                .ToString(CultureInfo.InvariantCulture);
+        }
+
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new
+            {
+                title = "För många försök",
+                detail = "Vänta en kort stund och försök igen.",
+                status = StatusCodes.Status429TooManyRequests
+            },
+            cancellationToken);
+    };
     options.AddPolicy("login", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "local",
@@ -83,6 +122,34 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+    options.AddPolicy("session-start", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "local",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = sessionStartPermitLimit,
+                Window = TimeSpan.FromSeconds(sessionStartWindowSeconds),
+                QueueLimit = 0
+            }));
+});
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+
+    if (deploymentSecurity.KnownProxies.Length == 0)
+    {
+        return;
+    }
+
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+    foreach (var proxy in deploymentSecurity.KnownProxies)
+    {
+        options.KnownProxies.Add(IPAddress.Parse(proxy));
+    }
 });
 
 builder.Services.AddCors(options =>
@@ -101,10 +168,15 @@ var app = builder.Build();
 var uploadPath = app.Configuration["Uploads:Path"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
 Directory.CreateDirectory(uploadPath);
 
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+app.UseForwardedHeaders();
+
+if (deploymentSecurity.RequireHttps)
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
+    app.UseHsts();
+    app.UseWhen(
+        context => !context.Request.Path.StartsWithSegments("/health"),
+        branch => branch.UseHttpsRedirection());
+}
 
 app.Use(async (context, next) =>
 {
@@ -115,6 +187,14 @@ app.Use(async (context, next) =>
         context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
         context.Response.Headers["Permissions-Policy"] =
             "camera=(), microphone=(), geolocation=()";
+        context.Response.Headers["Content-Security-Policy"] =
+            "default-src 'self'; base-uri 'self'; object-src 'none'; " +
+            "frame-ancestors 'none'; form-action 'self'; script-src 'self'; " +
+            "style-src 'self' 'unsafe-inline'; font-src 'self'; " +
+            "img-src 'self' data: blob:; connect-src 'self'; media-src 'none'" +
+            (deploymentSecurity.IsPublic ? "; upgrade-insecure-requests" : string.Empty);
+        context.Response.Headers["Cross-Origin-Opener-Policy"] = "same-origin";
+        context.Response.Headers["Cross-Origin-Resource-Policy"] = "same-origin";
         return Task.CompletedTask;
     });
     await next();

@@ -94,4 +94,4 @@ This shared model keeps administration, ordering and progression consistent whil
 
 ## Intentional next steps
 
-The current architecture is suitable for the stated single-computer event deployment. Before using multiple event computers or a public internet deployment, add centralized observability, an explicit backup/restore runbook and a deployment-specific secrets service. Those concerns are intentionally kept outside the current runtime rather than simulated with unnecessary infrastructure.
+The current architecture is suitable for the stated single-computer event deployment. Public deployment now has an explicit backup/restore runbook and file-based Docker secrets. Before using multiple event computers, add centralized observability and move secrets to the deployment provider's managed secret service when one is available.

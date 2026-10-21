@@ -117,6 +117,13 @@ Stop it without deleting persistent data or TLS state:
 docker compose --env-file .env.production -f docker-compose.production.yml down
 ```
 
+## Backup and recovery
+
+The repository includes consistent backup, guarded restore and isolated recovery
+test scripts for PostgreSQL, uploaded images and authentication keys. See the
+[backup and restore runbook](docs/backup-and-restore.md) before operating on a
+production environment.
+
 ## Development
 
 Start PostgreSQL and the application server with Docker:

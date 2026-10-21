@@ -4,6 +4,7 @@ public sealed class GameSession
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public required string PlayerName { get; set; }
+    public ExperienceMode ExperienceMode { get; set; } = ExperienceMode.Event;
     public DateTimeOffset StartedAtUtc { get; set; }
     public DateTimeOffset? CompletedAtUtc { get; set; }
     public SessionStatus Status { get; set; } = SessionStatus.InProgress;

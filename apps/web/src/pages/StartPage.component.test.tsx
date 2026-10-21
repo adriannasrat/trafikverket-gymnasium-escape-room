@@ -9,6 +9,7 @@ vi.mock("../lib/api", () => ({
   api: {
     games: vi.fn(),
     leaderboard: vi.fn(),
+    privacy: vi.fn(),
     startSession: vi.fn(),
   },
 }));
@@ -35,12 +36,14 @@ describe("StartPage", () => {
       type: "Quiz",
     }]);
     vi.mocked(api.leaderboard).mockResolvedValue([]);
+    vi.mocked(api.privacy).mockResolvedValue({ mode: "Event", retentionDays: 30 });
   });
 
   it("startar en session och navigerar till den skapade spelomgången", async () => {
     vi.mocked(api.startSession).mockResolvedValue({
       id: "session-123",
       playerName: "Ada",
+      experienceMode: "Event",
       startedAtUtc: "2026-10-21T10:00:00Z",
       completedAtUtc: null,
       status: "InProgress",
@@ -52,7 +55,7 @@ describe("StartPage", () => {
     const startButton = screen.getByRole("button", { name: /starta uppdraget/i });
     expect(startButton).toBeDisabled();
 
-    await user.type(screen.getByLabelText("DITT NAMN"), "Ada");
+    await user.type(screen.getByLabelText("DITT SMEKNAMN"), "Ada");
     expect(startButton).toBeEnabled();
     await user.click(startButton);
 
@@ -65,10 +68,21 @@ describe("StartPage", () => {
     const user = userEvent.setup();
     renderStartPage();
 
-    await user.type(screen.getByLabelText("DITT NAMN"), "Ada");
+    await user.type(screen.getByLabelText("DITT SMEKNAMN"), "Ada");
     await user.click(screen.getByRole("button", { name: /starta uppdraget/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("För många nya spelomgångar.");
     expect(screen.queryByRole("heading", { name: "Spelsidan" })).not.toBeInTheDocument();
+  });
+
+  it("förklarar vilka speluppgifter som sparas och hur länge", async () => {
+    renderStartPage();
+
+    const notice = await screen.findByRole("complementary", {
+      name: "Information om sparade speluppgifter",
+    });
+    expect(notice).toHaveTextContent("Använd ett smeknamn");
+    expect(notice).toHaveTextContent("sparas i 30 dagar och raderas sedan automatiskt");
+    expect(notice).toHaveTextContent("visas offentligt");
   });
 });

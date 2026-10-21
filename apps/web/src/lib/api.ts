@@ -12,6 +12,7 @@ import type {
   LeaderboardEntry,
   MatchingResult,
   PixelRevealResult,
+  PrivacySettings,
   Session,
   SortingResult,
   TimeoutResult,
@@ -86,6 +87,7 @@ async function protectedRequest<T>(path: string, init: RequestInit) {
 
 export const api = {
   games: () => request<GameSummary[]>("/api/games"),
+  privacy: () => request<PrivacySettings>("/api/privacy"),
   startSession: (playerName: string) =>
     request<Session>("/api/sessions/", {
       method: "POST",
@@ -167,14 +169,18 @@ export const api = {
     csrfToken = null;
   },
   adminGames: () => request<AdminGame[]>("/api/admin/games"),
-  adminResults: () => request<AdminResult[]>("/api/admin/results"),
+  adminResults: (mode: PrivacySettings["mode"]) =>
+    request<AdminResult[]>(`/api/admin/results?mode=${encodeURIComponent(mode)}`),
   adminAudit: () => request<AuditEntry[]>("/api/admin/audit"),
   deleteAdminResult: (sessionId: string) =>
     protectedRequest<void>(`/api/admin/results/${sessionId}`, {
       method: "DELETE",
     }),
-  deleteAllAdminResults: () =>
-    protectedRequest<void>("/api/admin/results", { method: "DELETE" }),
+  deleteAllAdminResults: (mode: PrivacySettings["mode"]) =>
+    protectedRequest<void>(
+      `/api/admin/results?mode=${encodeURIComponent(mode)}`,
+      { method: "DELETE" },
+    ),
   updateGame: (game: AdminGame) =>
     protectedRequest<AdminGame>(`/api/admin/games/${game.id}`, {
       method: "PUT",

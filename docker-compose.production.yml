@@ -42,6 +42,9 @@ services:
       Admin__Username: ${ADMIN_USERNAME:?Set ADMIN_USERNAME in .env.production}
       Secrets__AdminPasswordFile: /run/secrets/admin-password
       Features__ChallengeImageUploads: ${IMAGE_UPLOADS_ENABLED:-false}
+      Experience__Mode: ${EXPERIENCE_MODE:-Demo}
+      DataRetention__RetentionDays: ${DATA_RETENTION_DAYS:-30}
+      DataRetention__CleanupIntervalHours: ${DATA_RETENTION_CLEANUP_HOURS:-6}
       Security__SecureCookies: "true"
       Security__RequireHttps: "true"
       Security__HstsMaxAgeDays: ${HSTS_MAX_AGE_DAYS:-30}

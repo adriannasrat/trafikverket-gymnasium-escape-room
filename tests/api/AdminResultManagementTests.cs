@@ -19,6 +19,7 @@ public sealed class AdminResultManagementTests(ApiFactory factory) : IClassFixtu
         Guid fastestId;
         Guid slowerId;
         Guid activeId;
+        Guid demoId;
         Guid fastestAttemptId;
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -52,6 +53,14 @@ public sealed class AdminResultManagementTests(ApiFactory factory) : IClassFixtu
                 CurrentChallengeId = challengeId,
                 CurrentChallengeStartedAtUtc = now
             };
+            var demo = new GameSession
+            {
+                PlayerName = "Demospelare",
+                ExperienceMode = ExperienceMode.Demo,
+                StartedAtUtc = now.AddSeconds(-8),
+                CompletedAtUtc = now,
+                Status = SessionStatus.Completed
+            };
             var attempt = new ChallengeAttempt
             {
                 GameSession = fastest,
@@ -59,22 +68,31 @@ public sealed class AdminResultManagementTests(ApiFactory factory) : IClassFixtu
                 SubmittedAtUtc = now,
                 IsCorrect = true
             };
-            db.GameSessions.AddRange(fastest, slower, active);
+            db.GameSessions.AddRange(fastest, slower, active, demo);
             db.ChallengeAttempts.Add(attempt);
             await db.SaveChangesAsync();
             fastestId = fastest.Id;
             slowerId = slower.Id;
             activeId = active.Id;
+            demoId = demo.Id;
             fastestAttemptId = attempt.Id;
         }
 
-        var results = await client.GetFromJsonAsync<List<AdminResultResponse>>("/api/admin/results");
+        var results = await client.GetFromJsonAsync<List<AdminResultResponse>>(
+            "/api/admin/results?mode=Event");
         Assert.NotNull(results);
         Assert.Equal(2, results.Count);
         Assert.Equal(fastestId, results[0].Id);
         Assert.Equal(10_000, results[0].ElapsedMilliseconds);
         Assert.Equal(1, results[0].Rank);
+        Assert.All(results, result => Assert.Equal("Event", result.ExperienceMode));
         Assert.DoesNotContain(results, result => result.Id == activeId);
+
+        var demoResults = await client.GetFromJsonAsync<List<AdminResultResponse>>(
+            "/api/admin/results?mode=Demo");
+        var demoResult = Assert.Single(demoResults!);
+        Assert.Equal(demoId, demoResult.Id);
+        Assert.Equal("Demo", demoResult.ExperienceMode);
 
         using var deleteOneRequest = new HttpRequestMessage(
             HttpMethod.Delete,
@@ -90,7 +108,9 @@ public sealed class AdminResultManagementTests(ApiFactory factory) : IClassFixtu
             Assert.False(await db.ChallengeAttempts.AnyAsync(attempt => attempt.Id == fastestAttemptId));
         }
 
-        using var deleteAllRequest = new HttpRequestMessage(HttpMethod.Delete, "/api/admin/results");
+        using var deleteAllRequest = new HttpRequestMessage(
+            HttpMethod.Delete,
+            "/api/admin/results?mode=Event");
         await AddAntiforgeryTokenAsync(deleteAllRequest);
         var deleteAllResponse = await client.SendAsync(deleteAllRequest);
         Assert.Equal(HttpStatusCode.NoContent, deleteAllResponse.StatusCode);
@@ -99,6 +119,7 @@ public sealed class AdminResultManagementTests(ApiFactory factory) : IClassFixtu
         var finalDb = finalScope.ServiceProvider.GetRequiredService<AppDbContext>();
         Assert.False(await finalDb.GameSessions.AnyAsync(session => session.Id == slowerId));
         Assert.True(await finalDb.GameSessions.AnyAsync(session => session.Id == activeId));
+        Assert.True(await finalDb.GameSessions.AnyAsync(session => session.Id == demoId));
         Assert.Equal(
             2,
             await finalDb.AuditEntries.CountAsync(entry =>
@@ -132,6 +153,7 @@ public sealed class AdminResultManagementTests(ApiFactory factory) : IClassFixtu
         int Rank,
         Guid Id,
         string PlayerName,
+        string ExperienceMode,
         long ElapsedMilliseconds,
         DateTimeOffset CompletedAtUtc);
 }

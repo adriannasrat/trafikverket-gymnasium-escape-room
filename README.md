@@ -77,7 +77,18 @@ The Vite development server proxies backend requests through the same local
 application address at `http://localhost:8088`. The API has no separate public
 host port.
 
-Run all frontend checks with `npm run lint`, `npm run test` and `npm run build`. The API integration suite runs with `dotnet test EscapeRoom.sln` when .NET 10 is installed, or through the SDK container used by CI.
+Run the frontend checks with `npm run lint`, `npm run test` and `npm run build`.
+The browser suite uses deterministic mocked API responses so it can verify every
+player game type without changing local event data. Install its browser once and
+then run the tests:
+
+```sh
+cd apps/web
+npx playwright install chromium
+npm run test:e2e
+```
+
+The API integration suite runs with `dotnet test EscapeRoom.sln` when .NET 10 is installed, or through the SDK container used by CI. GitHub Actions runs both the frontend browser suite and the API integration suite.
 
 ## Repository structure
 

@@ -100,6 +100,7 @@ export function AnswerChoiceBoard({
               onChange={() => onSelect(option.id)}
             />
             <span
+              aria-hidden="true"
               className={cx(
                 `${barlow} grid size-9 place-items-center bg-[#ededed] text-[18px] font-bold text-[#555]`,
                 isSelected && !completed && "!bg-[#f9eeee] !text-[#d70000]",

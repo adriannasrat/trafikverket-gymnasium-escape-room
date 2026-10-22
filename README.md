@@ -177,6 +177,27 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
+The command above runs the fast browser tests with mocked API responses. To run
+the complete launch-critical journey against a real web server, API, and
+PostgreSQL database, run this from the repository root:
+
+```bash
+./scripts/test-full-stack-e2e.sh
+```
+
+The full-stack test logs in as an administrator, edits and reloads a question,
+starts a session, completes all seven game types, verifies the registered time
+in both the API and public leaderboard, and then restores the question and
+removes the result. It builds a separate temporary Docker Compose project and
+always removes its containers and database when the run ends, including after
+a failure. Docker and the Playwright Chromium browser must be installed; the CI
+workflow installs the browser automatically. If port `18090` is occupied, use a
+different local port, for example:
+
+```bash
+E2E_PORT=18091 ./scripts/test-full-stack-e2e.sh
+```
+
 The API integration suite runs with `dotnet test EscapeRoom.sln` when .NET 10 is installed, or through the SDK container used by CI. GitHub Actions runs both the frontend browser suite and the API integration suite.
 
 ## Repository structure

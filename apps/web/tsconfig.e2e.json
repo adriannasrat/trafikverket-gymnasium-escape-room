@@ -4,5 +4,10 @@
     "types": ["node", "@playwright/test"],
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.e2e.tsbuildinfo"
   },
-  "include": ["e2e", "playwright.config.ts"]
+  "include": [
+    "e2e",
+    "e2e-full-stack",
+    "playwright.config.ts",
+    "playwright.full-stack.config.ts"
+  ]
 }

@@ -67,12 +67,16 @@ test("en besökare kan starta en ny spelomgång", async ({ page }) => {
     json: [quiz.game],
   }));
   await page.route("**/api/leaderboard", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/privacy", (route) => route.fulfill({
+    json: { mode: "Event", retentionDays: 30 },
+  }));
   await page.route("**/api/sessions/", async (route) => {
     expect(route.request().postDataJSON()).toEqual({ playerName: "Ada" });
     await route.fulfill({
       json: {
         id: sessionId,
         playerName: "Ada",
+        experienceMode: "Event",
         startedAtUtc: new Date().toISOString(),
         completedAtUtc: null,
         status: "InProgress",
@@ -83,7 +87,7 @@ test("en besökare kan starta en ny spelomgång", async ({ page }) => {
   await mockCurrentChallenge(page, quiz);
 
   await page.goto("/");
-  await page.getByLabel("DITT NAMN").fill("Ada");
+  await page.getByLabel("DITT SMEKNAMN").fill("Ada");
   await page.getByRole("button", { name: /starta uppdraget/i }).click();
 
   await expect(page).toHaveURL(`/play/${sessionId}`);

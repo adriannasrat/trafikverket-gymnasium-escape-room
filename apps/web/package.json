@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:components": "vitest run component.test",
     "test:e2e": "tsc --noEmit -p tsconfig.e2e.json && playwright test",
+    "test:e2e:full-stack": "tsc --noEmit -p tsconfig.e2e.json && playwright test --config playwright.full-stack.config.ts",
     "test:watch": "vitest",
     "preview": "vite preview"
   },

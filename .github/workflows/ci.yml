@@ -27,6 +27,9 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Run isolated full-stack journey
+        working-directory: .
+        run: ./scripts/test-full-stack-e2e.sh
 
   api:
     runs-on: ubuntu-latest

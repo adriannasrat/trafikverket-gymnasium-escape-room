@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: escape_room_e2e
+      POSTGRES_USER: escape_room_e2e
+      POSTGRES_PASSWORD: ${E2E_DATABASE_PASSWORD:?E2E_DATABASE_PASSWORD must be set}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U escape_room_e2e -d escape_room_e2e"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "127.0.0.1:${E2E_PORT:-18090}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Database: Host=db;Port=5432;Database=escape_room_e2e;Username=escape_room_e2e;Password=${E2E_DATABASE_PASSWORD:?E2E_DATABASE_PASSWORD must be set}
+      Admin__Username: e2e-admin
+      Admin__Password: ${E2E_ADMIN_PASSWORD:?E2E_ADMIN_PASSWORD must be set}
+      Features__ChallengeImageUploads: "true"
+      Experience__Mode: Event
+      DataRetention__Enabled: "false"
+      Security__SecureCookies: "false"
+      RateLimiting__LoginPermitLimit: "1000"
+      RateLimiting__SessionStartPermitLimit: "1000"
+      DataProtection__KeysPath: /app/data-protection-keys
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health/ready"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+

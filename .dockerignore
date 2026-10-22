@@ -7,4 +7,6 @@
 **/dist
 **/coverage
 **/TestResults
+**/test-results
+**/playwright-report
 backups

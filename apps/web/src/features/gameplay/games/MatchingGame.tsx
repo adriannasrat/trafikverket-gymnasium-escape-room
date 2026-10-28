@@ -16,8 +16,12 @@ export function MatchingGame({
   navigating,
   onClearExternalFeedback,
   onElapsedChange,
+  onProgressChange,
   onChallengeComplete,
   onRestartChallenge,
+  onPauseChallenge,
+  onRetryChallenge,
+  retryingChallenge,
   onNextChallenge,
 }: GameRuntimeProps<"Matching">) {
   const [connections, setConnections] = useState<Record<string, string>>({});
@@ -84,6 +88,7 @@ export function MatchingGame({
     onClearExternalFeedback();
     try {
       const result = await api.submitMatches(sessionId, data.challenge.id, selections);
+      onProgressChange(result.progress);
       setFeedback({
         correct: result.correct,
         text: result.successMessage ?? result.message ?? "",
@@ -108,6 +113,7 @@ export function MatchingGame({
             .filter((scenario) => !invalid.has(scenario.id))
             .map((scenario) => scenario.id),
         ));
+        if (!result.progress?.gameOver) onPauseChallenge(result);
       }
     } catch (caught) {
       setFeedback({
@@ -121,8 +127,25 @@ export function MatchingGame({
     }
   }
 
+  async function retryAttempt() {
+    setSubmitting(true);
+    try {
+      await onRetryChallenge();
+      setActiveScenarioId(null);
+      setFeedback(null);
+    } catch (caught) {
+      setFeedback({
+        correct: false,
+        text: caught instanceof Error ? caught.message : "Kopplingarna kunde inte startas om.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const allScenariosConnected = data.matching.scenarios
     .every((scenario) => Boolean(connections[scenario.id]));
+  const retryRequired = data.challenge.retryRequired;
 
   return (
     <>
@@ -139,7 +162,7 @@ export function MatchingGame({
         activeScenarioId={activeScenarioId}
         lockedIds={lockedScenarioIds}
         invalidIds={invalidScenarioIds}
-        disabled={awaitingNext || submitting || timingOut}
+        disabled={awaitingNext || retryRequired || submitting || timingOut}
         onSelectScenario={selectScenario}
         onSelectDestination={selectDestination}
       />
@@ -148,13 +171,20 @@ export function MatchingGame({
         action={{
           label: awaitingNext
             ? nextActionLabel
+            : retryRequired ? "Försök igen"
             : timingOut ? "Tiden registreras…" : "Kontrollera kopplingar",
-          busyLabel: awaitingNext ? `${nextActionLabel}…` : "Kontrollerar…",
-          busy: submitting || navigating,
+          busyLabel: awaitingNext
+            ? `${nextActionLabel}…`
+            : retryRequired ? "Startar om…" : "Kontrollerar…",
+          busy: submitting || navigating || retryingChallenge,
           disabled: awaitingNext
             ? navigating
-            : !allScenariosConnected || submitting || timingOut,
-          onClick: () => void (awaitingNext ? onNextChallenge() : submit()),
+            : retryRequired
+              ? submitting || retryingChallenge
+              : !allScenariosConnected || submitting || timingOut,
+          onClick: () => void (awaitingNext
+            ? onNextChallenge()
+            : retryRequired ? retryAttempt() : submit()),
         }}
       />
     </>

@@ -19,6 +19,8 @@ const quiz: ChallengeOf<"Quiz"> = {
   playerName: "Ada",
   startedAtUtc: "2026-10-21T10:00:00Z",
   elapsedMilliseconds: 1_000,
+  score: 0,
+  livesRemaining: 5,
   game: {
     id: "game-1",
     slug: "uppdraget",
@@ -38,6 +40,7 @@ const quiz: ChallengeOf<"Quiz"> = {
     questionTotal: 2,
     currentChallengePenaltyMilliseconds: 0,
     awaitingNext: false,
+    retryRequired: false,
     challengeStartedAtUtc: "2026-10-21T10:00:00Z",
     secondsRemaining: 58,
     options: [
@@ -59,9 +62,13 @@ function runtimeProps(): GameRuntimeProps<"Quiz"> {
     navigating: false,
     onClearExternalFeedback: vi.fn(),
     onElapsedChange: vi.fn(),
+    onProgressChange: vi.fn(),
     onChallengeComplete: vi.fn(),
     onSessionComplete: vi.fn(),
     onRestartChallenge: vi.fn(),
+    onPauseChallenge: vi.fn(),
+    onRetryChallenge: vi.fn().mockResolvedValue(undefined),
+    retryingChallenge: false,
     onUpdateProgress: vi.fn(),
     onReplaceData: vi.fn(),
     onReloadChallenge: vi.fn(),
@@ -76,6 +83,13 @@ describe("QuizGame", () => {
       completed: false,
       successMessage: "Korrekt!",
       elapsedMilliseconds: 1_500,
+      progress: {
+        score: 900,
+        scoreAwarded: 900,
+        livesRemaining: 5,
+        lifeLost: false,
+        gameOver: false,
+      },
     });
   });
 
@@ -98,27 +112,54 @@ describe("QuizGame", () => {
     ));
     expect(await screen.findByRole("status")).toHaveTextContent("Korrekt!");
     expect(props.onElapsedChange).toHaveBeenCalledWith(1_500);
+    expect(props.onProgressChange).toHaveBeenCalledWith(expect.objectContaining({
+      scoreAwarded: 900,
+      livesRemaining: 5,
+    }));
     expect(props.onChallengeComplete).toHaveBeenCalledOnce();
   });
 
-  it("startar om frågans timer efter ett felaktigt svar", async () => {
+  it("pausar frågan efter fel svar och kräver ett aktivt nytt försök", async () => {
     vi.mocked(api.answer).mockResolvedValue({
       correct: false,
       message: "Försök igen.",
       challengeStartedAtUtc: "2026-10-21T10:01:00Z",
       timeLimitSeconds: 60,
+      secondsRemaining: 42,
+      retryRequired: true,
+      progress: {
+        score: 0,
+        scoreAwarded: 0,
+        livesRemaining: 4,
+        lifeLost: true,
+        gameOver: false,
+      },
     });
     const props = runtimeProps();
     const user = userEvent.setup();
-    render(<QuizGame {...props} />);
+    const view = render(<QuizGame {...props} />);
 
     await user.click(screen.getByRole("radio", { name: "Fel svar" }));
     await user.click(screen.getByRole("button", { name: /bekräfta svar/i }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Försök igen.");
-    expect(props.onRestartChallenge).toHaveBeenCalledWith(expect.objectContaining({
-      challengeStartedAtUtc: "2026-10-21T10:01:00Z",
+    expect(props.onProgressChange).toHaveBeenCalledWith(expect.objectContaining({
+      lifeLost: true,
+      livesRemaining: 4,
     }));
-    expect(screen.getByRole("radio", { name: "Fel svar" })).not.toBeChecked();
+    expect(props.onPauseChallenge).toHaveBeenCalledWith(expect.objectContaining({
+      challengeStartedAtUtc: "2026-10-21T10:01:00Z",
+      secondsRemaining: 42,
+    }));
+
+    view.rerender(<QuizGame
+      {...props}
+      data={{
+        ...quiz,
+        challenge: { ...quiz.challenge, retryRequired: true },
+      }}
+    />);
+    await user.click(screen.getByRole("button", { name: "Försök igen" }));
+    expect(props.onRetryChallenge).toHaveBeenCalledOnce();
   });
 });

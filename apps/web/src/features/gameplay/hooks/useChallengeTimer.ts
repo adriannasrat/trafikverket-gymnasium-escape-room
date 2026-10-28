@@ -16,6 +16,7 @@ export function useChallengeTimer({ data, completed, revision }: ChallengeTimerO
     data?.challenge.awaitingNext
     || (challengeId && locallyCompletedChallengeId === challengeId),
   );
+  const retryRequired = Boolean(data?.challenge.retryRequired);
 
   // Revision changes only when useGameSession installs a fresh server snapshot.
   // Direct in-round data updates must not reset the locally ticking clock.
@@ -35,8 +36,8 @@ export function useChallengeTimer({ data, completed, revision }: ChallengeTimerO
       const now = performance.now();
       const delta = now - previousTick;
       previousTick = now;
-      if (!awaitingNext) setElapsed((current) => current + delta);
-      if (awaitingNext) return;
+      if (!awaitingNext && !retryRequired) setElapsed((current) => current + delta);
+      if (awaitingNext || retryRequired) return;
 
       const challengeElapsed =
         (Date.now() - new Date(data.challenge.challengeStartedAtUtc).getTime()) / 1000
@@ -49,6 +50,7 @@ export function useChallengeTimer({ data, completed, revision }: ChallengeTimerO
     return () => window.clearInterval(timer);
   }, [
     awaitingNext,
+    retryRequired,
     completed,
     data?.challenge.challengeStartedAtUtc,
     data?.challenge.currentChallengePenaltyMilliseconds,
@@ -66,6 +68,10 @@ export function useChallengeTimer({ data, completed, revision }: ChallengeTimerO
     setRemaining(secondsRemaining);
   }, []);
 
+  const pauseChallenge = useCallback((secondsRemaining: number) => {
+    setRemaining(secondsRemaining);
+  }, []);
+
   return {
     elapsed,
     remaining,
@@ -74,5 +80,6 @@ export function useChallengeTimer({ data, completed, revision }: ChallengeTimerO
     setRemaining,
     completeChallenge,
     restartChallenge,
+    pauseChallenge,
   };
 }

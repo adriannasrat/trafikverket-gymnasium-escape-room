@@ -266,6 +266,9 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
                     b.Property<int>("ExperienceMode")
                         .HasColumnType("integer");
 
+                    b.Property<int>("LivesRemaining")
+                        .HasColumnType("integer");
+
                     b.Property<long>("CurrentChallengePenaltyMilliseconds")
                         .HasColumnType("bigint");
 
@@ -282,6 +285,9 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
 
                     b.Property<DateTimeOffset?>("PausedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Score")
+                        .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("StartedAtUtc")
                         .HasColumnType("timestamp with time zone");

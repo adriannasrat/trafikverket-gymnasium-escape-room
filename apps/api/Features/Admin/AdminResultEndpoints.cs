@@ -18,7 +18,7 @@ public static partial class AdminEndpoints
         var sessions = await db.GameSessions.AsNoTracking()
             .Where(session =>
                 session.ExperienceMode == selectedMode &&
-                session.Status == SessionStatus.Completed &&
+                session.Status != SessionStatus.InProgress &&
                 session.CompletedAtUtc != null)
             .ToListAsync(cancellationToken);
 
@@ -28,17 +28,24 @@ public static partial class AdminEndpoints
                 session.Id,
                 session.PlayerName,
                 session.ExperienceMode,
+                session.Score,
+                session.LivesRemaining,
+                session.Status,
                 session.StartedAtUtc,
                 completedAtUtc = session.CompletedAtUtc!.Value,
                 elapsedMilliseconds = CalculateElapsedMilliseconds(session)
             })
-            .OrderBy(result => result.elapsedMilliseconds)
+            .OrderByDescending(result => result.Score)
+            .ThenBy(result => result.elapsedMilliseconds)
             .ThenBy(result => result.completedAtUtc)
             .Select((result, index) => new
             {
                 rank = index + 1,
                 result.Id,
                 result.PlayerName,
+                result.Score,
+                result.LivesRemaining,
+                status = result.Status.ToString(),
                 experienceMode = result.ExperienceMode.ToString(),
                 result.StartedAtUtc,
                 result.completedAtUtc,
@@ -60,7 +67,7 @@ public static partial class AdminEndpoints
             .SingleOrDefaultAsync(
                 candidate =>
                     candidate.Id == sessionId &&
-                    candidate.Status == SessionStatus.Completed,
+                    candidate.Status != SessionStatus.InProgress,
                 cancellationToken);
         if (session is null)
         {
@@ -75,7 +82,7 @@ public static partial class AdminEndpoints
             Action = "deleted",
             EntityType = "game-result",
             EntityId = session.Id.ToString(),
-            Summary = "Deleted one completed game result."
+            Summary = "Deleted one finished game result."
         });
         await db.SaveChangesAsync(cancellationToken);
         return Results.NoContent();
@@ -94,7 +101,7 @@ public static partial class AdminEndpoints
             .Include(session => session.Attempts)
             .Where(session =>
                 session.ExperienceMode == selectedMode &&
-                session.Status == SessionStatus.Completed)
+                session.Status != SessionStatus.InProgress)
             .ToListAsync(cancellationToken);
 
         db.GameSessions.RemoveRange(sessions);
@@ -105,7 +112,7 @@ public static partial class AdminEndpoints
             Action = "cleared",
             EntityType = "game-results",
             EntityId = "all",
-            Summary = $"Deleted all {sessions.Count} completed {selectedMode} game results."
+            Summary = $"Deleted all {sessions.Count} finished {selectedMode} game results."
         });
         await db.SaveChangesAsync(cancellationToken);
         return Results.NoContent();

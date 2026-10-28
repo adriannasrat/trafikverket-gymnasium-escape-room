@@ -19,6 +19,7 @@ function progressFrom(response: ChallengeResponse): ChallengeProgress {
     currentChallengePenaltyMilliseconds:
       challenge.currentChallengePenaltyMilliseconds,
     awaitingNext: challenge.awaitingNext,
+    retryRequired: challenge.retryRequired,
     challengeStartedAtUtc: challenge.challengeStartedAtUtc,
     secondsRemaining: challenge.secondsRemaining,
   };
@@ -39,6 +40,8 @@ function baseChallenge<
     playerName: response.playerName,
     startedAtUtc: response.startedAtUtc,
     elapsedMilliseconds: response.elapsedMilliseconds,
+    score: response.score,
+    livesRemaining: response.livesRemaining,
     game: { ...response.game, type },
     challenge,
   };

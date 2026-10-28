@@ -21,9 +21,12 @@ export function ChoiceGame({
   variant,
   onClearExternalFeedback,
   onElapsedChange,
+  onProgressChange,
   onChallengeComplete,
   onSessionComplete,
-  onRestartChallenge,
+  onPauseChallenge,
+  onRetryChallenge,
+  retryingChallenge,
   onNextChallenge,
 }: ChoiceGameProps) {
   const [selected, setSelected] = useState("");
@@ -39,6 +42,7 @@ export function ChoiceGame({
     onClearExternalFeedback();
     try {
       const result = await api.answer(sessionId, data.challenge.id, selected);
+      onProgressChange(result.progress);
       setFeedback({
         correct: result.correct,
         text: result.successMessage ?? result.message ?? "",
@@ -50,9 +54,8 @@ export function ChoiceGame({
         onSessionComplete();
       } else if (result.correct) {
         onChallengeComplete();
-      } else if (result.challengeStartedAtUtc) {
-        setSelected("");
-        onRestartChallenge(result);
+      } else if (!result.progress?.gameOver) {
+        onPauseChallenge(result);
       }
     } catch (caught) {
       setFeedback({
@@ -63,6 +66,24 @@ export function ChoiceGame({
       setSubmitting(false);
     }
   }
+
+  async function retryAttempt() {
+    setSubmitting(true);
+    try {
+      await onRetryChallenge();
+      setSelected("");
+      setFeedback(null);
+    } catch (caught) {
+      setFeedback({
+        correct: false,
+        text: caught instanceof Error ? caught.message : "Frågan kunde inte startas om.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const retryRequired = data.challenge.retryRequired;
 
   return (
     <>
@@ -75,7 +96,7 @@ export function ChoiceGame({
         options={data.challenge.options}
         selectedId={selected}
         variant={variant}
-        disabled={awaitingNext || submitting || timingOut}
+        disabled={awaitingNext || retryRequired || submitting || timingOut}
         completed={awaitingNext}
         onSelect={(optionId) => {
           setSelected(optionId);
@@ -88,13 +109,20 @@ export function ChoiceGame({
         action={{
           label: awaitingNext
             ? nextActionLabel
+            : retryRequired ? "Försök igen"
             : timingOut ? "Tiden registreras…" : "Bekräfta svar",
-          busyLabel: awaitingNext ? `${nextActionLabel}…` : "Kontrollerar…",
-          busy: submitting || navigating,
+          busyLabel: awaitingNext
+            ? `${nextActionLabel}…`
+            : retryRequired ? "Startar om…" : "Kontrollerar…",
+          busy: submitting || navigating || retryingChallenge,
           disabled: awaitingNext
             ? navigating
-            : !selected || submitting || timingOut,
-          onClick: () => void (awaitingNext ? onNextChallenge() : submit()),
+            : retryRequired
+              ? submitting || retryingChallenge
+              : !selected || submitting || timingOut,
+          onClick: () => void (awaitingNext
+            ? onNextChallenge()
+            : retryRequired ? retryAttempt() : submit()),
         }}
       />
     </>

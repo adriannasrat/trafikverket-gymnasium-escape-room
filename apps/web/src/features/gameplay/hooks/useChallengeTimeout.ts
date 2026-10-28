@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../../lib/api";
-import type { Challenge } from "../../../types";
+import type { Challenge, SessionProgress } from "../../../types";
 import type { GameFeedbackMessage } from "../types";
 
 type ChallengeTimeoutOptions = {
@@ -10,6 +10,7 @@ type ChallengeTimeoutOptions = {
   awaitingNext: boolean;
   remaining: number;
   reloadChallenge: () => Promise<Challenge | null>;
+  onProgressChange: (progress?: SessionProgress) => void;
 };
 
 export function useChallengeTimeout({
@@ -19,6 +20,7 @@ export function useChallengeTimeout({
   awaitingNext,
   remaining,
   reloadChallenge,
+  onProgressChange,
 }: ChallengeTimeoutOptions) {
   const [timingOut, setTimingOut] = useState(false);
   const [feedback, setFeedback] = useState<GameFeedbackMessage | null>(null);
@@ -38,11 +40,13 @@ export function useChallengeTimeout({
     setTimingOut(true);
     api.timeout(sessionId, data.challenge.id)
       .then(async (result) => {
+        onProgressChange(result.progress);
+        if (result.progress?.gameOver) return;
         await reloadChallenge();
         if (result.expired) {
           setFeedback({
             correct: false,
-            text: result.message ?? "Tiden tog slut. Försök igen.",
+            text: result.message ?? "Game over – tiden tog slut.",
           });
         }
       })
@@ -60,6 +64,7 @@ export function useChallengeTimeout({
     completed,
     data,
     reloadChallenge,
+    onProgressChange,
     remaining,
     sessionId,
     timingOut,

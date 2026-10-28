@@ -11,6 +11,7 @@ public static partial class SessionEndpoints
         SubmitMatchesRequest request,
         AppDbContext db,
         TimeProvider timeProvider,
+        SessionProgressService progressService,
         CancellationToken cancellationToken)
     {
         var session = await db.GameSessions
@@ -33,6 +34,11 @@ public static partial class SessionEndpoints
         if (session.CurrentChallengeStartedAtUtc is null)
         {
             return Results.Conflict(new { message = "Uppdraget är redan klart. Gå vidare när du är redo." });
+        }
+
+        if (session.PausedAtUtc is not null)
+        {
+            return Results.Conflict(new { message = "Tryck på Försök igen innan du ändrar kopplingarna." });
         }
 
         var currentChallenge = await db.Challenges
@@ -102,16 +108,17 @@ public static partial class SessionEndpoints
 
         if (expired)
         {
-            session.CurrentChallengeStartedAtUtc = now;
+            var progress = progressService.RegisterTimeout(session, now);
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new
             {
                 correct = false,
                 expired = true,
-                message = "Tiden tog slut. Kopplingarna har återställts – försök igen.",
+                message = "Game over – tiden tog slut. Alla liv är förlorade.",
                 incorrectChallengeIds = scenarios.Select(scenario => scenario.Id),
                 challengeStartedAtUtc = now,
-                timeLimitSeconds = timeLimit
+                timeLimitSeconds = timeLimit,
+                progress
             });
         }
 
@@ -121,16 +128,31 @@ public static partial class SessionEndpoints
             .ToList();
         if (incorrectChallengeIds.Count > 0)
         {
+            var secondsRemaining = Math.Max(
+                0,
+                timeLimit - (now - session.CurrentChallengeStartedAtUtc.Value).TotalSeconds);
+            var progress = progressService.RegisterFailedAttempt(session, now);
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new
             {
                 correct = false,
                 expired = false,
-                message = "Några kopplingar är fel. De gröna är låsta – rätta de röda och försök igen.",
-                incorrectChallengeIds
+                message = progress.GameOver
+                    ? "Det sista livet försvann. Uppdraget är avslutat."
+                    : "Några kopplingar är fel. Tryck på Försök igen när du är redo.",
+                incorrectChallengeIds,
+                retryRequired = !progress.GameOver,
+                challengeStartedAtUtc = session.CurrentChallengeStartedAtUtc,
+                timeLimitSeconds = timeLimit,
+                secondsRemaining,
+                progress
             });
         }
 
+        var successProgress = progressService.AwardChallengeScore(
+            session,
+            currentChallenge,
+            now);
         session.CurrentChallengeStartedAtUtc = null;
         session.PausedAtUtc = now;
         await db.SaveChangesAsync(cancellationToken);
@@ -140,7 +162,8 @@ public static partial class SessionEndpoints
             completed = false,
             currentChallenge.Game.SuccessMessage,
             incorrectChallengeIds,
-            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
+            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
+            progress = successProgress
         });
     }
 }

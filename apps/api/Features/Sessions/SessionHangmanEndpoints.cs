@@ -11,6 +11,7 @@ public static partial class SessionEndpoints
         SubmitHangmanGuessRequest request,
         AppDbContext db,
         TimeProvider timeProvider,
+        SessionProgressService progressService,
         CancellationToken cancellationToken)
     {
         var session = await db.GameSessions
@@ -84,7 +85,7 @@ public static partial class SessionEndpoints
 
         if (expired)
         {
-            session.CurrentChallengeStartedAtUtc = now;
+            var progress = progressService.RegisterTimeout(session, now);
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new
             {
@@ -92,10 +93,11 @@ public static partial class SessionEndpoints
                 solved = false,
                 expired = true,
                 roundReset = true,
-                message = "Tiden tog slut. Bokstäverna har återställts – försök igen.",
+                message = "Game over – tiden tog slut. Alla liv är förlorade.",
                 challengeStartedAtUtc = now,
                 timeLimitSeconds = timeLimit,
-                hangman = HangmanRules.BuildState(answer, [])
+                hangman = HangmanRules.BuildState(answer, []),
+                progress
             });
         }
 
@@ -103,6 +105,7 @@ public static partial class SessionEndpoints
         var state = HangmanRules.BuildState(answer, guesses);
         if (state.Solved)
         {
+            var progress = progressService.AwardChallengeScore(session, challenge, now);
             session.CurrentChallengeStartedAtUtc = null;
             session.PausedAtUtc = now;
             await db.SaveChangesAsync(cancellationToken);
@@ -114,7 +117,8 @@ public static partial class SessionEndpoints
                 roundReset = false,
                 challenge.Game.SuccessMessage,
                 elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
-                hangman = state
+                hangman = state,
+                progress
             });
         }
 
@@ -123,6 +127,7 @@ public static partial class SessionEndpoints
             const int penaltyMilliseconds = 10_000;
             session.TotalPenaltyMilliseconds += penaltyMilliseconds;
             session.CurrentChallengeStartedAtUtc = now;
+            var progress = progressService.Snapshot(session);
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new
             {
@@ -134,10 +139,12 @@ public static partial class SessionEndpoints
                 challengeStartedAtUtc = now,
                 timeLimitSeconds = timeLimit,
                 elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
-                hangman = state
+                hangman = state,
+                progress
             });
         }
 
+        var currentProgress = progressService.Snapshot(session);
         await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(new
         {
@@ -147,7 +154,8 @@ public static partial class SessionEndpoints
             roundReset = false,
             message = letterIsCorrect ? "Bokstaven finns i ordet." : "Bokstaven finns inte i ordet.",
             elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
-            hangman = state
+            hangman = state,
+            progress = currentProgress
         });
     }
 }

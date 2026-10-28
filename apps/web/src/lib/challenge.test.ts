@@ -9,6 +9,8 @@ function responseFor(type: GameType): ChallengeResponse {
     playerName: "Ada",
     startedAtUtc: "2026-10-21T10:00:00Z",
     elapsedMilliseconds: 1_000,
+    score: 0,
+    livesRemaining: 5,
     game: {
       id: "game-1",
       slug: "game",
@@ -29,6 +31,7 @@ function responseFor(type: GameType): ChallengeResponse {
       pixelRevealCount: 0,
       currentChallengePenaltyMilliseconds: 0,
       awaitingNext: false,
+      retryRequired: false,
       challengeStartedAtUtc: "2026-10-21T10:00:00Z",
       secondsRemaining: 59,
       options: [],

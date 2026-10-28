@@ -29,6 +29,16 @@ export type Session = {
   id: string; playerName: string; experienceMode: ExperienceMode
   startedAtUtc: string; completedAtUtc: string | null
   status: 'InProgress' | 'Completed' | 'Abandoned'; elapsedMilliseconds: number
+  score: number; livesRemaining: number
+}
+
+export type SessionProgress = {
+  score: number
+  scoreAwarded: number
+  livesRemaining: number
+  lifeLost: boolean
+  gameOver: boolean
+  timedOut?: boolean
 }
 
 export type AnswerOption = {
@@ -54,6 +64,7 @@ export type ChallengeProgress = {
   questionTotal: number
   currentChallengePenaltyMilliseconds: number
   awaitingNext: boolean
+  retryRequired: boolean
   challengeStartedAtUtc: string
   secondsRemaining: number
 }
@@ -98,6 +109,8 @@ export type ChallengeBase<
   playerName: string
   startedAtUtc: string
   elapsedMilliseconds: number
+  score: number
+  livesRemaining: number
   game: GameSummary<TType>
   challenge: TProgress
 }
@@ -133,6 +146,8 @@ export type ChallengeResponse = {
   playerName: string
   startedAtUtc: string
   elapsedMilliseconds: number
+  score: number
+  livesRemaining: number
   game: GameSummary
   challenge: ChallengeProgress & {
     imagePath: string | null
@@ -145,11 +160,20 @@ export type ChallengeResponse = {
   hangman: HangmanState | null
 }
 
-export type CurrentChallengeResponse = ChallengeResponse | { completed: true }
+export type CurrentChallengeResponse = ChallengeResponse | {
+  completed: true
+  failed: boolean
+  playerName: string
+  elapsedMilliseconds: number
+  score: number
+  livesRemaining: number
+}
 
 export type AnswerResult = {
   correct: boolean; expired?: boolean; completed?: boolean; message?: string; successMessage?: string
   challengeStartedAtUtc?: string; timeLimitSeconds?: number; elapsedMilliseconds?: number
+  retryRequired?: boolean; secondsRemaining?: number
+  progress?: SessionProgress
 }
 
 export type MatchingResult = AnswerResult & {
@@ -160,6 +184,7 @@ export type PixelRevealResult = {
   expired: boolean; pixelRevealCount: number; penaltySeconds: number
   elapsedMilliseconds: number; message?: string
   challengeStartedAtUtc?: string; timeLimitSeconds?: number
+  progress?: SessionProgress
 }
 
 export type SortingResult = AnswerResult & {
@@ -181,15 +206,24 @@ export type HangmanResult = AnswerResult & {
 export type TimeoutResult = {
   expired: boolean; message?: string; challengeStartedAtUtc: string
   timeLimitSeconds: number; secondsRemaining?: number; currentChallengePenaltyMilliseconds?: number
+  progress?: SessionProgress
+}
+
+export type ChallengeRetryResult = {
+  retryRequired: false
+  challengeStartedAtUtc: string
+  timeLimitSeconds: number
+  currentChallengePenaltyMilliseconds: number
+  secondsRemaining: number
 }
 
 export type LeaderboardEntry = {
   rank: number; id: string; playerName: string; elapsedMilliseconds: number; completedAtUtc: string
-  experienceMode: ExperienceMode
+  experienceMode: ExperienceMode; score: number; status: 'Completed' | 'Abandoned'
 }
 
 export type AdminResult = LeaderboardEntry & {
-  startedAtUtc: string
+  startedAtUtc: string; livesRemaining: number
 }
 
 export type AuditEntry = {

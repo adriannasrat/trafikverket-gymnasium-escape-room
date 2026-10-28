@@ -2,6 +2,8 @@ namespace EscapeRoom.Api.Domain;
 
 public sealed class GameSession
 {
+    public const int InitialLives = 5;
+
     public Guid Id { get; set; } = Guid.NewGuid();
     public required string PlayerName { get; set; }
     public ExperienceMode ExperienceMode { get; set; } = ExperienceMode.Event;
@@ -16,5 +18,7 @@ public sealed class GameSession
     public int PixelRevealCount { get; set; }
     public long CurrentChallengePenaltyMilliseconds { get; set; }
     public long TotalPenaltyMilliseconds { get; set; }
+    public int Score { get; set; }
+    public int LivesRemaining { get; set; } = InitialLives;
     public List<ChallengeAttempt> Attempts { get; set; } = [];
 }

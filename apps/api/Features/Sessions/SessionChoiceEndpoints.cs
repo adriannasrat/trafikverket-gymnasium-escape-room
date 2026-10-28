@@ -11,6 +11,7 @@ public static partial class SessionEndpoints
         PixelRevealRequest request,
         AppDbContext db,
         TimeProvider timeProvider,
+        SessionProgressService progressService,
         CancellationToken cancellationToken)
     {
         var session = await db.GameSessions
@@ -29,6 +30,11 @@ public static partial class SessionEndpoints
         if (session.CurrentChallengeId != request.ChallengeId)
         {
             return Results.BadRequest(new { message = "Bilden tillhör inte den aktuella frågan." });
+        }
+
+        if (session.PausedAtUtc is not null)
+        {
+            return Results.Conflict(new { message = "Tryck på Försök igen innan bilden skärps." });
         }
 
         var challenge = await db.Challenges
@@ -51,18 +57,19 @@ public static partial class SessionEndpoints
                 IsCorrect = false,
                 WasExpired = true
             });
-            session.CurrentChallengeStartedAtUtc = now;
+            var progress = progressService.RegisterTimeout(session, now);
             session.PixelRevealCount = 0;
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new
             {
                 expired = true,
-                message = "Tiden tog slut. Bilden har återställts – försök igen.",
+                message = "Game over – tiden tog slut. Alla liv är förlorade.",
                 pixelRevealCount = 0,
                 penaltySeconds = session.TotalPenaltyMilliseconds / 1000,
                 challengeStartedAtUtc = now,
                 timeLimitSeconds = timeLimit,
-                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
+                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
+                progress
             });
         }
 
@@ -74,13 +81,15 @@ public static partial class SessionEndpoints
 
         session.PixelRevealCount++;
         session.TotalPenaltyMilliseconds += 5_000;
+        var currentProgress = progressService.Snapshot(session);
         await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(new
         {
             expired = false,
             pixelRevealCount = session.PixelRevealCount,
             penaltySeconds = session.TotalPenaltyMilliseconds / 1000,
-            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
+            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
+            progress = currentProgress
         });
     }
 
@@ -89,6 +98,7 @@ public static partial class SessionEndpoints
         SubmitAnswerRequest request,
         AppDbContext db,
         TimeProvider timeProvider,
+        SessionProgressService progressService,
         CancellationToken cancellationToken)
     {
         var session = await db.GameSessions
@@ -111,6 +121,11 @@ public static partial class SessionEndpoints
         if (session.CurrentChallengeStartedAtUtc is null)
         {
             return Results.Conflict(new { message = "Frågan är redan klar. Gå vidare till nästa fråga." });
+        }
+
+        if (session.PausedAtUtc is not null)
+        {
+            return Results.Conflict(new { message = "Tryck på Försök igen innan du svarar på nytt." });
         }
 
         var challenge = await db.Challenges
@@ -140,19 +155,32 @@ public static partial class SessionEndpoints
 
         if (expired || !selectedOption.IsCorrect)
         {
-            session.CurrentChallengeStartedAtUtc = now;
+            var secondsRemaining = Math.Max(
+                0,
+                timeLimit - (now - challengeStartedAt).TotalSeconds);
+            var progress = expired
+                ? progressService.RegisterTimeout(session, now)
+                : progressService.RegisterFailedAttempt(session, now);
             session.PixelRevealCount = 0;
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new
             {
                 correct = false,
                 expired,
-                message = expired ? "Tiden tog slut. Försök igen." : "Det var inte rätt svar. Försök igen.",
-                challengeStartedAtUtc = now,
-                timeLimitSeconds = timeLimit
+                message = progress.GameOver
+                    ? expired
+                        ? "Game over – tiden tog slut. Alla liv är förlorade."
+                        : "Det sista livet försvann. Uppdraget är avslutat."
+                    : "Det var inte rätt svar. Tryck på Försök igen när du är redo.",
+                retryRequired = !progress.GameOver,
+                challengeStartedAtUtc = challengeStartedAt,
+                timeLimitSeconds = timeLimit,
+                secondsRemaining,
+                progress
             });
         }
 
+        var successProgress = progressService.AwardChallengeScore(session, challenge, now);
         session.CurrentChallengeStartedAtUtc = null;
         session.PausedAtUtc = now;
 
@@ -162,7 +190,8 @@ public static partial class SessionEndpoints
             correct = true,
             completed = false,
             challenge.Game.SuccessMessage,
-            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
+            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
+            progress = successProgress
         });
     }
 }

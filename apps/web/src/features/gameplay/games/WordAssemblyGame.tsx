@@ -16,7 +16,11 @@ export function WordAssemblyGame({
   navigating,
   onClearExternalFeedback,
   onElapsedChange,
+  onProgressChange,
   onChallengeComplete,
+  onPauseChallenge,
+  onRetryChallenge,
+  retryingChallenge,
   onReloadChallenge,
   onNextChallenge,
 }: GameRuntimeProps<"WordAssembly">) {
@@ -47,6 +51,7 @@ export function WordAssemblyGame({
     onClearExternalFeedback();
     try {
       const result = await api.submitWordAssembly(sessionId, data.challenge.id, order);
+      onProgressChange(result.progress);
       setFeedback({
         correct: result.correct,
         text: result.successMessage ?? result.message ?? "",
@@ -55,7 +60,7 @@ export function WordAssemblyGame({
       if (result.expired) {
         await onReloadChallenge({
           correct: false,
-          text: result.message ?? "Tiden tog slut. Försök igen.",
+          text: result.message ?? "Game over – tiden tog slut.",
         });
       } else if (result.correct) {
         setCorrectIds(new Set(order));
@@ -65,6 +70,7 @@ export function WordAssemblyGame({
         const incorrect = new Set(result.incorrectOptionIds);
         setIncorrectIds(incorrect);
         setCorrectIds(new Set(order.filter((id) => !incorrect.has(id))));
+        if (!result.progress?.gameOver) onPauseChallenge(result);
       }
     } catch (caught) {
       setFeedback({
@@ -77,6 +83,23 @@ export function WordAssemblyGame({
       setSubmitting(false);
     }
   }
+
+  async function retryAttempt() {
+    setSubmitting(true);
+    try {
+      await onRetryChallenge();
+      setFeedback(null);
+    } catch (caught) {
+      setFeedback({
+        correct: false,
+        text: caught instanceof Error ? caught.message : "Orddelarna kunde inte startas om.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const retryRequired = data.challenge.retryRequired;
 
   return (
     <>
@@ -91,7 +114,7 @@ export function WordAssemblyGame({
         order={order}
         correctIds={correctIds}
         incorrectIds={incorrectIds}
-        disabled={awaitingNext || submitting || timingOut || remaining <= 0}
+        disabled={awaitingNext || retryRequired || submitting || timingOut || remaining <= 0}
         onReorder={reorder}
       />
       <GameActionArea
@@ -99,13 +122,20 @@ export function WordAssemblyGame({
         action={{
           label: awaitingNext
             ? nextActionLabel
+            : retryRequired ? "Försök igen"
             : timingOut ? "Tiden registreras…" : "Kontrollera ordning",
-          busyLabel: awaitingNext ? `${nextActionLabel}…` : "Kontrollerar…",
-          busy: submitting || navigating,
+          busyLabel: awaitingNext
+            ? `${nextActionLabel}…`
+            : retryRequired ? "Startar om…" : "Kontrollerar…",
+          busy: submitting || navigating || retryingChallenge,
           disabled: awaitingNext
             ? navigating
-            : order.length === 0 || submitting || timingOut,
-          onClick: () => void (awaitingNext ? onNextChallenge() : submit()),
+            : retryRequired
+              ? submitting || retryingChallenge
+              : order.length === 0 || submitting || timingOut,
+          onClick: () => void (awaitingNext
+            ? onNextChallenge()
+            : retryRequired ? retryAttempt() : submit()),
         }}
       />
     </>

@@ -415,6 +415,8 @@ test("hela användarresan fungerar mot en riktig isolerad miljö", async ({
     expect(completedSession.status).toBe("Completed");
     expect(completedSession.completedAtUtc).not.toBeNull();
     expect(completedSession.elapsedMilliseconds).toBeGreaterThanOrEqual(0);
+    expect(completedSession.score).toBeGreaterThan(0);
+    expect(completedSession.livesRemaining).toBe(5);
     const expectedTime = formatElapsed(completedSession.elapsedMilliseconds);
     await expect(page.getByText("SLUTTID", { exact: true }).locator(".."))
       .toContainText(expectedTime);
@@ -427,6 +429,8 @@ test("hela användarresan fungerar mot en riktig isolerad miljö", async ({
     expect(adminResult).toBeDefined();
     expect(adminResult?.playerName).toBe(playerName);
     expect(adminResult?.elapsedMilliseconds).toBe(completedSession.elapsedMilliseconds);
+    expect(adminResult?.score).toBe(completedSession.score);
+    expect(adminResult?.livesRemaining).toBe(5);
 
     const leaderboard = await readJson<LeaderboardEntry[]>(
       await request.get("/api/leaderboard"),
@@ -436,11 +440,15 @@ test("hela användarresan fungerar mot en riktig isolerad miljö", async ({
     expect(leaderboardResult).toBeDefined();
     expect(leaderboardResult?.elapsedMilliseconds)
       .toBe(completedSession.elapsedMilliseconds);
+    expect(leaderboardResult?.score).toBe(completedSession.score);
 
     await page.getByRole("link", { name: /visa topplistan/i }).click();
     const leaderboardRow = page.locator("ol > li").filter({ hasText: playerName });
     await expect(leaderboardRow).toContainText(playerName);
     await expect(leaderboardRow).toContainText(expectedTime);
+    await expect(leaderboardRow).toContainText(
+      `${completedSession.score.toLocaleString("sv-SE")} p`,
+    );
   } finally {
     // The runner also destroys the entire temporary database in a shell trap.
     // These explicit cleanups verify that production admin cleanup works too.

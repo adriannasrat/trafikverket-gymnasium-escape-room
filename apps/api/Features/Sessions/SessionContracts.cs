@@ -9,6 +9,7 @@ public sealed record SortingPlacementRequest(Guid OptionId, string? Category);
 public sealed record SubmitWordAssemblyRequest(Guid ChallengeId, List<Guid> OrderedOptionIds);
 public sealed record SubmitHangmanGuessRequest(Guid ChallengeId, string Letter);
 public sealed record ChallengeTimeoutRequest(Guid ChallengeId);
+public sealed record RetryChallengeRequest(Guid ChallengeId);
 public sealed record PixelRevealRequest(Guid ChallengeId);
 
 public sealed record SessionResponse(
@@ -18,9 +19,25 @@ public sealed record SessionResponse(
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? CompletedAtUtc,
     string Status,
-    long ElapsedMilliseconds);
+    long ElapsedMilliseconds,
+    int Score,
+    int LivesRemaining);
 
-public sealed record SessionCompletedResponse(bool Completed);
+public sealed record SessionCompletedResponse(
+    bool Completed,
+    bool Failed,
+    string PlayerName,
+    long ElapsedMilliseconds,
+    int Score,
+    int LivesRemaining);
+
+public sealed record SessionProgressResponse(
+    int Score,
+    int ScoreAwarded,
+    int LivesRemaining,
+    bool LifeLost,
+    bool GameOver,
+    bool TimedOut = false);
 
 public sealed record CurrentChallengeResponse(
     bool Completed,
@@ -28,6 +45,8 @@ public sealed record CurrentChallengeResponse(
     string PlayerName,
     DateTimeOffset StartedAtUtc,
     long ElapsedMilliseconds,
+    int Score,
+    int LivesRemaining,
     SessionGameResponse Game,
     SessionChallengeResponse Challenge,
     MatchingGameResponse? Matching,
@@ -54,6 +73,7 @@ public sealed record SessionChallengeResponse(
     int PixelRevealCount,
     long CurrentChallengePenaltyMilliseconds,
     bool AwaitingNext,
+    bool RetryRequired,
     int TimeLimitSeconds,
     DateTimeOffset ChallengeStartedAtUtc,
     double SecondsRemaining,
@@ -87,6 +107,13 @@ public sealed record ChallengeTimeRemainingResponse(
     int TimeLimitSeconds,
     double SecondsRemaining);
 
+public sealed record ChallengeRetryResponse(
+    bool RetryRequired,
+    DateTimeOffset ChallengeStartedAtUtc,
+    int TimeLimitSeconds,
+    long CurrentChallengePenaltyMilliseconds,
+    double SecondsRemaining);
+
 public sealed record ChallengeExpiredResponse(
     bool Expired,
     string Message,
@@ -99,8 +126,10 @@ public sealed record LeaderboardEntryResponse(
     int Rank,
     Guid Id,
     string PlayerName,
+    int Score,
     long ElapsedMilliseconds,
     DateTimeOffset? CompletedAtUtc,
+    string Status,
     string ExperienceMode);
 
 public sealed record ErrorResponse(string Message);

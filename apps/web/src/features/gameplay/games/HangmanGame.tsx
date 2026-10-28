@@ -16,6 +16,7 @@ export function HangmanGame({
   navigating,
   onClearExternalFeedback,
   onElapsedChange,
+  onProgressChange,
   onChallengeComplete,
   onRestartChallenge,
   onReplaceData,
@@ -33,6 +34,7 @@ export function HangmanGame({
     onClearExternalFeedback();
     try {
       const result = await api.submitHangmanGuess(sessionId, data.challenge.id, letter);
+      onProgressChange(result.progress);
       const resetPattern = result.roundReset
         ? result.hangman.pattern.map((character) =>
             character === " " || character === "-" ? character : null)

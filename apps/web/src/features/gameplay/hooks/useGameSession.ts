@@ -3,21 +3,34 @@ import { updateChallengeProgress } from "../../../lib/challenge";
 import { api } from "../../../lib/api";
 import type { Challenge, ChallengeProgress } from "../../../types";
 
+type TerminalSession = {
+  playerName: string;
+  elapsedMilliseconds: number;
+  score: number;
+  livesRemaining: number;
+};
+
 export function useGameSession(sessionId: string) {
   const [data, setData] = useState<Challenge | null>(null);
   const [completed, setCompleted] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [terminal, setTerminal] = useState<TerminalSession | null>(null);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
 
   const loadChallenge = useCallback(async () => {
     const result = await api.currentChallenge(sessionId);
     if (result.completed) {
-      setCompleted(true);
+      setTerminal(result);
+      setCompleted(!result.failed);
+      setFailed(result.failed);
       return null;
     }
 
     setData(result);
     setCompleted(false);
+    setFailed(false);
+    setTerminal(null);
     setError("");
     setRevision((current) => current + 1);
     window.scrollTo(0, 0);
@@ -38,10 +51,13 @@ export function useGameSession(sessionId: string) {
   return {
     data,
     completed,
+    failed,
+    terminal,
     error,
     revision,
     loadChallenge,
     markCompleted: useCallback(() => setCompleted(true), []),
+    markFailed: useCallback(() => setFailed(true), []),
     updateProgress,
     replaceData: useCallback((next: Challenge) => setData(next), []),
   };

@@ -62,13 +62,18 @@ public sealed class SessionProgressService
             session.CurrentChallengeStartedAtUtc = null;
             session.PausedAtUtc = null;
         }
+        else
+        {
+            session.PausedAtUtc = now;
+        }
 
         return new SessionProgressResponse(
             session.Score,
             0,
             session.LivesRemaining,
             true,
-            gameOver);
+            gameOver,
+            false);
     }
 
     public SessionProgressResponse RegisterTimeout(
@@ -92,6 +97,7 @@ public sealed class SessionProgressService
             0,
             0,
             lifeLost,
+            true,
             true);
     }
 }

@@ -31,6 +31,7 @@ function responseFor(type: GameType): ChallengeResponse {
       pixelRevealCount: 0,
       currentChallengePenaltyMilliseconds: 0,
       awaitingNext: false,
+      retryRequired: false,
       challengeStartedAtUtc: "2026-10-21T10:00:00Z",
       secondsRemaining: 59,
       options: [],

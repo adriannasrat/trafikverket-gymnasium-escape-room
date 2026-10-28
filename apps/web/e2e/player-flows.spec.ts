@@ -32,6 +32,7 @@ function challengeResponse(type: GameType): ChallengeResponse {
       pixelRevealCount: 0,
       currentChallengePenaltyMilliseconds: 0,
       awaitingNext: false,
+      retryRequired: false,
       challengeStartedAtUtc: new Date().toISOString(),
       secondsRemaining: 300,
       options: [],
@@ -97,6 +98,105 @@ test("en besökare kan starta en ny spelomgång", async ({ page }) => {
   await expect(page).toHaveURL(`/play/${sessionId}`);
   await expect(page.getByRole("heading", { name: "Vilket färdmedel går på räls?" }))
     .toBeVisible();
+});
+
+test("en spelare utan liv kan börja om med samma namn", async ({ page }) => {
+  const retrySessionId = "00000000-0000-0000-0000-000000000002";
+  const restartedChallenge = challengeResponse("Quiz");
+  restartedChallenge.sessionId = retrySessionId;
+  restartedChallenge.challenge.prompt = "Första aktiva uppdraget";
+  restartedChallenge.challenge.options = [
+    { id: "train", text: "Tåg" },
+    { id: "car", text: "Bil" },
+  ];
+
+  await page.route(`**/api/sessions/${sessionId}/current-challenge`, (route) =>
+    route.fulfill({
+      json: {
+        completed: true,
+        failed: true,
+        playerName: "Ada",
+        elapsedMilliseconds: 12_000,
+        score: 1_800,
+        livesRemaining: 0,
+      },
+    }));
+  await page.route("**/api/sessions/", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ playerName: "Ada" });
+    await route.fulfill({
+      json: {
+        id: retrySessionId,
+        playerName: "Ada",
+        experienceMode: "Event",
+        startedAtUtc: new Date().toISOString(),
+        completedAtUtc: null,
+        status: "InProgress",
+        elapsedMilliseconds: 0,
+        score: 0,
+        livesRemaining: 5,
+      },
+    });
+  });
+  await page.route(`**/api/sessions/${retrySessionId}/current-challenge`,
+    (route) => route.fulfill({ json: restartedChallenge }));
+
+  await page.goto(`/play/${sessionId}`);
+  await expect(page.getByRole("heading", { name: "Uppdraget misslyckades." }))
+    .toBeVisible();
+  await page.getByRole("button", { name: "Försök igen" }).click();
+
+  await expect(page).toHaveURL(`/play/${retrySessionId}`);
+  await expect(page.getByRole("heading", { name: "Första aktiva uppdraget" }))
+    .toBeVisible();
+});
+
+test("ett fel svar pausar tiden tills spelaren försöker igen", async ({ page }) => {
+  const quiz = challengeResponse("Quiz");
+  quiz.challenge.options = [
+    { id: "wrong", text: "Fel svar" },
+    { id: "correct", text: "Rätt svar" },
+  ];
+  await mockCurrentChallenge(page, quiz);
+  await mockSubmission(page, "answers", {
+    correct: false,
+    expired: false,
+    message: "Det var inte rätt svar. Tryck på Försök igen när du är redo.",
+    retryRequired: true,
+    challengeStartedAtUtc: quiz.challenge.challengeStartedAtUtc,
+    timeLimitSeconds: 300,
+    secondsRemaining: 241,
+    progress: {
+      score: 0,
+      scoreAwarded: 0,
+      livesRemaining: 4,
+      lifeLost: true,
+      gameOver: false,
+      timedOut: false,
+    },
+  });
+  await page.route(`**/api/sessions/${sessionId}/retry`, async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ challengeId: "challenge-Quiz" });
+    await route.fulfill({
+      json: {
+        retryRequired: false,
+        challengeStartedAtUtc: new Date().toISOString(),
+        timeLimitSeconds: 300,
+        currentChallengePenaltyMilliseconds: 0,
+        secondsRemaining: 241,
+      },
+    });
+  });
+
+  await page.goto(`/play/${sessionId}`);
+  await page.getByText("Fel svar", { exact: true }).click();
+  await page.getByRole("button", { name: "Bekräfta svar" }).click();
+
+  await expect(page.getByRole("button", { name: "Försök igen" })).toBeVisible();
+  await expect(page.getByText("241 SEK")).toBeVisible();
+  await page.waitForTimeout(250);
+  await expect(page.getByText("241 SEK")).toBeVisible();
+  await page.getByRole("button", { name: "Försök igen" }).click();
+  await expect(page.getByRole("button", { name: "Bekräfta svar" })).toBeDisabled();
 });
 
 for (const game of [

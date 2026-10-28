@@ -13,8 +13,10 @@ public sealed class CurrentChallengeResponseBuilder(AppDbContext db)
         CancellationToken cancellationToken)
     {
         var awaitingNext = session.CurrentChallengeStartedAtUtc is null;
+        var retryRequired = !awaitingNext && session.PausedAtUtc is not null;
         var startedAt = session.CurrentChallengeStartedAtUtc ?? now;
-        var elapsed = awaitingNext ? TimeSpan.Zero : now - startedAt;
+        var effectiveNow = retryRequired ? session.PausedAtUtc!.Value : now;
+        var elapsed = awaitingNext ? TimeSpan.Zero : effectiveNow - startedAt;
         var limit = SessionTimeCalculator.GetTimeLimitSeconds(challenge);
         var currentPenalty = challenge.Game.Type == GameType.Sorting
             ? session.CurrentChallengePenaltyMilliseconds
@@ -68,6 +70,7 @@ public sealed class CurrentChallengeResponseBuilder(AppDbContext db)
                 challenge.Game.Type == GameType.PixelHunt ? session.PixelRevealCount : 0,
                 currentPenalty,
                 awaitingNext,
+                retryRequired,
                 limit,
                 startedAt,
                 Math.Max(0, limit - elapsed.TotalSeconds - currentPenalty / 1000d),

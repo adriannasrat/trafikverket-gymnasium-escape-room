@@ -19,6 +19,9 @@ export function SortingGame({
   onProgressChange,
   onChallengeComplete,
   onRestartChallenge,
+  onPauseChallenge,
+  onRetryChallenge,
+  retryingChallenge,
   onUpdateProgress,
   onNextChallenge,
 }: GameRuntimeProps<"Sorting">) {
@@ -87,7 +90,7 @@ export function SortingGame({
           currentChallengePenaltyMilliseconds: result.currentChallengePenaltyMilliseconds,
         });
         if (result.secondsRemaining !== undefined) {
-          onRestartChallenge({
+          onPauseChallenge({
             secondsRemaining: result.secondsRemaining,
             currentChallengePenaltyMilliseconds: result.currentChallengePenaltyMilliseconds,
           });
@@ -105,6 +108,23 @@ export function SortingGame({
     }
   }
 
+  async function retryAttempt() {
+    setSubmitting(true);
+    try {
+      await onRetryChallenge();
+      setFeedback(null);
+    } catch (caught) {
+      setFeedback({
+        correct: false,
+        text: caught instanceof Error ? caught.message : "Sorteringen kunde inte startas om.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const retryRequired = data.challenge.retryRequired;
+
   return (
     <>
       <GameChallengeTimer
@@ -119,7 +139,7 @@ export function SortingGame({
         placements={placements}
         correctIds={correctIds}
         incorrectIds={incorrectIds}
-        disabled={awaitingNext || submitting || timingOut || remaining <= 0}
+        disabled={awaitingNext || retryRequired || submitting || timingOut || remaining <= 0}
         onMove={moveCard}
       />
       <GameActionArea
@@ -127,11 +147,18 @@ export function SortingGame({
         action={{
           label: awaitingNext
             ? nextActionLabel
+            : retryRequired ? "Försök igen"
             : timingOut ? "Tiden registreras…" : "Kontrollera sortering",
-          busyLabel: awaitingNext ? `${nextActionLabel}…` : "Kontrollerar…",
-          busy: submitting || navigating,
-          disabled: awaitingNext ? navigating : submitting || timingOut,
-          onClick: () => void (awaitingNext ? onNextChallenge() : submit()),
+          busyLabel: awaitingNext
+            ? `${nextActionLabel}…`
+            : retryRequired ? "Startar om…" : "Kontrollerar…",
+          busy: submitting || navigating || retryingChallenge,
+          disabled: awaitingNext
+            ? navigating
+            : retryRequired ? submitting || retryingChallenge : submitting || timingOut,
+          onClick: () => void (awaitingNext
+            ? onNextChallenge()
+            : retryRequired ? retryAttempt() : submit()),
         }}
       />
     </>

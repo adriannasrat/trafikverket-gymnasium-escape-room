@@ -20,6 +20,7 @@ public sealed class AdminResultManagementTests(ApiFactory factory) : IClassFixtu
         Guid slowerId;
         Guid activeId;
         Guid demoId;
+        Guid abandonedId;
         Guid fastestAttemptId;
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -53,6 +54,14 @@ public sealed class AdminResultManagementTests(ApiFactory factory) : IClassFixtu
                 CurrentChallengeId = challengeId,
                 CurrentChallengeStartedAtUtc = now
             };
+            var abandoned = new GameSession
+            {
+                PlayerName = "Ej slutförd spelare",
+                StartedAtUtc = now.AddSeconds(-18),
+                CompletedAtUtc = now,
+                Status = SessionStatus.Abandoned,
+                LivesRemaining = 0
+            };
             var demo = new GameSession
             {
                 PlayerName = "Demospelare",
@@ -68,25 +77,28 @@ public sealed class AdminResultManagementTests(ApiFactory factory) : IClassFixtu
                 SubmittedAtUtc = now,
                 IsCorrect = true
             };
-            db.GameSessions.AddRange(fastest, slower, active, demo);
+            db.GameSessions.AddRange(fastest, slower, active, demo, abandoned);
             db.ChallengeAttempts.Add(attempt);
             await db.SaveChangesAsync();
             fastestId = fastest.Id;
             slowerId = slower.Id;
             activeId = active.Id;
             demoId = demo.Id;
+            abandonedId = abandoned.Id;
             fastestAttemptId = attempt.Id;
         }
 
         var results = await client.GetFromJsonAsync<List<AdminResultResponse>>(
             "/api/admin/results?mode=Event");
         Assert.NotNull(results);
-        Assert.Equal(2, results.Count);
+        Assert.Equal(3, results.Count);
         Assert.Equal(fastestId, results[0].Id);
         Assert.Equal(10_000, results[0].ElapsedMilliseconds);
         Assert.Equal(1, results[0].Rank);
         Assert.All(results, result => Assert.Equal("Event", result.ExperienceMode));
         Assert.DoesNotContain(results, result => result.Id == activeId);
+        Assert.Contains(results, result =>
+            result.Id == abandonedId && result.Status == "Abandoned");
 
         var demoResults = await client.GetFromJsonAsync<List<AdminResultResponse>>(
             "/api/admin/results?mode=Demo");
@@ -118,6 +130,7 @@ public sealed class AdminResultManagementTests(ApiFactory factory) : IClassFixtu
         await using var finalScope = factory.Services.CreateAsyncScope();
         var finalDb = finalScope.ServiceProvider.GetRequiredService<AppDbContext>();
         Assert.False(await finalDb.GameSessions.AnyAsync(session => session.Id == slowerId));
+        Assert.False(await finalDb.GameSessions.AnyAsync(session => session.Id == abandonedId));
         Assert.True(await finalDb.GameSessions.AnyAsync(session => session.Id == activeId));
         Assert.True(await finalDb.GameSessions.AnyAsync(session => session.Id == demoId));
         Assert.Equal(
@@ -154,6 +167,7 @@ public sealed class AdminResultManagementTests(ApiFactory factory) : IClassFixtu
         Guid Id,
         string PlayerName,
         string ExperienceMode,
+        string Status,
         long ElapsedMilliseconds,
         DateTimeOffset CompletedAtUtc);
 }

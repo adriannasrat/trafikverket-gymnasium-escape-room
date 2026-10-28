@@ -32,6 +32,11 @@ public static partial class SessionEndpoints
             return Results.BadRequest(new { message = "Bilden tillhör inte den aktuella frågan." });
         }
 
+        if (session.PausedAtUtc is not null)
+        {
+            return Results.Conflict(new { message = "Tryck på Försök igen innan bilden skärps." });
+        }
+
         var challenge = await db.Challenges
             .Include(candidate => candidate.Game)
             .SingleAsync(candidate => candidate.Id == request.ChallengeId, cancellationToken);
@@ -58,7 +63,7 @@ public static partial class SessionEndpoints
             return Results.Ok(new
             {
                 expired = true,
-                message = "Tiden tog slut. Alla liv är förlorade och uppdraget är avslutat.",
+                message = "Game over – tiden tog slut. Alla liv är förlorade.",
                 pixelRevealCount = 0,
                 penaltySeconds = session.TotalPenaltyMilliseconds / 1000,
                 challengeStartedAtUtc = now,
@@ -118,6 +123,11 @@ public static partial class SessionEndpoints
             return Results.Conflict(new { message = "Frågan är redan klar. Gå vidare till nästa fråga." });
         }
 
+        if (session.PausedAtUtc is not null)
+        {
+            return Results.Conflict(new { message = "Tryck på Försök igen innan du svarar på nytt." });
+        }
+
         var challenge = await db.Challenges
             .Include(candidate => candidate.Game)
             .Include(candidate => candidate.Options)
@@ -145,13 +155,12 @@ public static partial class SessionEndpoints
 
         if (expired || !selectedOption.IsCorrect)
         {
+            var secondsRemaining = Math.Max(
+                0,
+                timeLimit - (now - challengeStartedAt).TotalSeconds);
             var progress = expired
                 ? progressService.RegisterTimeout(session, now)
                 : progressService.RegisterFailedAttempt(session, now);
-            if (!progress.GameOver)
-            {
-                session.CurrentChallengeStartedAtUtc = now;
-            }
             session.PixelRevealCount = 0;
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new
@@ -160,11 +169,13 @@ public static partial class SessionEndpoints
                 expired,
                 message = progress.GameOver
                     ? expired
-                        ? "Tiden tog slut. Alla liv är förlorade och uppdraget är avslutat."
+                        ? "Game over – tiden tog slut. Alla liv är förlorade."
                         : "Det sista livet försvann. Uppdraget är avslutat."
-                    : expired ? "Tiden tog slut. Försök igen." : "Det var inte rätt svar. Försök igen.",
-                challengeStartedAtUtc = now,
+                    : "Det var inte rätt svar. Tryck på Försök igen när du är redo.",
+                retryRequired = !progress.GameOver,
+                challengeStartedAtUtc = challengeStartedAt,
                 timeLimitSeconds = timeLimit,
+                secondsRemaining,
                 progress
             });
         }

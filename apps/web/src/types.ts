@@ -38,6 +38,7 @@ export type SessionProgress = {
   livesRemaining: number
   lifeLost: boolean
   gameOver: boolean
+  timedOut?: boolean
 }
 
 export type AnswerOption = {
@@ -63,6 +64,7 @@ export type ChallengeProgress = {
   questionTotal: number
   currentChallengePenaltyMilliseconds: number
   awaitingNext: boolean
+  retryRequired: boolean
   challengeStartedAtUtc: string
   secondsRemaining: number
 }
@@ -170,6 +172,7 @@ export type CurrentChallengeResponse = ChallengeResponse | {
 export type AnswerResult = {
   correct: boolean; expired?: boolean; completed?: boolean; message?: string; successMessage?: string
   challengeStartedAtUtc?: string; timeLimitSeconds?: number; elapsedMilliseconds?: number
+  retryRequired?: boolean; secondsRemaining?: number
   progress?: SessionProgress
 }
 
@@ -206,9 +209,17 @@ export type TimeoutResult = {
   progress?: SessionProgress
 }
 
+export type ChallengeRetryResult = {
+  retryRequired: false
+  challengeStartedAtUtc: string
+  timeLimitSeconds: number
+  currentChallengePenaltyMilliseconds: number
+  secondsRemaining: number
+}
+
 export type LeaderboardEntry = {
   rank: number; id: string; playerName: string; elapsedMilliseconds: number; completedAtUtc: string
-  experienceMode: ExperienceMode; score: number
+  experienceMode: ExperienceMode; score: number; status: 'Completed' | 'Abandoned'
 }
 
 export type AdminResult = LeaderboardEntry & {

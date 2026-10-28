@@ -93,7 +93,7 @@ public static partial class SessionEndpoints
                 solved = false,
                 expired = true,
                 roundReset = true,
-                message = "Tiden tog slut. Alla liv är förlorade och uppdraget är avslutat.",
+                message = "Game over – tiden tog slut. Alla liv är förlorade.",
                 challengeStartedAtUtc = now,
                 timeLimitSeconds = timeLimit,
                 hangman = HangmanRules.BuildState(answer, []),

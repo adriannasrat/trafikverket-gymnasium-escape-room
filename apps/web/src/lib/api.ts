@@ -6,6 +6,7 @@ import type {
   AuditEntry,
   AnswerResult,
   Challenge,
+  ChallengeRetryResult,
   CurrentChallengeResponse,
   GameSummary,
   HangmanResult,
@@ -104,6 +105,11 @@ export const api = {
     request<AnswerResult>(`/api/sessions/${sessionId}/answers`, {
       method: "POST",
       body: JSON.stringify({ challengeId, optionId }),
+    }),
+  retryChallenge: (sessionId: string, challengeId: string) =>
+    request<ChallengeRetryResult>(`/api/sessions/${sessionId}/retry`, {
+      method: "POST",
+      body: JSON.stringify({ challengeId }),
     }),
   submitMatches: (
     sessionId: string,

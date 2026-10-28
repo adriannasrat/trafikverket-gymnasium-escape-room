@@ -16,7 +16,7 @@ In the word assembly challenge, players drag or move word parts into the correct
 
 All games use server timing and validation. The protected administration supports questions, statements, scenarios, risk zones, image questions, sorting cards and categories, word parts and their correct order, secret Signalordet answers and hints, correct answers and mappings, image uploads, activation, audit history and management of the ranked leaderboard without requiring source code changes.
 
-Each completed challenge awards 100–1,000 points based on the remaining challenge time. Wrong answers consume one shared life, except individual letter guesses in Signalordet. A timeout in any game immediately consumes all remaining lives and ends the session. Completed sessions are ranked by score and then by total time.
+Each completed challenge awards 100–1,000 points based on the remaining challenge time. Wrong answers consume one shared life, except individual letter guesses in Signalordet, and pause the timer until the player actively starts the next attempt. A timeout in any game immediately consumes all remaining lives and ends the session. Finished sessions, including attempts that ran out of lives, are ranked by score and then by total time; incomplete entries are clearly marked in the leaderboard.
 
 ## Technology
 

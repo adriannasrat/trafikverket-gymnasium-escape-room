@@ -19,6 +19,7 @@ function progressFrom(response: ChallengeResponse): ChallengeProgress {
     currentChallengePenaltyMilliseconds:
       challenge.currentChallengePenaltyMilliseconds,
     awaitingNext: challenge.awaitingNext,
+    retryRequired: challenge.retryRequired,
     challengeStartedAtUtc: challenge.challengeStartedAtUtc,
     secondsRemaining: challenge.secondsRemaining,
   };

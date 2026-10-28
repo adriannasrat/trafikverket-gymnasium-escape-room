@@ -36,6 +36,11 @@ public static partial class SessionEndpoints
             return Results.Conflict(new { message = "Sorteringen är redan klar. Gå vidare när du är redo." });
         }
 
+        if (session.PausedAtUtc is not null)
+        {
+            return Results.Conflict(new { message = "Tryck på Försök igen innan du ändrar sorteringen." });
+        }
+
         var challenge = await db.Challenges
             .Include(candidate => candidate.Game)
             .Include(candidate => candidate.Options)
@@ -90,7 +95,7 @@ public static partial class SessionEndpoints
             {
                 correct = false,
                 expired = true,
-                message = "Tiden tog slut. Alla liv är förlorade och uppdraget är avslutat.",
+                message = "Game over – tiden tog slut. Alla liv är förlorade.",
                 incorrectOptionIds = challenge.Options.Select(option => option.Id),
                 challengeStartedAtUtc = now,
                 timeLimitSeconds = timeLimit,
@@ -158,9 +163,10 @@ public static partial class SessionEndpoints
                 correct = false,
                 expired = penaltyExpired,
                 message = penaltyExpired
-                    ? "Tiden tog slut. Alla liv är förlorade och uppdraget är avslutat."
-                    : "Några kort ligger fel. De gröna är låsta – rätta de röda. 10 sekunder har lagts till på totaltiden.",
+                    ? "Game over – tiden tog slut. Alla liv är förlorade."
+                    : "Några kort ligger fel. 10 sekunder har lagts till på totaltiden. Tryck på Försök igen när du är redo.",
                 incorrectOptionIds,
+                retryRequired = !progress.GameOver,
                 challengeStartedAtUtc = penaltyExpired
                     ? now
                     : session.CurrentChallengeStartedAtUtc!.Value,

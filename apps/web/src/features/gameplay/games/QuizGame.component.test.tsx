@@ -40,6 +40,7 @@ const quiz: ChallengeOf<"Quiz"> = {
     questionTotal: 2,
     currentChallengePenaltyMilliseconds: 0,
     awaitingNext: false,
+    retryRequired: false,
     challengeStartedAtUtc: "2026-10-21T10:00:00Z",
     secondsRemaining: 58,
     options: [
@@ -65,6 +66,9 @@ function runtimeProps(): GameRuntimeProps<"Quiz"> {
     onChallengeComplete: vi.fn(),
     onSessionComplete: vi.fn(),
     onRestartChallenge: vi.fn(),
+    onPauseChallenge: vi.fn(),
+    onRetryChallenge: vi.fn().mockResolvedValue(undefined),
+    retryingChallenge: false,
     onUpdateProgress: vi.fn(),
     onReplaceData: vi.fn(),
     onReloadChallenge: vi.fn(),
@@ -115,12 +119,14 @@ describe("QuizGame", () => {
     expect(props.onChallengeComplete).toHaveBeenCalledOnce();
   });
 
-  it("startar om frågans timer efter ett felaktigt svar", async () => {
+  it("pausar frågan efter fel svar och kräver ett aktivt nytt försök", async () => {
     vi.mocked(api.answer).mockResolvedValue({
       correct: false,
       message: "Försök igen.",
       challengeStartedAtUtc: "2026-10-21T10:01:00Z",
       timeLimitSeconds: 60,
+      secondsRemaining: 42,
+      retryRequired: true,
       progress: {
         score: 0,
         scoreAwarded: 0,
@@ -131,7 +137,7 @@ describe("QuizGame", () => {
     });
     const props = runtimeProps();
     const user = userEvent.setup();
-    render(<QuizGame {...props} />);
+    const view = render(<QuizGame {...props} />);
 
     await user.click(screen.getByRole("radio", { name: "Fel svar" }));
     await user.click(screen.getByRole("button", { name: /bekräfta svar/i }));
@@ -141,9 +147,19 @@ describe("QuizGame", () => {
       lifeLost: true,
       livesRemaining: 4,
     }));
-    expect(props.onRestartChallenge).toHaveBeenCalledWith(expect.objectContaining({
+    expect(props.onPauseChallenge).toHaveBeenCalledWith(expect.objectContaining({
       challengeStartedAtUtc: "2026-10-21T10:01:00Z",
+      secondsRemaining: 42,
     }));
-    expect(screen.getByRole("radio", { name: "Fel svar" })).not.toBeChecked();
+
+    view.rerender(<QuizGame
+      {...props}
+      data={{
+        ...quiz,
+        challenge: { ...quiz.challenge, retryRequired: true },
+      }}
+    />);
+    await user.click(screen.getByRole("button", { name: "Försök igen" }));
+    expect(props.onRetryChallenge).toHaveBeenCalledOnce();
   });
 });

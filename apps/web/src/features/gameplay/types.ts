@@ -32,6 +32,9 @@ type SharedGameRuntimeProps = {
   onChallengeComplete: () => void;
   onSessionComplete: () => void;
   onRestartChallenge: (restart: ChallengeRestart) => void;
+  onPauseChallenge: (restart: ChallengeRestart) => void;
+  onRetryChallenge: () => Promise<void>;
+  retryingChallenge: boolean;
   onUpdateProgress: (update: Partial<ChallengeProgress>) => void;
   onReplaceData: (data: Challenge) => void;
   onReloadChallenge: (feedback?: GameFeedbackMessage) => Promise<void>;

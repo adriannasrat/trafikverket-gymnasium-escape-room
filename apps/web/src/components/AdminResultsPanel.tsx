@@ -97,7 +97,7 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
     if (!results?.length) return;
     if (
       !window.confirm(
-        `Töm alla ${results.length} slutförda ${mode === "Demo" ? "demo" : "event"}resultat? Alla tider och registrerade svar tas bort permanent. Pågående spel påverkas inte.`,
+        `Töm alla ${results.length} avslutade ${mode === "Demo" ? "demo" : "event"}resultat? Alla tider och registrerade svar tas bort permanent. Pågående spel påverkas inte.`,
       )
     ) return;
 
@@ -107,7 +107,7 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
     try {
       await api.deleteAllAdminResults(mode);
       setResults([]);
-      setStatus(`Alla slutförda ${mode === "Demo" ? "demo" : "event"}resultat har tagits bort.`);
+      setStatus(`Alla avslutade ${mode === "Demo" ? "demo" : "event"}resultat har tagits bort.`);
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         onUnauthorized();
@@ -212,7 +212,7 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
                 Inga resultat ännu
               </h3>
               <p className="m-0 text-[12px] leading-[1.6] text-[#6a6a6a]">
-                Slutförda spelomgångar visas här och på den publika topplistan.
+                Avslutade spelomgångar visas här och på den publika topplistan.
               </p>
             </div>
           </div>
@@ -223,7 +223,7 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
               <span>Spelare</span>
               <span>Poäng</span>
               <span>Sluttid</span>
-              <span>Slutförd</span>
+              <span>Avslutad</span>
               <span className="sr-only">Åtgärd</span>
             </div>
             {results.map((result) => (
@@ -234,8 +234,11 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
                 <strong className={`${barlow} text-[25px] text-[#d70000]`}>
                   {result.rank.toString().padStart(2, "0")}
                 </strong>
-                <span className="min-w-0 overflow-hidden text-[13px] font-bold text-ellipsis whitespace-nowrap text-[#202020]">
-                  {result.playerName}
+                <span className="grid min-w-0 gap-1 overflow-hidden">
+                  <strong className="overflow-hidden text-[13px] text-ellipsis whitespace-nowrap text-[#202020]">{result.playerName}</strong>
+                  <small className={`text-[8px] font-extrabold tracking-[0.1em] uppercase ${result.status === "Abandoned" ? "text-[#a32620]" : "text-[#23845e]"}`}>
+                    {result.status === "Abandoned" ? "Inte slutfört" : "Slutfört"}
+                  </small>
                 </span>
                 <strong className={`${barlow} text-[22px] text-[#23845e]`}>
                   {result.score.toLocaleString("sv-SE")}

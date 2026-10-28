@@ -3,7 +3,7 @@ import type { Challenge, SessionProgress } from "../../../types";
 
 export type ProgressAnimation =
   | { id: number; type: "score"; amount: number }
-  | { id: number; type: "life"; livesRemaining: number; gameOver: boolean };
+  | { id: number; type: "life"; livesRemaining: number; gameOver: boolean; timedOut: boolean };
 
 export function useSessionProgress(data: Challenge | null) {
   const [localProgress, setLocalProgress] = useState<{
@@ -40,6 +40,7 @@ export function useSessionProgress(data: Challenge | null) {
         type: "life",
         livesRemaining: progress.livesRemaining,
         gameOver: progress.gameOver,
+        timedOut: Boolean(progress.timedOut),
       });
     }
   }, [data?.sessionId]);

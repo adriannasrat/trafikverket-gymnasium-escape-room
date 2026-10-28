@@ -11,10 +11,12 @@ import { GameRenderer } from "../features/gameplay/games/GameRenderer";
 import { ProgressAnimation } from "../features/gameplay/components/ProgressAnimation";
 import { useChallengeTimeout } from "../features/gameplay/hooks/useChallengeTimeout";
 import { useChallengeTimer } from "../features/gameplay/hooks/useChallengeTimer";
+import { useChallengeRetry } from "../features/gameplay/hooks/useChallengeRetry";
 import { useGameNavigation } from "../features/gameplay/hooks/useGameNavigation";
 import { useGameNotice } from "../features/gameplay/hooks/useGameNotice";
 import { useGameSession } from "../features/gameplay/hooks/useGameSession";
 import { useSessionProgress } from "../features/gameplay/hooks/useSessionProgress";
+import { useSessionRetry } from "../features/gameplay/hooks/useSessionRetry";
 import type { ChallengeRestart, GameFeedbackMessage } from "../features/gameplay/types";
 import { formatElapsed } from "../lib/time";
 import type { SessionProgress } from "../types";
@@ -23,6 +25,8 @@ export function GamePage() {
   const { sessionId = "" } = useParams();
   const session = useGameSession(sessionId);
   const markSessionFailed = session.markFailed;
+  const playerName = session.terminal?.playerName ?? session.data?.playerName;
+  const retry = useSessionRetry(playerName);
   const {
     score,
     livesRemaining,
@@ -44,7 +48,7 @@ export function GamePage() {
     sessionId,
     data: session.data,
     completed: session.completed,
-    awaitingNext: timer.awaitingNext,
+    awaitingNext: timer.awaitingNext || Boolean(session.data?.challenge.retryRequired),
     remaining: timer.remaining,
     reloadChallenge: session.loadChallenge,
     onProgressChange: handleProgressChange,
@@ -91,6 +95,33 @@ export function GamePage() {
     timer.restartChallenge(secondsRemaining);
   }, [session, timer]);
 
+  const pauseChallenge = useCallback((restart: ChallengeRestart) => {
+    const current = session.data;
+    if (!current) return;
+
+    const secondsRemaining = restart.secondsRemaining ?? timer.remaining;
+    session.updateProgress({
+      retryRequired: true,
+      challengeStartedAtUtc: restart.challengeStartedAtUtc
+        ?? current.challenge.challengeStartedAtUtc,
+      timeLimitSeconds: restart.timeLimitSeconds
+        ?? current.challenge.timeLimitSeconds,
+      currentChallengePenaltyMilliseconds:
+        restart.currentChallengePenaltyMilliseconds
+        ?? current.challenge.currentChallengePenaltyMilliseconds,
+      secondsRemaining,
+    });
+    timer.pauseChallenge(secondsRemaining);
+  }, [session, timer]);
+
+  const challengeRetry = useChallengeRetry({
+    sessionId,
+    data: session.data,
+    onUpdateProgress: session.updateProgress,
+    onRestart: restartChallenge,
+    onClearFeedback: clearExternalFeedback,
+  });
+
   const reloadChallenge = useCallback(async (feedback?: GameFeedbackMessage) => {
     await session.loadChallenge();
     if (feedback) notice.showFeedback(feedback);
@@ -108,8 +139,11 @@ export function GamePage() {
   if (session.failed) {
     return (
       <GameFailure
-        playerName={session.terminal?.playerName ?? session.data?.playerName}
+        playerName={playerName}
         score={session.terminal?.score ?? score}
+        retrying={retry.retrying}
+        retryError={retry.retryError}
+        onRetry={() => void retry.retry()}
       />
     );
   }
@@ -163,6 +197,9 @@ export function GamePage() {
             onChallengeComplete={timer.completeChallenge}
             onSessionComplete={session.markCompleted}
             onRestartChallenge={restartChallenge}
+            onPauseChallenge={pauseChallenge}
+            onRetryChallenge={challengeRetry.retry}
+            retryingChallenge={challengeRetry.retrying}
             onUpdateProgress={session.updateProgress}
             onReplaceData={session.replaceData}
             onReloadChallenge={reloadChallenge}

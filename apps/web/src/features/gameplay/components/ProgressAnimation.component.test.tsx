@@ -17,6 +17,8 @@ describe("ProgressAnimation", () => {
 
     expect(screen.getByText("+850")).toBeVisible();
     expect(screen.getByText("Poäng")).toBeVisible();
+    fireEvent.animationEnd(container.querySelector(".score-ring")!);
+    expect(onFinished).not.toHaveBeenCalled();
     fireEvent.animationEnd(container.querySelector(".score-burst-animation")!);
     vi.runAllTimers();
     expect(onFinished).toHaveBeenCalledOnce();
@@ -26,7 +28,7 @@ describe("ProgressAnimation", () => {
     const onFinished = vi.fn();
     render(
       <ProgressAnimation
-        animation={{ id: 2, type: "life", livesRemaining: 4, gameOver: false }}
+        animation={{ id: 2, type: "life", livesRemaining: 4, gameOver: false, timedOut: false }}
         onFinished={onFinished}
       />,
     );
@@ -38,12 +40,24 @@ describe("ProgressAnimation", () => {
   it("förklarar att alla liv försvinner när sessionen tar slut", () => {
     render(
       <ProgressAnimation
-        animation={{ id: 3, type: "life", livesRemaining: 0, gameOver: true }}
+        animation={{ id: 3, type: "life", livesRemaining: 0, gameOver: true, timedOut: false }}
         onFinished={vi.fn()}
       />,
     );
 
     expect(screen.getByText("Alla liv förlorade")).toBeVisible();
     expect(screen.getByText("0 liv kvar")).toBeVisible();
+  });
+
+  it("visar Game over när tiden tar slut", () => {
+    render(
+      <ProgressAnimation
+        animation={{ id: 4, type: "life", livesRemaining: 0, gameOver: true, timedOut: true }}
+        onFinished={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Game over")).toBeVisible();
+    expect(screen.getByText("Tiden tog slut")).toBeVisible();
   });
 });

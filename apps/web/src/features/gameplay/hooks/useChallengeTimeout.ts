@@ -46,7 +46,7 @@ export function useChallengeTimeout({
         if (result.expired) {
           setFeedback({
             correct: false,
-            text: result.message ?? "Tiden tog slut. Försök igen.",
+            text: result.message ?? "Game over – tiden tog slut.",
           });
         }
       })

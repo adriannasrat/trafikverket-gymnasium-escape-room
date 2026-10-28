@@ -21,6 +21,9 @@ export function PixelHuntGame({
   onChallengeComplete,
   onSessionComplete,
   onRestartChallenge,
+  onPauseChallenge,
+  onRetryChallenge,
+  retryingChallenge,
   onNextChallenge,
 }: GameRuntimeProps<"PixelHunt">) {
   const [selected, setSelected] = useState("");
@@ -46,7 +49,7 @@ export function PixelHuntGame({
         onRestartChallenge(result);
         setFeedback({
           correct: false,
-          text: result.message ?? "Tiden tog slut. Försök igen.",
+          text: result.message ?? "Game over – tiden tog slut.",
         });
       }
     } catch (caught) {
@@ -76,10 +79,8 @@ export function PixelHuntGame({
         onSessionComplete();
       } else if (result.correct) {
         onChallengeComplete();
-      } else if (result.challengeStartedAtUtc) {
-        setSelected("");
-        setRevealCount(0);
-        onRestartChallenge(result);
+      } else if (!result.progress?.gameOver) {
+        onPauseChallenge(result);
       }
     } catch (caught) {
       setFeedback({
@@ -91,6 +92,25 @@ export function PixelHuntGame({
     }
   }
 
+  async function retryAttempt() {
+    setSubmitting(true);
+    try {
+      await onRetryChallenge();
+      setSelected("");
+      setRevealCount(0);
+      setFeedback(null);
+    } catch (caught) {
+      setFeedback({
+        correct: false,
+        text: caught instanceof Error ? caught.message : "Frågan kunde inte startas om.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const retryRequired = data.challenge.retryRequired;
+
   return (
     <>
       <GameChallengeTimer
@@ -101,14 +121,14 @@ export function PixelHuntGame({
       <PixelRevealBoard
         imagePath={data.challenge.imagePath}
         revealCount={awaitingNext ? 5 : revealCount}
-        disabled={awaitingNext || revealing || submitting || timingOut || remaining <= 0}
+        disabled={awaitingNext || retryRequired || revealing || submitting || timingOut || remaining <= 0}
         onReveal={() => void revealPixel()}
       />
       <AnswerChoiceBoard
         options={data.challenge.options}
         selectedId={selected}
         variant="multiple-choice"
-        disabled={awaitingNext || submitting || timingOut}
+        disabled={awaitingNext || retryRequired || submitting || timingOut}
         completed={awaitingNext}
         onSelect={(optionId) => {
           setSelected(optionId);
@@ -121,13 +141,20 @@ export function PixelHuntGame({
         action={{
           label: awaitingNext
             ? nextActionLabel
+            : retryRequired ? "Försök igen"
             : timingOut ? "Tiden registreras…" : "Bekräfta svar",
-          busyLabel: awaitingNext ? `${nextActionLabel}…` : "Kontrollerar…",
-          busy: submitting || navigating,
+          busyLabel: awaitingNext
+            ? `${nextActionLabel}…`
+            : retryRequired ? "Startar om…" : "Kontrollerar…",
+          busy: submitting || navigating || retryingChallenge,
           disabled: awaitingNext
             ? navigating
-            : !selected || submitting || timingOut || revealing,
-          onClick: () => void (awaitingNext ? onNextChallenge() : submit()),
+            : retryRequired
+              ? submitting || retryingChallenge
+              : !selected || submitting || timingOut || revealing,
+          onClick: () => void (awaitingNext
+            ? onNextChallenge()
+            : retryRequired ? retryAttempt() : submit()),
         }}
       />
     </>

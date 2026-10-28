@@ -84,6 +84,8 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         var wrongMatchResult = await wrongMatchResponse.Content.ReadFromJsonAsync<MatchingAnswerResponse>();
         Assert.False(wrongMatchResult?.Correct);
         Assert.Equal(3, wrongMatchResult?.IncorrectChallengeIds.Count);
+        Assert.True(wrongMatchResult?.RetryRequired);
+        await RetryChallengeAsync(session.Id, matching.Challenge.Id);
 
         List<MatchSelectionRequest> selections;
         await using (var scope = factory.Services.CreateAsyncScope())
@@ -209,6 +211,8 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.Equal(9, wrongSortingResult?.IncorrectOptionIds.Count);
         Assert.Equal(10_000, wrongSortingResult?.CurrentChallengePenaltyMilliseconds);
         Assert.True(wrongSortingResult?.ElapsedMilliseconds >= 10_000);
+        Assert.True(wrongSortingResult?.RetryRequired);
+        await RetryChallengeAsync(session.Id, sorting.Challenge.Id);
 
         List<SortingPlacementRequest> sortingPlacements;
         await using (var scope = factory.Services.CreateAsyncScope())
@@ -265,6 +269,8 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.False(wrongWordResult?.Correct);
         Assert.False(wrongWordResult?.Expired);
         Assert.NotEmpty(wrongWordResult!.IncorrectOptionIds);
+        Assert.True(wrongWordResult.RetryRequired);
+        await RetryChallengeAsync(session.Id, wordAssembly.Challenge.Id);
 
         for (var question = 0; question < 4; question++)
         {
@@ -381,11 +387,15 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.False(wrong?.Correct);
         Assert.True(wrong?.Progress.LifeLost);
         Assert.Equal(4, wrong?.Progress.LivesRemaining);
+        Assert.True(wrong?.RetryRequired);
 
         var afterWrong = await client.GetFromJsonAsync<ChallengeResponse>(
             $"/api/sessions/{session.Id}/current-challenge");
         Assert.Equal(4, afterWrong?.LivesRemaining);
         Assert.Equal(0, afterWrong?.Score);
+        Assert.True(afterWrong?.Challenge.RetryRequired);
+
+        await RetryChallengeAsync(session.Id, quiz.Challenge.Id);
 
         var correctResponse = await client.PostAsJsonAsync(
             $"/api/sessions/{session.Id}/answers",
@@ -433,6 +443,11 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
             response.EnsureSuccessStatusCode();
             result = await response.Content.ReadFromJsonAsync<AnswerResponse>();
             Assert.Equal(5 - attempt, result?.Progress.LivesRemaining);
+            if (attempt < 5)
+            {
+                Assert.True(result?.RetryRequired);
+                await RetryChallengeAsync(session.Id, quiz.Challenge.Id);
+            }
         }
 
         Assert.True(result?.Progress.GameOver);
@@ -441,6 +456,11 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.True(terminal?.Completed);
         Assert.True(terminal?.Failed);
         Assert.Equal(0, terminal?.LivesRemaining);
+
+        var leaderboard = await client.GetFromJsonAsync<List<LeaderboardResponse>>(
+            "/api/leaderboard");
+        var failedResult = leaderboard?.Single(entry => entry.PlayerName == "Fem fel");
+        Assert.Equal("Abandoned", failedResult?.Status);
     }
 
     [Fact]
@@ -508,9 +528,10 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         var result = await timeout.Content.ReadFromJsonAsync<TimeoutResponse>();
         Assert.True(result?.Expired);
         Assert.Equal(
-            "Tiden tog slut. Alla liv är förlorade och uppdraget är avslutat.",
+            "Game over – tiden tog slut. Alla liv är förlorade.",
             result?.Message);
         Assert.True(result?.Progress.GameOver);
+        Assert.True(result?.Progress.TimedOut);
         Assert.Equal(0, result?.Progress.LivesRemaining);
 
         await using var verificationScope = factory.Services.CreateAsyncScope();
@@ -628,6 +649,8 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
             $"/api/sessions/{session.Id}/current-challenge");
         Assert.Equal(0, restarted?.Challenge.PixelRevealCount);
         Assert.True(restarted?.ElapsedMilliseconds >= 25_000);
+        Assert.True(restarted?.Challenge.RetryRequired);
+        await RetryChallengeAsync(session.Id, pixelChallengeId);
 
         var oneMoreReveal = await client.PostAsJsonAsync(
             $"/api/sessions/{session.Id}/pixel-reveal",
@@ -660,6 +683,14 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.Equal(30_000, verifiedSession.TotalPenaltyMilliseconds);
     }
 
+    private async Task RetryChallengeAsync(Guid sessionId, Guid challengeId)
+    {
+        var response = await client.PostAsJsonAsync(
+            $"/api/sessions/{sessionId}/retry",
+            new { challengeId });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     private sealed record SessionResponse(Guid Id, int Score, int LivesRemaining);
     private sealed record ChallengeResponse(
         GameBody Game,
@@ -679,6 +710,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         int QuestionNumber,
         int QuestionTotal,
         int PixelRevealCount,
+        bool RetryRequired,
         List<OptionBody> Options);
     private sealed record MatchingBody(
         List<MatchingScenarioBody> Scenarios,
@@ -701,19 +733,29 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         int ScoreAwarded,
         int LivesRemaining,
         bool LifeLost,
-        bool GameOver);
-    private sealed record AnswerResponse(bool Correct, bool Completed, ProgressResponse Progress);
-    private sealed record MatchingAnswerResponse(bool Correct, List<Guid> IncorrectChallengeIds);
+        bool GameOver,
+        bool TimedOut);
+    private sealed record AnswerResponse(
+        bool Correct,
+        bool Completed,
+        ProgressResponse Progress,
+        bool RetryRequired);
+    private sealed record MatchingAnswerResponse(
+        bool Correct,
+        List<Guid> IncorrectChallengeIds,
+        bool RetryRequired);
     private sealed record SortingAnswerResponse(
         bool Correct,
         bool Expired,
         List<Guid> IncorrectOptionIds,
         long CurrentChallengePenaltyMilliseconds,
-        long ElapsedMilliseconds);
+        long ElapsedMilliseconds,
+        bool RetryRequired);
     private sealed record WordAssemblyAnswerResponse(
         bool Correct,
         bool Expired,
-        List<Guid> IncorrectOptionIds);
+        List<Guid> IncorrectOptionIds,
+        bool RetryRequired);
     private sealed record HangmanAnswerResponse(
         bool Correct,
         bool Solved,
@@ -727,5 +769,9 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         string Message,
         ProgressResponse Progress);
     private sealed record PixelRevealResponse(int PixelRevealCount, int PenaltySeconds, long ElapsedMilliseconds);
-    private sealed record LeaderboardResponse(int Rank, string PlayerName, int Score);
+    private sealed record LeaderboardResponse(
+        int Rank,
+        string PlayerName,
+        int Score,
+        string Status);
 }

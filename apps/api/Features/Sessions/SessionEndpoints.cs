@@ -16,6 +16,7 @@ public static partial class SessionEndpoints
         group.MapPost("/{sessionId:guid}/word-assembly", SubmitWordAssemblyAsync);
         group.MapPost("/{sessionId:guid}/hangman-guesses", SubmitHangmanGuessAsync);
         group.MapPost("/{sessionId:guid}/timeout", RegisterTimeoutAsync);
+        group.MapPost("/{sessionId:guid}/retry", RetryChallengeAsync);
         group.MapPost("/{sessionId:guid}/next", MoveToNextChallengeAsync);
 
         endpoints.MapGet("/api/leaderboard", GetLeaderboardAsync).WithTags("Leaderboard");
@@ -75,6 +76,18 @@ public static partial class SessionEndpoints
         var result = await sessions.MoveToNextChallengeAsync(sessionId, cancellationToken);
         return result.Kind == SessionResultKind.Success
             ? Results.NoContent()
+            : ToErrorResult(result);
+    }
+
+    private static async Task<IResult> RetryChallengeAsync(
+        Guid sessionId,
+        RetryChallengeRequest request,
+        SessionService sessions,
+        CancellationToken cancellationToken)
+    {
+        var result = await sessions.RetryChallengeAsync(sessionId, request, cancellationToken);
+        return result.Kind == SessionResultKind.Success
+            ? Results.Ok(result.Value)
             : ToErrorResult(result);
     }
 

@@ -123,6 +123,11 @@ public sealed class SessionService(
             return SessionResults.Conflict<object>("Frågan är redan klar. Gå vidare till nästa fråga.");
         }
 
+        if (session.PausedAtUtc is not null)
+        {
+            return SessionResults.Conflict<object>("Tryck på Försök igen innan tiden kan fortsätta.");
+        }
+
         var challenge = await db.Challenges
             .Include(candidate => candidate.Game)
             .SingleAsync(candidate => candidate.Id == request.ChallengeId, cancellationToken);
@@ -158,13 +163,65 @@ public sealed class SessionService(
         return SessionResults.Success<object>(new
         {
             expired = true,
-            message = "Tiden tog slut. Alla liv är förlorade och uppdraget är avslutat.",
+            message = "Game over – tiden tog slut. Alla liv är förlorade.",
             challengeStartedAtUtc = now,
             timeLimitSeconds = limit,
             currentChallengePenaltyMilliseconds = 0,
             secondsRemaining = limit,
             progress
         });
+    }
+
+    public async Task<SessionResult<ChallengeRetryResponse>> RetryChallengeAsync(
+        Guid sessionId,
+        RetryChallengeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var session = await db.GameSessions
+            .SingleOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken);
+        if (session is null)
+        {
+            return SessionResults.NotFound<ChallengeRetryResponse>();
+        }
+
+        if (session.Status != SessionStatus.InProgress ||
+            session.CurrentChallengeId != request.ChallengeId ||
+            session.CurrentChallengeStartedAtUtc is null)
+        {
+            return SessionResults.Conflict<ChallengeRetryResponse>(
+                "Den aktuella frågan kan inte startas om.");
+        }
+
+        if (session.PausedAtUtc is null)
+        {
+            return SessionResults.Conflict<ChallengeRetryResponse>(
+                "Frågan är redan igång.");
+        }
+
+        var challenge = await db.Challenges.AsNoTracking()
+            .Include(candidate => candidate.Game)
+            .SingleAsync(candidate => candidate.Id == request.ChallengeId, cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        var pausedDuration = now - session.PausedAtUtc.Value;
+        session.TotalPausedMilliseconds += Math.Max(
+            0,
+            (long)pausedDuration.TotalMilliseconds);
+        session.PausedAtUtc = null;
+        session.CurrentChallengeStartedAtUtc =
+            session.CurrentChallengeStartedAtUtc.Value + pausedDuration;
+        var limit = SessionTimeCalculator.GetTimeLimitSeconds(challenge);
+        var secondsRemaining = Math.Max(
+            0,
+            limit - (now - session.CurrentChallengeStartedAtUtc.Value).TotalSeconds -
+            session.CurrentChallengePenaltyMilliseconds / 1000d);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return SessionResults.Success(new ChallengeRetryResponse(
+            false,
+            session.CurrentChallengeStartedAtUtc.Value,
+            limit,
+            session.CurrentChallengePenaltyMilliseconds,
+            secondsRemaining));
     }
 
     public async Task<SessionResult<bool>> MoveToNextChallengeAsync(
@@ -234,7 +291,7 @@ public sealed class SessionService(
         var sessions = await db.GameSessions.AsNoTracking()
             .Where(session =>
                 session.ExperienceMode == experienceOptions.Value.Mode &&
-                session.Status == SessionStatus.Completed &&
+                session.Status != SessionStatus.InProgress &&
                 session.CompletedAtUtc != null)
             .OrderByDescending(session => session.Score)
             .ThenBy(session => session.CompletedAtUtc)
@@ -260,6 +317,7 @@ public sealed class SessionService(
                 result.Session.Score,
                 result.ElapsedMilliseconds,
                 result.Session.CompletedAtUtc,
+                result.Session.Status.ToString(),
                 result.Session.ExperienceMode.ToString()))
             .ToList();
     }

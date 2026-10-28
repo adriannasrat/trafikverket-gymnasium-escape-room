@@ -10,6 +10,7 @@ import type {
   CurrentChallengeResponse,
   GameSummary,
   HangmanResult,
+  ImageCleanupReport,
   LeaderboardEntry,
   MatchingResult,
   PixelRevealResult,
@@ -233,9 +234,20 @@ export const api = {
   uploadChallengeImage: (challengeId: string, image: File) => {
     const form = new FormData();
     form.append("image", image);
-    return protectedRequest<{ imagePath: string }>(
+    return protectedRequest<{ imagePath: string; isEnabled: boolean }>(
       `/api/admin/challenges/${challengeId}/image`,
       { method: "POST", body: form },
     );
   },
+  removeChallengeImage: (challengeId: string) =>
+    protectedRequest<{ imagePath: null; isEnabled: boolean }>(
+      `/api/admin/challenges/${challengeId}/image`,
+      { method: "DELETE" },
+    ),
+  previewUnusedImages: () =>
+    request<ImageCleanupReport>("/api/admin/images/unused"),
+  cleanupUnusedImages: () =>
+    protectedRequest<ImageCleanupReport>("/api/admin/images/cleanup", {
+      method: "POST",
+    }),
 };

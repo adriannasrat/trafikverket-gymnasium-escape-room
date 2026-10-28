@@ -1,7 +1,8 @@
-import { ChevronRight, Gamepad2, LogOut, ShieldCheck, Trophy } from "lucide-react";
+import { ChevronRight, Gamepad2, HardDrive, LogOut, ShieldCheck, Trophy } from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { AdminAuditPanel } from "../components/AdminAuditPanel";
+import { AdminImageCleanupPanel } from "../components/AdminImageCleanupPanel";
 import { BrandHeader } from "../components/BrandHeader";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { AdminResultsPanel } from "../components/AdminResultsPanel";
@@ -12,7 +13,7 @@ import { cx, focusRing } from "../uiStyles";
 
 const sidebarButton = `flex min-h-[45px] w-full cursor-pointer items-center gap-[11px] border-0 bg-transparent px-3 text-left text-[12px] text-[#777] disabled:cursor-not-allowed disabled:opacity-[0.42] [&>svg]:w-[17px] max-[980px]:justify-center max-[980px]:text-[0px] max-[980px]:[&>svg]:w-[19px] max-[720px]:min-h-[42px] max-[720px]:w-auto max-[720px]:justify-start max-[720px]:px-3 max-[720px]:text-[11px] max-[420px]:w-10 max-[420px]:justify-center max-[420px]:!px-0 max-[420px]:text-[0px] ${focusRing}`;
 
-type AdminView = "games" | "results" | "audit";
+type AdminView = "games" | "results" | "images" | "audit";
 
 export function AdminPage() {
   const [activeView, setActiveView] = useState<AdminView>("games");
@@ -47,6 +48,9 @@ export function AdminPage() {
             <SidebarButton active={activeView === "audit"} onClick={() => setActiveView("audit")}>
               <ShieldCheck /> Händelselogg
             </SidebarButton>
+            <SidebarButton active={activeView === "images"} onClick={() => setActiveView("images")}>
+              <HardDrive /> Bildlagring
+            </SidebarButton>
           </nav>
           <div className="mt-auto border-t border-[#dedede] pt-[18px] max-[720px]:ml-auto max-[720px]:mt-0 max-[720px]:border-0 max-[720px]:p-0">
             <span className="flex items-center gap-[7px] px-3 pb-[10px] text-[8px] tracking-[0.12em] text-[#23845e] max-[980px]:hidden">
@@ -65,6 +69,8 @@ export function AdminPage() {
         <main className="min-w-0 px-[clamp(24px,4vw,60px)] pt-[38px] pb-[65px] max-[720px]:px-[14px] max-[720px]:pt-[30px] max-[720px]:pb-[45px]">
           {activeView === "results" ? (
             <AdminResultsPanel onUnauthorized={handleUnauthorized} />
+          ) : activeView === "images" ? (
+            <AdminImageCleanupPanel onUnauthorized={handleUnauthorized} />
           ) : activeView === "audit" ? (
             <AdminAuditPanel onUnauthorized={handleUnauthorized} />
           ) : (

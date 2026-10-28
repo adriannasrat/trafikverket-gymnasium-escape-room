@@ -33,6 +33,7 @@ type AdminMatchingBoardProps = {
   onAssignScenario: (challengeId: string, destinationSortOrder: number) => void;
   onChangePrompt: (challengeId: string, prompt: string) => void;
   onUploadImage: (challengeId: string, image?: File) => void;
+  onRemoveImage: (challengeId: string) => void;
   onDeleteScenario: (challengeId: string) => void;
   onDeleteDestination: (sortOrder: number) => void;
 };
@@ -62,6 +63,7 @@ export function AdminMatchingBoard({
   onAssignScenario,
   onChangePrompt,
   onUploadImage,
+  onRemoveImage,
   onDeleteScenario,
   onDeleteDestination,
 }: AdminMatchingBoardProps) {
@@ -300,6 +302,7 @@ export function AdminMatchingBoard({
                     onUploadImage={(image) =>
                       onUploadImage(challenge.id, image)
                     }
+                    onRemoveImage={() => onRemoveImage(challenge.id)}
                     onDelete={() => onDeleteScenario(challenge.id)}
                   />
                 );

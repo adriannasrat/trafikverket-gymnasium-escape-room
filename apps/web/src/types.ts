@@ -236,6 +236,15 @@ export type AuditEntry = {
   summary: string
 }
 
+export type ImageCleanupReport = {
+  dryRun: boolean
+  candidateCount: number
+  deletedCount: number
+  skippedCount: number
+  totalBytes: number
+  files: Array<{ imagePath: string; sizeBytes: number; deleted: boolean }>
+}
+
 export type AdminOption = {
   id: string; text: string; sortOrder: number; isCorrect: boolean; sortingCategory: string | null
   matchingIconKey: string | null

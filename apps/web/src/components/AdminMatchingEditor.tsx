@@ -10,6 +10,7 @@ type AdminMatchingEditorProps = {
   onAddDestination: () => void;
   onAddScenario: () => void;
   onUploadImage: (challengeId: string, image?: File) => void;
+  onRemoveImage: (challengeId: string) => void;
   onDeleteScenario: (challengeId: string) => void;
   onDeleteDestination: (sortOrder: number) => void;
 };
@@ -23,6 +24,7 @@ export function AdminMatchingEditor({
   onAddDestination,
   onAddScenario,
   onUploadImage,
+  onRemoveImage,
   onDeleteScenario,
   onDeleteDestination,
 }: AdminMatchingEditorProps) {
@@ -158,6 +160,7 @@ export function AdminMatchingEditor({
         })
       }
       onUploadImage={onUploadImage}
+      onRemoveImage={onRemoveImage}
       onDeleteScenario={onDeleteScenario}
       onDeleteDestination={onDeleteDestination}
     />

@@ -12,6 +12,9 @@ namespace EscapeRoom.Api.Tests;
 public sealed class ApiFactory : WebApplicationFactory<Program>
 {
     private readonly string databaseName = $"escape-room-tests-{Guid.NewGuid():N}";
+    public string UploadsPath { get; } = Path.Combine(
+        Path.GetTempPath(),
+        $"escape-room-upload-tests-{Guid.NewGuid():N}");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -23,6 +26,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimiting:SessionStartPermitLimit", "1000");
         builder.UseSetting("Experience:Mode", "Event");
         builder.UseSetting("DataRetention:Enabled", "false");
+        builder.UseSetting("Uploads:Path", UploadsPath);
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<AppDbContext>>();
@@ -40,5 +44,14 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
             .GetAwaiter()
             .GetResult();
         return host;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (Directory.Exists(UploadsPath))
+        {
+            Directory.Delete(UploadsPath, recursive: true);
+        }
     }
 }

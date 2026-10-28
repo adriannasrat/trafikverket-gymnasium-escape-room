@@ -14,6 +14,8 @@ const actionLabels: Record<string, string> = {
   deleted: "Borttagen",
   cleared: "Tömd",
   "uploaded-image": "Bild uppladdad",
+  "removed-image": "Bild borttagen",
+  "cleaned-images": "Bildlagring rensad",
 };
 
 const entityLabels: Record<string, string> = {
@@ -24,6 +26,7 @@ const entityLabels: Record<string, string> = {
   "word-part": "Orddel",
   session: "Spelresultat",
   results: "Resultatlista",
+  uploads: "Bildlagring",
 };
 
 export function AdminAuditPanel({ onUnauthorized }: AdminAuditPanelProps) {

@@ -45,6 +45,7 @@ export function ScenarioCard({
   onMove,
   onChangePrompt,
   onUploadImage,
+  onRemoveImage,
   onDelete,
 }: {
   challenge: AdminChallenge;
@@ -65,6 +66,7 @@ export function ScenarioCard({
   onMove: (direction: -1 | 1) => void;
   onChangePrompt: (prompt: string) => void;
   onUploadImage: (image?: File) => void;
+  onRemoveImage: () => void;
   onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
@@ -221,25 +223,37 @@ export function ScenarioCard({
       </label>
 
       {imageUploadsEnabled ? (
-        <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 border border-[#bdbdbd] bg-white px-3 text-[8px] font-extrabold tracking-[0.07em] text-[#555] uppercase focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[rgba(215,0,0,0.25)]">
-          <ImagePlus size={14} />
-          {mutating === `image-${challenge.id}`
-            ? "Laddar upp…"
-            : challenge.imagePath
-              ? "Byt bild"
-              : "Lägg till bild"}
-          <input
-            className="absolute size-px opacity-0"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            disabled={disabled}
-            onChange={(event) => {
-              const image = event.target.files?.[0];
-              event.target.value = "";
-              onUploadImage(image);
-            }}
-          />
-        </label>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 max-[520px]:grid-cols-1">
+          <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 border border-[#bdbdbd] bg-white px-3 text-[8px] font-extrabold tracking-[0.07em] text-[#555] uppercase focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[rgba(215,0,0,0.25)]">
+            <ImagePlus size={14} />
+            {mutating === `image-${challenge.id}`
+              ? "Arbetar…"
+              : challenge.imagePath
+                ? "Byt bild"
+                : "Lägg till bild"}
+            <input
+              className="absolute size-px opacity-0"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={disabled}
+              onChange={(event) => {
+                const image = event.target.files?.[0];
+                event.target.value = "";
+                onUploadImage(image);
+              }}
+            />
+          </label>
+          {challenge.imagePath && (
+            <button
+              className={`inline-flex min-h-9 items-center justify-center gap-2 border border-[#bd4b45] bg-white px-3 text-[8px] font-extrabold tracking-[0.07em] text-[#9f302b] uppercase hover:bg-[#fff0ef] disabled:cursor-not-allowed disabled:opacity-45 ${focusRing}`}
+              type="button"
+              disabled={disabled}
+              onClick={onRemoveImage}
+            >
+              <Trash2 size={14} /> Ta bort
+            </button>
+          )}
+        </div>
       ) : (
         <p className="m-0 border-l-[3px] border-[#d70000] bg-[#fff4f3] px-3 py-2 text-[8px] leading-[1.5] font-bold text-[#8f211c]">
           Demoläge: Bildbyte är avstängt i onlineversionen.

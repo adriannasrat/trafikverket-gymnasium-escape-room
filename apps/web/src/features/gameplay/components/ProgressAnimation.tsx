@@ -26,7 +26,10 @@ export function ProgressAnimation({
   useEffect(() => {
     if (!animation) return;
     hasFinishedRef.current = false;
-    const fallback = window.setTimeout(finish, 2_800);
+    const fallback = window.setTimeout(
+      finish,
+      animation.type === "score" ? 1_300 : 2_800,
+    );
     return () => window.clearTimeout(fallback);
   }, [animation, finish]);
 
@@ -39,7 +42,7 @@ export function ProgressAnimation({
   if (animation.type === "life") {
     return (
       <div
-        className="pointer-events-none fixed inset-0 z-[100] grid place-items-center"
+        className="progress-animation-layer pointer-events-none fixed inset-0 z-[100] grid place-items-center"
         aria-live="assertive"
       >
         <div
@@ -67,7 +70,7 @@ export function ProgressAnimation({
 
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-[100] grid place-items-center overflow-hidden"
+      className="progress-animation-layer pointer-events-none fixed inset-0 z-[100] grid place-items-center overflow-hidden"
       aria-live="polite"
     >
       <div

@@ -3,96 +3,98 @@
 @keyframes score-burst {
   0% {
     opacity: 0;
-    transform: translateY(28px) scale(0.72);
+    transform: translate3d(0, 18px, 0) scale(0.9);
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
-  13% {
+  16% {
     opacity: 1;
-    transform: translateY(0) scale(1.07);
+    transform: translate3d(0, 0, 0) scale(1.025);
   }
-  24% {
-    transform: scale(1);
-  }
-  70% {
+  30% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate3d(0, 0, 0) scale(1);
+    animation-timing-function: linear;
   }
-  86% {
-    opacity: 0.72;
-    transform: translateY(-8px) scale(0.99);
+  76% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
   100% {
     opacity: 0;
-    transform: translateY(-28px) scale(0.97);
+    transform: translate3d(0, -14px, 0) scale(0.985);
   }
 }
 
 @keyframes score-ring {
   0% {
-    opacity: 0.8;
-    transform: scale(0.4);
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.55);
+  }
+  14% {
+    opacity: 0.68;
   }
   100% {
     opacity: 0;
-    transform: scale(1.8);
+    transform: translate3d(0, 0, 0) scale(1.65);
   }
 }
 
 @keyframes score-particle {
   0% {
     opacity: 0;
-    transform: translate(0, 0) rotate(0deg) scale(0.4);
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(0.65);
   }
-  25% {
+  18% {
     opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: var(--particle-end) rotate(150deg) scale(1);
+    transform: translate3d(var(--particle-x), var(--particle-y), 0) rotate(75deg) scale(0.95);
   }
 }
 
 @keyframes life-loss {
   0% {
     opacity: 0;
-    transform: scale(0.8);
+    transform: translate3d(0, 16px, 0) scale(0.92);
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
-  13% {
+  18% {
     opacity: 1;
-    transform: scale(1.08) rotate(-2deg);
+    transform: translate3d(0, 0, 0) scale(1.025);
   }
-  20% {
-    transform: translateX(-7px) rotate(-5deg);
-  }
-  27% {
-    transform: translateX(7px) rotate(5deg);
-  }
-  34% {
-    transform: translateX(-4px) rotate(-3deg);
-  }
-  68% {
+  32% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate3d(0, 0, 0) scale(1);
+    animation-timing-function: linear;
   }
-  86% {
-    opacity: 0.68;
-    transform: translateY(8px) scale(0.98);
+  76% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
   100% {
     opacity: 0;
-    transform: translateY(28px) scale(0.94);
+    transform: translate3d(0, 14px, 0) scale(0.98);
   }
 }
 
 @keyframes life-heart {
-  0%,
-  100% {
-    transform: scale(1);
+  0% {
+    opacity: 0.65;
+    transform: translate3d(0, 0, 0) scale(0.82);
   }
   35% {
-    transform: scale(1.22);
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1.08);
   }
-  55% {
-    transform: scale(0.86);
+  62% {
+    transform: translate3d(0, 0, 0) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
   }
 }
 
@@ -107,40 +109,59 @@
 }
 
 .score-burst-animation {
-  animation: score-burst 1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: score-burst 1s linear both;
 }
 .score-ring {
-  animation: score-ring 1.15s ease-out both;
+  animation: score-ring 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .score-ring-delay {
   animation-delay: 0.16s;
 }
 .score-particle {
-  animation: score-particle 1.15s 0.15s ease-out both;
+  animation: score-particle 1.35s 0.12s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .score-particle-0 {
-  --particle-end: translate(-104px, -78px);
+  --particle-x: -104px;
+  --particle-y: -78px;
 }
 .score-particle-1 {
-  --particle-end: translate(95px, -88px);
+  --particle-x: 95px;
+  --particle-y: -88px;
 }
 .score-particle-2 {
-  --particle-end: translate(-124px, 20px);
+  --particle-x: -124px;
+  --particle-y: 20px;
 }
 .score-particle-3 {
-  --particle-end: translate(118px, 28px);
+  --particle-x: 118px;
+  --particle-y: 28px;
 }
 .score-particle-4 {
-  --particle-end: translate(-66px, 100px);
+  --particle-x: -66px;
+  --particle-y: 100px;
 }
 .score-particle-5 {
-  --particle-end: translate(74px, 96px);
+  --particle-x: 74px;
+  --particle-y: 96px;
 }
 .life-loss-animation {
-  animation: life-loss 2.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: life-loss 2.5s linear both;
 }
 .life-loss-heart {
-  animation: life-heart 0.7s ease-in-out both;
+  animation: life-heart 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.progress-animation-layer {
+  contain: layout style paint;
+  isolation: isolate;
+}
+.score-burst-animation,
+.score-ring,
+.score-particle,
+.life-loss-animation,
+.life-loss-heart {
+  backface-visibility: hidden;
+  transform-origin: center;
+  will-change: transform, opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -11,6 +11,7 @@ public static partial class SessionEndpoints
         SubmitMatchesRequest request,
         AppDbContext db,
         TimeProvider timeProvider,
+        SessionProgressService progressService,
         CancellationToken cancellationToken)
     {
         var session = await db.GameSessions
@@ -102,16 +103,17 @@ public static partial class SessionEndpoints
 
         if (expired)
         {
-            session.CurrentChallengeStartedAtUtc = now;
+            var progress = progressService.RegisterTimeout(session, now);
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new
             {
                 correct = false,
                 expired = true,
-                message = "Tiden tog slut. Kopplingarna har återställts – försök igen.",
+                message = "Tiden tog slut. Alla liv är förlorade och uppdraget är avslutat.",
                 incorrectChallengeIds = scenarios.Select(scenario => scenario.Id),
                 challengeStartedAtUtc = now,
-                timeLimitSeconds = timeLimit
+                timeLimitSeconds = timeLimit,
+                progress
             });
         }
 
@@ -121,16 +123,24 @@ public static partial class SessionEndpoints
             .ToList();
         if (incorrectChallengeIds.Count > 0)
         {
+            var progress = progressService.RegisterFailedAttempt(session, now);
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new
             {
                 correct = false,
                 expired = false,
-                message = "Några kopplingar är fel. De gröna är låsta – rätta de röda och försök igen.",
-                incorrectChallengeIds
+                message = progress.GameOver
+                    ? "Det sista livet försvann. Uppdraget är avslutat."
+                    : "Några kopplingar är fel. De gröna är låsta – rätta de röda och försök igen.",
+                incorrectChallengeIds,
+                progress
             });
         }
 
+        var successProgress = progressService.AwardChallengeScore(
+            session,
+            currentChallenge,
+            now);
         session.CurrentChallengeStartedAtUtc = null;
         session.PausedAtUtc = now;
         await db.SaveChangesAsync(cancellationToken);
@@ -140,7 +150,8 @@ public static partial class SessionEndpoints
             completed = false,
             currentChallenge.Game.SuccessMessage,
             incorrectChallengeIds,
-            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
+            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
+            progress = successProgress
         });
     }
 }

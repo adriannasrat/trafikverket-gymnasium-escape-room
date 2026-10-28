@@ -7,13 +7,15 @@ import { barlow, eyebrow, primaryButton, secondaryButton } from "../../../uiStyl
 export function GameCompletion({
   playerName,
   elapsed,
+  score,
 }: {
   playerName?: string;
   elapsed: number;
+  score: number;
 }) {
   return (
     <div className="min-h-screen overflow-hidden bg-white">
-      <BrandHeader playerName={playerName} elapsed={formatElapsed(elapsed)} />
+      <BrandHeader playerName={playerName} elapsed={formatElapsed(elapsed)} score={score} />
       <main className="relative flex min-h-[calc(100vh-72px)] flex-col items-center justify-center px-[30px] py-12 text-center before:absolute before:top-[18%] before:left-[8%] before:size-[150px] before:rotate-8 before:border before:border-[#eee] before:content-[''] after:absolute after:right-[8%] after:bottom-[15%] after:size-[150px] after:-rotate-8 after:border after:border-[#eee] after:content-[''] max-[720px]:min-h-[calc(100vh-66px)] max-[720px]:px-5 max-[720px]:py-10 max-[720px]:before:hidden max-[720px]:after:hidden">
         <span className="mb-[30px] grid size-[76px] place-items-center rounded-full bg-[#23845e] text-white shadow-[0_0_0_12px_rgba(35,132,94,0.1)] [&>svg]:size-[38px]">
           <CheckCircle2 />
@@ -26,6 +28,8 @@ export function GameCompletion({
         <div className="my-[35px] grid">
           <small className="tracking-[0.2em] text-[#777]">SLUTTID</small>
           <strong className={`${barlow} text-[70px] tracking-[0.05em] text-[#d70000]`}>{formatElapsed(elapsed)}</strong>
+          <small className="mt-5 tracking-[0.2em] text-[#777]">SLUTPOÄNG</small>
+          <strong className={`${barlow} mt-1 text-[45px] leading-none text-[#23845e]`}>{score.toLocaleString("sv-SE")}</strong>
         </div>
         <div className="relative z-1 flex gap-3 max-[720px]:w-[min(100%,320px)] max-[720px]:flex-col">
           <Link className={primaryButton} to="/leaderboard">

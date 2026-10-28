@@ -17,6 +17,7 @@ export function PixelHuntGame({
   navigating,
   onClearExternalFeedback,
   onElapsedChange,
+  onProgressChange,
   onChallengeComplete,
   onSessionComplete,
   onRestartChallenge,
@@ -37,6 +38,7 @@ export function PixelHuntGame({
     onClearExternalFeedback();
     try {
       const result = await api.revealPixel(sessionId, data.challenge.id);
+      onProgressChange(result.progress);
       onElapsedChange(result.elapsedMilliseconds);
       setRevealCount(result.pixelRevealCount);
       if (result.expired && result.challengeStartedAtUtc) {
@@ -64,6 +66,7 @@ export function PixelHuntGame({
     onClearExternalFeedback();
     try {
       const result = await api.answer(sessionId, data.challenge.id, selected);
+      onProgressChange(result.progress);
       setFeedback({
         correct: result.correct,
         text: result.successMessage ?? result.message ?? "",

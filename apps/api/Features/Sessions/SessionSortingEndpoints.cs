@@ -11,6 +11,7 @@ public static partial class SessionEndpoints
         SubmitSortingRequest request,
         AppDbContext db,
         TimeProvider timeProvider,
+        SessionProgressService progressService,
         CancellationToken cancellationToken)
     {
         var session = await db.GameSessions
@@ -82,19 +83,20 @@ public static partial class SessionEndpoints
                 IsCorrect = false,
                 WasExpired = true
             });
-            session.CurrentChallengeStartedAtUtc = now;
+            var progress = progressService.RegisterTimeout(session, now);
             session.CurrentChallengePenaltyMilliseconds = 0;
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new
             {
                 correct = false,
                 expired = true,
-                message = "Tiden tog slut. Korten har återställts – försök igen.",
+                message = "Tiden tog slut. Alla liv är förlorade och uppdraget är avslutat.",
                 incorrectOptionIds = challenge.Options.Select(option => option.Id),
                 challengeStartedAtUtc = now,
                 timeLimitSeconds = timeLimit,
                 currentChallengePenaltyMilliseconds = 0,
-                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
+                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
+                progress
             });
         }
 
@@ -120,6 +122,23 @@ public static partial class SessionEndpoints
 
         if (incorrectOptionIds.Count > 0)
         {
+            var progress = progressService.RegisterFailedAttempt(session, now);
+            if (progress.GameOver)
+            {
+                session.CurrentChallengePenaltyMilliseconds = 0;
+                await db.SaveChangesAsync(cancellationToken);
+                return Results.Ok(new
+                {
+                    correct = false,
+                    expired = false,
+                    message = "Det sista livet försvann. Uppdraget är avslutat.",
+                    incorrectOptionIds,
+                    currentChallengePenaltyMilliseconds = 0,
+                    elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
+                    progress
+                });
+            }
+
             const long penaltyMilliseconds = 10_000;
             session.TotalPenaltyMilliseconds += penaltyMilliseconds;
             session.CurrentChallengePenaltyMilliseconds += penaltyMilliseconds;
@@ -129,7 +148,7 @@ public static partial class SessionEndpoints
             var penaltyExpired = secondsRemaining <= 0;
             if (penaltyExpired)
             {
-                session.CurrentChallengeStartedAtUtc = now;
+                progress = progressService.RegisterTimeout(session, now);
                 session.CurrentChallengePenaltyMilliseconds = 0;
             }
 
@@ -139,17 +158,21 @@ public static partial class SessionEndpoints
                 correct = false,
                 expired = penaltyExpired,
                 message = penaltyExpired
-                    ? "Tidsstraffet tog slut på tiden. Korten har återställts – försök igen."
+                    ? "Tiden tog slut. Alla liv är förlorade och uppdraget är avslutat."
                     : "Några kort ligger fel. De gröna är låsta – rätta de röda. 10 sekunder har lagts till på totaltiden.",
                 incorrectOptionIds,
-                challengeStartedAtUtc = session.CurrentChallengeStartedAtUtc.Value,
+                challengeStartedAtUtc = penaltyExpired
+                    ? now
+                    : session.CurrentChallengeStartedAtUtc!.Value,
                 timeLimitSeconds = timeLimit,
                 currentChallengePenaltyMilliseconds = session.CurrentChallengePenaltyMilliseconds,
                 secondsRemaining = penaltyExpired ? timeLimit : Math.Max(0, secondsRemaining),
-                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
+                elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
+                progress
             });
         }
 
+        var successProgress = progressService.AwardChallengeScore(session, challenge, now);
         session.CurrentChallengeStartedAtUtc = null;
         session.CurrentChallengePenaltyMilliseconds = 0;
         session.PausedAtUtc = now;
@@ -161,7 +184,8 @@ public static partial class SessionEndpoints
             challenge.Game.SuccessMessage,
             incorrectOptionIds,
             currentChallengePenaltyMilliseconds = 0,
-            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now)
+            elapsedMilliseconds = SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
+            progress = successProgress
         });
     }
 }

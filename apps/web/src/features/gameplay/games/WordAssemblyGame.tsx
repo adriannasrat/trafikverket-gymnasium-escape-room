@@ -16,6 +16,7 @@ export function WordAssemblyGame({
   navigating,
   onClearExternalFeedback,
   onElapsedChange,
+  onProgressChange,
   onChallengeComplete,
   onReloadChallenge,
   onNextChallenge,
@@ -47,6 +48,7 @@ export function WordAssemblyGame({
     onClearExternalFeedback();
     try {
       const result = await api.submitWordAssembly(sessionId, data.challenge.id, order);
+      onProgressChange(result.progress);
       setFeedback({
         correct: result.correct,
         text: result.successMessage ?? result.message ?? "",

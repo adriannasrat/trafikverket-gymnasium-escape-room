@@ -16,6 +16,7 @@ export function SortingGame({
   navigating,
   onClearExternalFeedback,
   onElapsedChange,
+  onProgressChange,
   onChallengeComplete,
   onRestartChallenge,
   onUpdateProgress,
@@ -55,6 +56,7 @@ export function SortingGame({
     onClearExternalFeedback();
     try {
       const result = await api.submitSorting(sessionId, data.challenge.id, submittedPlacements);
+      onProgressChange(result.progress);
       setFeedback({
         correct: result.correct,
         text: result.successMessage ?? result.message ?? "",

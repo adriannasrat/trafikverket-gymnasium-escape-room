@@ -28,17 +28,22 @@ public static partial class AdminEndpoints
                 session.Id,
                 session.PlayerName,
                 session.ExperienceMode,
+                session.Score,
+                session.LivesRemaining,
                 session.StartedAtUtc,
                 completedAtUtc = session.CompletedAtUtc!.Value,
                 elapsedMilliseconds = CalculateElapsedMilliseconds(session)
             })
-            .OrderBy(result => result.elapsedMilliseconds)
+            .OrderByDescending(result => result.Score)
+            .ThenBy(result => result.elapsedMilliseconds)
             .ThenBy(result => result.completedAtUtc)
             .Select((result, index) => new
             {
                 rank = index + 1,
                 result.Id,
                 result.PlayerName,
+                result.Score,
+                result.LivesRemaining,
                 experienceMode = result.ExperienceMode.ToString(),
                 result.StartedAtUtc,
                 result.completedAtUtc,

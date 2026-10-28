@@ -39,6 +39,8 @@ function baseChallenge<
     playerName: response.playerName,
     startedAtUtc: response.startedAtUtc,
     elapsedMilliseconds: response.elapsedMilliseconds,
+    score: response.score,
+    livesRemaining: response.livesRemaining,
     game: { ...response.game, type },
     challenge,
   };

@@ -94,7 +94,7 @@ export const api = {
       body: JSON.stringify({ playerName }),
     }),
   session: (id: string) => request<Session>(`/api/sessions/${id}`),
-  currentChallenge: async (id: string): Promise<Challenge | { completed: true }> => {
+  currentChallenge: async (id: string): Promise<Challenge | Extract<CurrentChallengeResponse, { completed: true }>> => {
     const response = await request<CurrentChallengeResponse>(
       `/api/sessions/${id}/current-challenge`,
     );

@@ -16,6 +16,7 @@ export function MatchingGame({
   navigating,
   onClearExternalFeedback,
   onElapsedChange,
+  onProgressChange,
   onChallengeComplete,
   onRestartChallenge,
   onNextChallenge,
@@ -84,6 +85,7 @@ export function MatchingGame({
     onClearExternalFeedback();
     try {
       const result = await api.submitMatches(sessionId, data.challenge.id, selections);
+      onProgressChange(result.progress);
       setFeedback({
         correct: result.correct,
         text: result.successMessage ?? result.message ?? "",

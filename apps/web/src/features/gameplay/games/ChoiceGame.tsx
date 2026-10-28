@@ -21,6 +21,7 @@ export function ChoiceGame({
   variant,
   onClearExternalFeedback,
   onElapsedChange,
+  onProgressChange,
   onChallengeComplete,
   onSessionComplete,
   onRestartChallenge,
@@ -39,6 +40,7 @@ export function ChoiceGame({
     onClearExternalFeedback();
     try {
       const result = await api.answer(sessionId, data.challenge.id, selected);
+      onProgressChange(result.progress);
       setFeedback({
         correct: result.correct,
         text: result.successMessage ?? result.message ?? "",

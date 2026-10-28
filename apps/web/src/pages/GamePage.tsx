@@ -1,23 +1,40 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useParams } from "react-router-dom";
 import { BrandHeader } from "../components/BrandHeader";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { MissionRoute } from "../components/MissionRoute";
 import { GameCompletion } from "../features/gameplay/components/GameCompletion";
 import { GameError } from "../features/gameplay/components/GameError";
+import { GameFailure } from "../features/gameplay/components/GameFailure";
 import { GameHeading } from "../features/gameplay/components/GameHeading";
 import { GameRenderer } from "../features/gameplay/games/GameRenderer";
+import { ProgressAnimation } from "../features/gameplay/components/ProgressAnimation";
 import { useChallengeTimeout } from "../features/gameplay/hooks/useChallengeTimeout";
 import { useChallengeTimer } from "../features/gameplay/hooks/useChallengeTimer";
 import { useGameNavigation } from "../features/gameplay/hooks/useGameNavigation";
 import { useGameNotice } from "../features/gameplay/hooks/useGameNotice";
 import { useGameSession } from "../features/gameplay/hooks/useGameSession";
+import { useSessionProgress } from "../features/gameplay/hooks/useSessionProgress";
 import type { ChallengeRestart, GameFeedbackMessage } from "../features/gameplay/types";
 import { formatElapsed } from "../lib/time";
+import type { SessionProgress } from "../types";
 
 export function GamePage() {
   const { sessionId = "" } = useParams();
   const session = useGameSession(sessionId);
+  const markSessionFailed = session.markFailed;
+  const {
+    score,
+    livesRemaining,
+    animation,
+    apply: applyProgress,
+    clearAnimation,
+  } = useSessionProgress(session.data);
+  const [pendingFailure, setPendingFailure] = useState(false);
+  const handleProgressChange = useCallback((update?: SessionProgress) => {
+    applyProgress(update);
+    if (update?.gameOver) setPendingFailure(true);
+  }, [applyProgress]);
   const timer = useChallengeTimer({
     data: session.data,
     completed: session.completed,
@@ -30,6 +47,7 @@ export function GamePage() {
     awaitingNext: timer.awaitingNext,
     remaining: timer.remaining,
     reloadChallenge: session.loadChallenge,
+    onProgressChange: handleProgressChange,
   });
   const notice = useGameNotice();
 
@@ -78,12 +96,29 @@ export function GamePage() {
     if (feedback) notice.showFeedback(feedback);
   }, [notice, session]);
 
+  const finishProgressAnimation = useCallback(() => {
+    clearAnimation();
+    if (pendingFailure) {
+      setPendingFailure(false);
+      markSessionFailed();
+    }
+  }, [clearAnimation, markSessionFailed, pendingFailure]);
+
   if (session.error) return <GameError message={session.error} />;
+  if (session.failed) {
+    return (
+      <GameFailure
+        playerName={session.terminal?.playerName ?? session.data?.playerName}
+        score={session.terminal?.score ?? score}
+      />
+    );
+  }
   if (session.completed) {
     return (
       <GameCompletion
-        playerName={session.data?.playerName}
-        elapsed={timer.elapsed}
+        playerName={session.terminal?.playerName ?? session.data?.playerName}
+        elapsed={session.terminal?.elapsedMilliseconds ?? timer.elapsed}
+        score={session.terminal?.score ?? score}
       />
     );
   }
@@ -98,6 +133,12 @@ export function GamePage() {
       <BrandHeader
         playerName={session.data.playerName}
         elapsed={formatElapsed(timer.elapsed)}
+        score={score}
+        livesRemaining={livesRemaining}
+      />
+      <ProgressAnimation
+        animation={animation}
+        onFinished={finishProgressAnimation}
       />
       <div className="grid min-h-[calc(100vh-72px)] grid-cols-[280px_minmax(0,1fr)] max-[980px]:grid-cols-[230px_minmax(0,1fr)] max-[720px]:block max-[720px]:min-h-[calc(100vh-66px)]">
         <MissionRoute
@@ -118,6 +159,7 @@ export function GamePage() {
             navigating={navigation.navigating}
             onClearExternalFeedback={clearExternalFeedback}
             onElapsedChange={timer.setElapsed}
+            onProgressChange={handleProgressChange}
             onChallengeComplete={timer.completeChallenge}
             onSessionComplete={session.markCompleted}
             onRestartChallenge={restartChallenge}

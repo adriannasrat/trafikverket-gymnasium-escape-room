@@ -2,7 +2,7 @@
 
 A redevelopment of the Gymnasium escape room experience and management platform I designed and implemented during a university collaboration with Trafikverket.
 
-The application is intended for event computers where teams complete configurable infrastructure-themed challenges. The lowest verified completion time wins. Event staff can securely manage game content, complete answers, images, activation and timing without changing source code.
+The application is intended for event computers where players complete configurable infrastructure-themed challenges. Each session has five lives shared by all seven games, and correct answers award more points when they are solved quickly. The highest verified score wins, with the fastest completion time used as the tiebreaker. Event staff can securely manage game content, complete answers, images, activation and timing without changing source code.
 
 ## Current status
 
@@ -15,6 +15,8 @@ In the sorting challenge, cards are dragged or tapped into Trafikverket areas wh
 In the word assembly challenge, players drag or move word parts into the correct order to build Trafikverket related compound words.
 
 All games use server timing and validation. The protected administration supports questions, statements, scenarios, risk zones, image questions, sorting cards and categories, word parts and their correct order, secret Signalordet answers and hints, correct answers and mappings, image uploads, activation, audit history and management of the ranked leaderboard without requiring source code changes.
+
+Each completed challenge awards 100–1,000 points based on the remaining challenge time. Wrong answers consume one shared life, except individual letter guesses in Signalordet. A timeout in any game immediately consumes all remaining lives and ends the session. Completed sessions are ranked by score and then by total time.
 
 ## Technology
 

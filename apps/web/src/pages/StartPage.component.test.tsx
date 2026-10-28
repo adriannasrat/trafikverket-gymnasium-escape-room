@@ -48,6 +48,8 @@ describe("StartPage", () => {
       completedAtUtc: null,
       status: "InProgress",
       elapsedMilliseconds: 0,
+      score: 0,
+      livesRemaining: 5,
     });
     const user = userEvent.setup();
     renderStartPage();

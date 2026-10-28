@@ -9,6 +9,7 @@ public sealed class SessionService(
     AppDbContext db,
     TimeProvider timeProvider,
     CurrentChallengeResponseBuilder challengeResponseBuilder,
+    SessionProgressService progressService,
     IOptions<ExperienceOptions> experienceOptions)
 {
     public async Task<SessionResult<SessionResponse>> StartAsync(
@@ -71,9 +72,16 @@ public sealed class SessionService(
             return SessionResults.NotFound<object>();
         }
 
-        if (session.Status == SessionStatus.Completed || session.CurrentChallengeId is null)
+        if (session.Status != SessionStatus.InProgress || session.CurrentChallengeId is null)
         {
-            return SessionResults.Success<object>(new SessionCompletedResponse(true));
+            var endedAt = session.CompletedAtUtc ?? timeProvider.GetUtcNow();
+            return SessionResults.Success<object>(new SessionCompletedResponse(
+                true,
+                session.Status == SessionStatus.Abandoned,
+                session.PlayerName,
+                SessionTimeCalculator.CalculateElapsedMilliseconds(session, endedAt),
+                session.Score,
+                session.LivesRemaining));
         }
 
         var challenge = await db.Challenges.AsNoTracking()
@@ -142,18 +150,21 @@ public sealed class SessionService(
             IsCorrect = false,
             WasExpired = true
         });
-        session.CurrentChallengeStartedAtUtc = now;
+        var progress = progressService.RegisterTimeout(session, now);
         session.PixelRevealCount = 0;
         session.CurrentChallengePenaltyMilliseconds = 0;
         await db.SaveChangesAsync(cancellationToken);
 
-        return SessionResults.Success<object>(new ChallengeExpiredResponse(
-            true,
-            "Tiden tog slut. Försök igen.",
-            now,
-            limit,
-            0,
-            limit));
+        return SessionResults.Success<object>(new
+        {
+            expired = true,
+            message = "Tiden tog slut. Alla liv är förlorade och uppdraget är avslutat.",
+            challengeStartedAtUtc = now,
+            timeLimitSeconds = limit,
+            currentChallengePenaltyMilliseconds = 0,
+            secondsRemaining = limit,
+            progress
+        });
     }
 
     public async Task<SessionResult<bool>> MoveToNextChallengeAsync(
@@ -225,7 +236,8 @@ public sealed class SessionService(
                 session.ExperienceMode == experienceOptions.Value.Mode &&
                 session.Status == SessionStatus.Completed &&
                 session.CompletedAtUtc != null)
-            .OrderBy(session => session.CompletedAtUtc)
+            .OrderByDescending(session => session.Score)
+            .ThenBy(session => session.CompletedAtUtc)
             .Take(100)
             .ToListAsync(cancellationToken);
 
@@ -237,13 +249,15 @@ public sealed class SessionService(
                     session,
                     session.CompletedAtUtc!.Value)
             })
-            .OrderBy(result => result.ElapsedMilliseconds)
+            .OrderByDescending(result => result.Session.Score)
+            .ThenBy(result => result.ElapsedMilliseconds)
             .ThenBy(result => result.Session.CompletedAtUtc)
             .Take(10)
             .Select((result, index) => new LeaderboardEntryResponse(
                 index + 1,
                 result.Session.Id,
                 result.Session.PlayerName,
+                result.Session.Score,
                 result.ElapsedMilliseconds,
                 result.Session.CompletedAtUtc,
                 result.Session.ExperienceMode.ToString()))
@@ -265,5 +279,7 @@ public sealed class SessionService(
         session.StartedAtUtc,
         session.CompletedAtUtc,
         session.Status.ToString(),
-        SessionTimeCalculator.CalculateElapsedMilliseconds(session, now));
+        SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
+        session.Score,
+        session.LivesRemaining);
 }

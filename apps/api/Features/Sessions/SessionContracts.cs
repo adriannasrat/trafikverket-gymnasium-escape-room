@@ -18,9 +18,24 @@ public sealed record SessionResponse(
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? CompletedAtUtc,
     string Status,
-    long ElapsedMilliseconds);
+    long ElapsedMilliseconds,
+    int Score,
+    int LivesRemaining);
 
-public sealed record SessionCompletedResponse(bool Completed);
+public sealed record SessionCompletedResponse(
+    bool Completed,
+    bool Failed,
+    string PlayerName,
+    long ElapsedMilliseconds,
+    int Score,
+    int LivesRemaining);
+
+public sealed record SessionProgressResponse(
+    int Score,
+    int ScoreAwarded,
+    int LivesRemaining,
+    bool LifeLost,
+    bool GameOver);
 
 public sealed record CurrentChallengeResponse(
     bool Completed,
@@ -28,6 +43,8 @@ public sealed record CurrentChallengeResponse(
     string PlayerName,
     DateTimeOffset StartedAtUtc,
     long ElapsedMilliseconds,
+    int Score,
+    int LivesRemaining,
     SessionGameResponse Game,
     SessionChallengeResponse Challenge,
     MatchingGameResponse? Matching,
@@ -99,6 +116,7 @@ public sealed record LeaderboardEntryResponse(
     int Rank,
     Guid Id,
     string PlayerName,
+    int Score,
     long ElapsedMilliseconds,
     DateTimeOffset? CompletedAtUtc,
     string ExperienceMode);

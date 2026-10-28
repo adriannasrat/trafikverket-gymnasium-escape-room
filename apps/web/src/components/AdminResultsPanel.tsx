@@ -218,16 +218,17 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
           </div>
         ) : (
           <div>
-            <div className="grid grid-cols-[65px_minmax(150px,1fr)_120px_170px_48px] gap-3 border-b border-[#dedede] px-5 py-3 text-[9px] font-extrabold tracking-[0.11em] text-[#777] uppercase max-[820px]:grid-cols-[50px_minmax(120px,1fr)_90px_48px] max-[820px]:[&>span:nth-child(4)]:hidden">
+            <div className="grid grid-cols-[65px_minmax(150px,1fr)_100px_100px_150px_48px] gap-3 border-b border-[#dedede] px-5 py-3 text-[9px] font-extrabold tracking-[0.11em] text-[#777] uppercase max-[980px]:grid-cols-[50px_minmax(120px,1fr)_90px_90px_48px] max-[980px]:[&>span:nth-child(5)]:hidden">
               <span>Plats</span>
               <span>Spelare</span>
+              <span>Poäng</span>
               <span>Sluttid</span>
               <span>Slutförd</span>
               <span className="sr-only">Åtgärd</span>
             </div>
             {results.map((result) => (
               <article
-                className="grid min-h-[68px] grid-cols-[65px_minmax(150px,1fr)_120px_170px_48px] items-center gap-3 border-b border-[#ededed] px-5 py-3 last:border-b-0 max-[820px]:grid-cols-[50px_minmax(120px,1fr)_90px_48px]"
+                className="grid min-h-[68px] grid-cols-[65px_minmax(150px,1fr)_100px_100px_150px_48px] items-center gap-3 border-b border-[#ededed] px-5 py-3 last:border-b-0 max-[980px]:grid-cols-[50px_minmax(120px,1fr)_90px_90px_48px]"
                 key={result.id}
               >
                 <strong className={`${barlow} text-[25px] text-[#d70000]`}>
@@ -236,10 +237,13 @@ export function AdminResultsPanel({ onUnauthorized }: AdminResultsPanelProps) {
                 <span className="min-w-0 overflow-hidden text-[13px] font-bold text-ellipsis whitespace-nowrap text-[#202020]">
                   {result.playerName}
                 </span>
+                <strong className={`${barlow} text-[22px] text-[#23845e]`}>
+                  {result.score.toLocaleString("sv-SE")}
+                </strong>
                 <time className={`${barlow} text-[22px] font-bold text-[#202020]`}>
                   {formatElapsed(result.elapsedMilliseconds)}
                 </time>
-                <time className="text-[10px] leading-[1.4] text-[#777] max-[820px]:hidden">
+                <time className="text-[10px] leading-[1.4] text-[#777] max-[980px]:hidden">
                   {new Intl.DateTimeFormat("sv-SE", {
                     dateStyle: "medium",
                     timeStyle: "short",

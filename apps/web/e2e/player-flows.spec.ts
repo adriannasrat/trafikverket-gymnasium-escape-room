@@ -10,6 +10,8 @@ function challengeResponse(type: GameType): ChallengeResponse {
     playerName: "Ada",
     startedAtUtc: new Date().toISOString(),
     elapsedMilliseconds: 1_000,
+    score: 0,
+    livesRemaining: 5,
     game: {
       id: `game-${type}`,
       slug: type.toLowerCase(),
@@ -81,6 +83,8 @@ test("en besökare kan starta en ny spelomgång", async ({ page }) => {
         completedAtUtc: null,
         status: "InProgress",
         elapsedMilliseconds: 0,
+        score: 0,
+        livesRemaining: 5,
       },
     });
   });

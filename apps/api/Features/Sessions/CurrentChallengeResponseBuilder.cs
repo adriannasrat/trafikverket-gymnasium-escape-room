@@ -48,6 +48,8 @@ public sealed class CurrentChallengeResponseBuilder(AppDbContext db)
             PlayerName: session.PlayerName,
             StartedAtUtc: session.StartedAtUtc,
             ElapsedMilliseconds: SessionTimeCalculator.CalculateElapsedMilliseconds(session, now),
+            Score: session.Score,
+            LivesRemaining: session.LivesRemaining,
             Game: new SessionGameResponse(
                 challenge.Game.Id,
                 challenge.Game.Slug,

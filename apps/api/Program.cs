@@ -28,6 +28,7 @@ builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("database");
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddScoped<SessionService>();
+builder.Services.AddScoped<SessionProgressService>();
 builder.Services.AddScoped<CurrentChallengeResponseBuilder>();
 builder.Services.AddScoped<SessionRetentionService>();
 builder.Services.AddHostedService<SessionRetentionWorker>();

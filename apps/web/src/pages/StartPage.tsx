@@ -199,7 +199,7 @@ export function StartPage() {
             <ol className="m-0 grid list-none grid-cols-3 gap-2 p-0 max-[720px]:grid-cols-1">
               {leaders.map((entry) => (
                 <li
-                  className="grid grid-cols-[25px_1fr] items-center gap-x-2 gap-y-px bg-[#f5f5f5] px-3 py-[10px] text-left"
+                  className="grid grid-cols-[25px_1fr_auto] items-center gap-x-2 gap-y-px bg-[#f5f5f5] px-3 py-[10px] text-left"
                   key={entry.id}
                 >
                   <span
@@ -209,6 +209,9 @@ export function StartPage() {
                   </span>
                   <strong className="overflow-hidden text-[11px] text-ellipsis whitespace-nowrap text-[#303030]">
                     {entry.playerName}
+                  </strong>
+                  <strong className={`${barlow} row-span-2 text-[18px] leading-none text-[#23845e]`}>
+                    {entry.score.toLocaleString("sv-SE")} p
                   </strong>
                   <time
                     className={`${barlow} text-[13px] font-semibold tracking-[.04em] text-[#686868]`}

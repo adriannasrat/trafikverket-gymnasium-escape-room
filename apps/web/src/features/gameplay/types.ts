@@ -3,6 +3,7 @@ import type {
   ChallengeOf,
   ChallengeProgress,
   GameType,
+  SessionProgress,
 } from "../../types";
 
 export type GameFeedbackMessage = {
@@ -27,6 +28,7 @@ type SharedGameRuntimeProps = {
   navigating: boolean;
   onClearExternalFeedback: () => void;
   onElapsedChange: (elapsedMilliseconds: number) => void;
+  onProgressChange: (progress?: SessionProgress) => void;
   onChallengeComplete: () => void;
   onSessionComplete: () => void;
   onRestartChallenge: (restart: ChallengeRestart) => void;

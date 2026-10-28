@@ -19,6 +19,8 @@ const quiz: ChallengeOf<"Quiz"> = {
   playerName: "Ada",
   startedAtUtc: "2026-10-21T10:00:00Z",
   elapsedMilliseconds: 1_000,
+  score: 0,
+  livesRemaining: 5,
   game: {
     id: "game-1",
     slug: "uppdraget",
@@ -59,6 +61,7 @@ function runtimeProps(): GameRuntimeProps<"Quiz"> {
     navigating: false,
     onClearExternalFeedback: vi.fn(),
     onElapsedChange: vi.fn(),
+    onProgressChange: vi.fn(),
     onChallengeComplete: vi.fn(),
     onSessionComplete: vi.fn(),
     onRestartChallenge: vi.fn(),
@@ -76,6 +79,13 @@ describe("QuizGame", () => {
       completed: false,
       successMessage: "Korrekt!",
       elapsedMilliseconds: 1_500,
+      progress: {
+        score: 900,
+        scoreAwarded: 900,
+        livesRemaining: 5,
+        lifeLost: false,
+        gameOver: false,
+      },
     });
   });
 
@@ -98,6 +108,10 @@ describe("QuizGame", () => {
     ));
     expect(await screen.findByRole("status")).toHaveTextContent("Korrekt!");
     expect(props.onElapsedChange).toHaveBeenCalledWith(1_500);
+    expect(props.onProgressChange).toHaveBeenCalledWith(expect.objectContaining({
+      scoreAwarded: 900,
+      livesRemaining: 5,
+    }));
     expect(props.onChallengeComplete).toHaveBeenCalledOnce();
   });
 
@@ -107,6 +121,13 @@ describe("QuizGame", () => {
       message: "Försök igen.",
       challengeStartedAtUtc: "2026-10-21T10:01:00Z",
       timeLimitSeconds: 60,
+      progress: {
+        score: 0,
+        scoreAwarded: 0,
+        livesRemaining: 4,
+        lifeLost: true,
+        gameOver: false,
+      },
     });
     const props = runtimeProps();
     const user = userEvent.setup();
@@ -116,6 +137,10 @@ describe("QuizGame", () => {
     await user.click(screen.getByRole("button", { name: /bekräfta svar/i }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Försök igen.");
+    expect(props.onProgressChange).toHaveBeenCalledWith(expect.objectContaining({
+      lifeLost: true,
+      livesRemaining: 4,
+    }));
     expect(props.onRestartChallenge).toHaveBeenCalledWith(expect.objectContaining({
       challengeStartedAtUtc: "2026-10-21T10:01:00Z",
     }));

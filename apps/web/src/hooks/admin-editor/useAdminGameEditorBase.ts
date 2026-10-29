@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../../lib/api";
 import { getAdminGameCopy } from "../../lib/gameCatalog";
 import type { AdminGame } from "../../types";
@@ -9,6 +9,7 @@ export function useAdminGameEditorBase(onUnauthorized: () => void) {
   const [games, setGames] = useState<AdminGame[] | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [status, setStatus] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [mutating, setMutating] = useState<string | null>(null);
   const [openChallengeIds, setOpenChallengeIds] = useState<Set<string>>(
     () => new Set(),
@@ -25,30 +26,28 @@ export function useAdminGameEditorBase(onUnauthorized: () => void) {
     waitForActiveSave,
   } = useAdminAutosave({ gamesRef, setGames, onUnauthorized });
 
-  useEffect(() => {
-    let cancelled = false;
-    api.adminGames()
-      .then((result) => {
-        if (cancelled) return;
-        gamesRef.current = result;
-        initializeAutosave(result);
-        setGames(result);
-        setSelectedId(result[0]?.id ?? "");
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        if (error instanceof ApiError && error.status === 401) {
-          onUnauthorized();
-          return;
-        }
-        setStatus(error instanceof Error ? error.message : "Spelen kunde inte laddas.");
-        setGames([]);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+  const loadGames = useCallback(async () => {
+    setLoadError("");
+    try {
+      const result = await api.adminGames();
+      gamesRef.current = result;
+      initializeAutosave(result);
+      setGames(result);
+      setSelectedId(result[0]?.id ?? "");
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        onUnauthorized();
+        return;
+      }
+      setLoadError(error instanceof Error ? error.message : "Spelen kunde inte laddas.");
+      setGames([]);
+    }
   }, [initializeAutosave, onUnauthorized]);
+
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- synchronize admin state with persisted games when the editor opens.
+    void loadGames();
+  }, [loadGames]);
 
   function updateGameById(gameId: string, change: Partial<AdminGame>) {
     const currentGame = gamesRef.current?.find((candidate) => candidate.id === gameId);
@@ -168,10 +167,12 @@ export function useAdminGameEditorBase(onUnauthorized: () => void) {
       games,
       game,
       status,
+      loadError,
       autosaveState,
       mutating,
       openChallengeIds,
       selectGame,
+      reloadGames: loadGames,
       toggleChallenge,
       updateGame,
       flushPendingSaves,

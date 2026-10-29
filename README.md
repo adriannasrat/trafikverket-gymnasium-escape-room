@@ -188,7 +188,7 @@ PostgreSQL database, run this from the repository root:
 ```
 
 The full-stack test logs in as an administrator, edits and reloads a question,
-starts a session, completes all seven game types, verifies the registered time
+starts a session, completes all seven game types with keyboard activation, verifies the registered time
 in both the API and public leaderboard, and then restores the question and
 removes the result. It builds a separate temporary Docker Compose project and
 always removes its containers and database when the run ends, including after
@@ -201,6 +201,12 @@ E2E_PORT=18091 ./scripts/test-full-stack-e2e.sh
 ```
 
 The API integration suite runs with `dotnet test EscapeRoom.sln` when .NET 10 is installed, or through the SDK container used by CI. GitHub Actions runs both the frontend browser suite and the API integration suite.
+
+Before an event or public release, complete the
+[manual rehearsal checklist](docs/manual-rehearsal-checklist.md) with a person
+who has not previously seen the project. It covers physical event hardware,
+real mobile devices, keyboard use, zoom, reduced motion and interrupted networks,
+and distinguishes these human checks from the automated browser coverage.
 
 ## Repository structure
 

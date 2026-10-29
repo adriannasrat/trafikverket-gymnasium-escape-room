@@ -1,6 +1,6 @@
 import { CheckCircle2, XCircle } from "lucide-react";
 import type { AnswerOption } from "../types";
-import { barlow, cx, focusRing } from "../uiStyles";
+import { barlow, cx, focusWithinRing } from "../uiStyles";
 
 type AnswerChoiceBoardProps = {
   options: AnswerOption[];
@@ -34,7 +34,7 @@ export function AnswerChoiceBoard({
           return (
             <label
               className={cx(
-                `grid min-h-[148px] cursor-pointer place-items-center gap-2 border bg-white p-5 text-center text-[#202020] ${focusRing}`,
+                `grid min-h-[148px] cursor-pointer place-items-center gap-2 border bg-white p-5 text-center text-[#202020] ${focusWithinRing}`,
                 isSelected && !completed &&
                   "!border-2 !border-[#d70000] !bg-[#fffafa] !p-[19px] shadow-[0_5px_18px_rgba(215,0,0,0.08)]",
                 isSelected && completed &&
@@ -80,7 +80,7 @@ export function AnswerChoiceBoard({
         return (
           <label
             className={cx(
-              "grid min-h-[78px] cursor-pointer grid-cols-[38px_minmax(0,1fr)] items-center gap-[15px] border border-[#cfcfcf] bg-white p-[15px] text-[#202020]",
+              `grid min-h-[78px] cursor-pointer grid-cols-[38px_minmax(0,1fr)] items-center gap-[15px] border border-[#cfcfcf] bg-white p-[15px] text-[#202020] ${focusWithinRing}`,
               isSelected && !completed &&
                 "!border-2 !border-[#d70000] !bg-[#fffafa] !p-[14px] shadow-[0_5px_18px_rgba(215,0,0,0.08)] hover:!border-[#d70000]",
               isSelected && completed &&

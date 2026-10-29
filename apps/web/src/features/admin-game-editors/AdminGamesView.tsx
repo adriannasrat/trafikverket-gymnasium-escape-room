@@ -3,12 +3,31 @@ import { AdminGameList } from "../../components/AdminGameList";
 import { AdminGameSettings } from "../../components/AdminGameSettings";
 import type { AdminGameEditorController } from "../../hooks/useAdminGameEditor";
 import { getAdminGameCopy } from "../../lib/gameCatalog";
-import { barlow, cx, eyebrow } from "../../uiStyles";
+import { barlow, cx, eyebrow, primaryButton } from "../../uiStyles";
 import { AdminGameTypeEditor } from "./AdminGameTypeEditor";
 
 export function AdminGamesView({ controller }: { controller: AdminGameEditorController }) {
-  const { games, game, status, autosaveState } = controller;
+  const { games, game, status, loadError, autosaveState } = controller;
   if (!games) return null;
+
+  if (loadError) {
+    return (
+      <section className="grid min-h-[430px] place-items-center border border-[#dedede] bg-white px-5 text-center">
+        <div className="grid max-w-[470px] justify-items-center gap-4">
+          <AlertTriangle className="text-[#d70000]" size={34} />
+          <h1 className={`${barlow} m-0 text-[38px] text-[#202020] uppercase`}>
+            Uppdragen kunde inte laddas
+          </h1>
+          <p className="m-0 text-[13px] leading-[1.6] text-[#686868]" role="alert">
+            {loadError} Kontrollera anslutningen och försök igen.
+          </p>
+          <button className={primaryButton} type="button" onClick={() => void controller.reloadGames()}>
+            Försök igen
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <>

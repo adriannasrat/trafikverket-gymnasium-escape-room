@@ -1,37 +1,130 @@
-import { ArrowLeft, Medal, Trophy } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { BrandHeader } from '../components/BrandHeader'
-import { LoadingScreen } from '../components/LoadingScreen'
-import { api } from '../lib/api'
-import { formatElapsed } from '../lib/time'
-import type { LeaderboardEntry } from '../types'
-import { backLink, barlow, cx, eventFooter, eyebrow, focusRing } from '../uiStyles'
+import { ArrowLeft, Medal, RefreshCw, Trophy } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { BrandHeader } from "../components/BrandHeader";
+import { LoadingScreen } from "../components/LoadingScreen";
+import { api } from "../lib/api";
+import { formatElapsed } from "../lib/time";
+import type { LeaderboardEntry } from "../types";
+import {
+  backLink,
+  barlow,
+  cx,
+  eventFooter,
+  eyebrow,
+  focusRing,
+  primaryButton,
+} from "../uiStyles";
 
 const podiumStyle = (rank: number) => {
-  if (rank === 1) return 'border-l-[5px] border-l-[#d70000] bg-[#fffafa]'
-  if (rank === 2) return 'border-l-[5px] border-l-[#777]'
-  if (rank === 3) return 'border-l-[5px] border-l-[#b6b6b6]'
-  return ''
-}
+  if (rank === 1) return "border-l-[5px] border-l-[#d70000] bg-[#fffafa]";
+  if (rank === 2) return "border-l-[5px] border-l-[#777]";
+  if (rank === 3) return "border-l-[5px] border-l-[#b6b6b6]";
+  return "";
+};
 
 export function LeaderboardPage() {
-  const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null)
-  useEffect(() => { api.leaderboard().then(setEntries).catch(() => setEntries([])) }, [])
-  if (!entries) return <LoadingScreen label="Hämtar topplistan…" />
+  const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null);
+  const [error, setError] = useState("");
+
+  const loadEntries = useCallback(async () => {
+    setError("");
+    try {
+      setEntries(await api.leaderboard());
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Topplistan kunde inte laddas.");
+      setEntries([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- load persisted leaderboard data when the page opens.
+    void loadEntries();
+  }, [loadEntries]);
+
+  if (!entries) return <LoadingScreen label="Hämtar topplistan…" />;
+
   return (
     <div className="grid min-h-screen grid-rows-[auto_1fr_auto] bg-[#f5f5f5]">
       <BrandHeader />
       <main className="mx-auto w-[min(980px,100%)] px-[35px] py-[55px] max-[720px]:px-[18px] max-[720px]:py-[38px]">
-        <Link className={`${backLink} mb-[38px]`} to="/"><ArrowLeft size={16} /> Nytt uppdrag</Link>
-        <div className="mb-[30px]"><p className={eyebrow}><Trophy size={15} /> EVENTRESULTAT</p><h1 className={`${barlow} mb-2 text-[50px] leading-none text-[#202020] uppercase max-[720px]:text-[41px]`}>Mest poäng genom systemet</h1><p className="text-[#686868]">Högst poäng vinner. Vid lika poäng avgör den snabbaste tiden.</p></div>
-        <section className="border border-[#dedede] bg-white shadow-[0_16px_45px_rgba(30,30,30,0.05)]">
-          {entries.length === 0 ? <div className="px-[30px] py-[70px] text-center text-[#777]"><Medal className="mx-auto text-[#d70000]" size={34} /><h2 className={`${barlow} mt-[15px] mb-[5px] text-[30px] text-[#202020] uppercase`}>Första platsen väntar</h2><p className="text-[13px]">Slutför ett uppdrag för att sätta eventets första tid.</p></div> : (
-            <ol className="m-0 list-none p-0">{entries.map((entry) => <li key={entry.id} className={cx('grid grid-cols-[60px_1fr_130px_110px] items-center gap-3 border-b border-[#e7e7e7] px-[25px] py-5 last:border-b-0 max-[720px]:grid-cols-[45px_1fr_auto] max-[720px]:px-[15px] max-[720px]:py-[17px]', podiumStyle(entry.rank))}><span className={`${barlow} text-[22px] ${entry.rank === 1 ? 'text-[#d70000]' : 'text-[#888]'}`}>{entry.rank.toString().padStart(2, '0')}</span><span className="grid gap-1"><strong className="text-[15px]">{entry.playerName}</strong><small className={`text-[9px] font-bold tracking-[0.1em] uppercase ${entry.status === 'Abandoned' ? 'text-[#a32620]' : 'text-[#23845e]'}`}>{entry.status === 'Abandoned' ? 'Inte slutfört' : 'Slutfört'}</small></span><strong className={`${barlow} text-right text-[26px] leading-none text-[#23845e] max-[720px]:text-[22px]`}>{entry.score.toLocaleString('sv-SE')} p</strong><time className={`${barlow} text-right text-[20px] font-bold tracking-[0.05em] text-[#666] max-[720px]:col-start-2 max-[720px]:text-left max-[720px]:text-[15px]`}>{formatElapsed(entry.elapsedMilliseconds)}</time></li>)}</ol>
-          )}
-        </section>
+        <Link className={`${backLink} mb-[38px]`} to="/">
+          <ArrowLeft size={16} /> Nytt uppdrag
+        </Link>
+        <div className="mb-[30px]">
+          <p className={eyebrow}><Trophy size={15} /> EVENTRESULTAT</p>
+          <h1 className={`${barlow} mb-2 text-[50px] leading-none text-[#202020] uppercase max-[720px]:text-[41px]`}>
+            Mest poäng genom systemet
+          </h1>
+          <p className="text-[#686868]">
+            Högst poäng vinner. Vid lika poäng avgör den snabbaste tiden.
+          </p>
+        </div>
+
+        {error ? (
+          <section className="grid min-h-[330px] place-items-center border border-[#dedede] bg-white px-5 text-center">
+            <div className="grid max-w-[430px] justify-items-center gap-4">
+              <RefreshCw className="text-[#d70000]" size={32} />
+              <h2 className={`${barlow} m-0 text-[30px] text-[#202020] uppercase`}>
+                Topplistan kunde inte laddas
+              </h2>
+              <p className="m-0 text-[13px] leading-[1.6] text-[#686868]" role="alert">
+                {error} Kontrollera anslutningen och försök igen.
+              </p>
+              <button className={primaryButton} type="button" onClick={() => void loadEntries()}>
+                Försök igen
+              </button>
+            </div>
+          </section>
+        ) : (
+          <section className="border border-[#dedede] bg-white shadow-[0_16px_45px_rgba(30,30,30,0.05)]">
+            {entries.length === 0 ? (
+              <div className="px-[30px] py-[70px] text-center text-[#777]">
+                <Medal className="mx-auto text-[#d70000]" size={34} />
+                <h2 className={`${barlow} mt-[15px] mb-[5px] text-[30px] text-[#202020] uppercase`}>
+                  Första platsen väntar
+                </h2>
+                <p className="text-[13px]">Slutför ett uppdrag för att sätta eventets första tid.</p>
+              </div>
+            ) : (
+              <ol className="m-0 list-none p-0">
+                {entries.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className={cx(
+                      "grid grid-cols-[60px_1fr_130px_110px] items-center gap-3 border-b border-[#e7e7e7] px-[25px] py-5 last:border-b-0 max-[720px]:grid-cols-[45px_1fr_auto] max-[720px]:px-[15px] max-[720px]:py-[17px]",
+                      podiumStyle(entry.rank),
+                    )}
+                  >
+                    <span className={`${barlow} text-[22px] ${entry.rank === 1 ? "text-[#d70000]" : "text-[#888]"}`}>
+                      {entry.rank.toString().padStart(2, "0")}
+                    </span>
+                    <span className="grid gap-1">
+                      <strong className="text-[15px]">{entry.playerName}</strong>
+                      <small className={`text-[9px] font-bold tracking-[0.1em] uppercase ${entry.status === "Abandoned" ? "text-[#a32620]" : "text-[#23845e]"}`}>
+                        {entry.status === "Abandoned" ? "Inte slutfört" : "Slutfört"}
+                      </small>
+                    </span>
+                    <strong className={`${barlow} text-right text-[26px] leading-none text-[#23845e] max-[720px]:text-[22px]`}>
+                      {entry.score.toLocaleString("sv-SE")} p
+                    </strong>
+                    <time className={`${barlow} text-right text-[20px] font-bold tracking-[0.05em] text-[#666] max-[720px]:col-start-2 max-[720px]:text-left max-[720px]:text-[15px]`}>
+                      {formatElapsed(entry.elapsedMilliseconds)}
+                    </time>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        )}
       </main>
-      <footer className={eventFooter}><span className="max-[720px]:hidden">TRAFIKVERKET · GYMNASIUM</span><nav className="flex gap-[25px]"><Link className={`flex items-center gap-[5px] text-[#555] ${focusRing}`} to="/">Starta uppdrag</Link><Link className={`flex items-center gap-[5px] text-[#555] ${focusRing}`} to="/admin/login">Admin</Link></nav></footer>
+      <footer className={eventFooter}>
+        <span className="max-[720px]:hidden">TRAFIKVERKET · GYMNASIUM</span>
+        <nav className="flex gap-[25px]">
+          <Link className={`flex items-center gap-[5px] text-[#555] ${focusRing}`} to="/">Starta uppdrag</Link>
+          <Link className={`flex items-center gap-[5px] text-[#555] ${focusRing}`} to="/admin/login">Admin</Link>
+        </nav>
+      </footer>
     </div>
-  )
+  );
 }

@@ -135,7 +135,14 @@ export function GamePage() {
     }
   }, [clearAnimation, markSessionFailed, pendingFailure]);
 
-  if (session.error) return <GameError message={session.error} />;
+  if (session.error) {
+    return (
+      <GameError
+        message={session.error}
+        onRetry={() => window.location.reload()}
+      />
+    );
+  }
   if (session.failed) {
     return (
       <GameFailure

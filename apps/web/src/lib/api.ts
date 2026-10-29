@@ -57,14 +57,22 @@ export function getApiErrorMessage(
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const hasFormData = init?.body instanceof FormData;
-  const response = await fetch(path, {
-    ...init,
-    credentials: "include",
-    headers: {
-      ...(!hasFormData && { "Content-Type": "application/json" }),
-      ...init?.headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      credentials: "include",
+      headers: {
+        ...(!hasFormData && { "Content-Type": "application/json" }),
+        ...init?.headers,
+      },
+    });
+  } catch {
+    throw new ApiError(
+      "Nätverksanslutningen bröts.",
+      0,
+    );
+  }
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as ProblemDetails | null;
     throw new ApiError(

@@ -3,6 +3,7 @@ import {
   test,
   type APIRequestContext,
   type APIResponse,
+  type Locator,
   type Page,
   type Response,
 } from "@playwright/test";
@@ -25,6 +26,27 @@ import {
 
 const adminUsername = process.env.E2E_ADMIN_USERNAME ?? "e2e-admin";
 const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? "";
+
+async function focusWithKeyboard(page: Page, target: Locator) {
+  await expect(target).toBeVisible();
+  await expect(target).toBeEnabled();
+  for (let step = 0; step < 200; step += 1) {
+    if (await target.evaluate((element) => element === document.activeElement)) return;
+    await page.keyboard.press("Tab");
+  }
+  throw new Error(`Could not reach ${await target.getAttribute("aria-label") ?? await target.textContent() ?? "control"} with Tab.`);
+}
+
+async function activateWithKeyboard(page: Page, target: Locator, key = "Enter") {
+  await focusWithKeyboard(page, target);
+  await page.keyboard.press(key);
+}
+
+async function replaceTextWithKeyboard(page: Page, target: Locator, value: string) {
+  await focusWithKeyboard(page, target);
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type(value);
+}
 
 async function readJson<T>(
   response: APIResponse | Response,
@@ -87,7 +109,7 @@ async function submitAndRead<T>(
     return response.request().method() === "POST" &&
       url.pathname === `/api/sessions/${sessionId}/${endpoint}`;
   });
-  await page.getByRole("button", { name: buttonName }).click();
+  await activateWithKeyboard(page, page.getByRole("button", { name: buttonName }));
   const response = await responsePromise;
   return readJson<T>(response, `Submit ${endpoint}`);
 }
@@ -102,7 +124,14 @@ async function solveChoiceGame(
   const correctOption = challenge.options.find((option) => option.isCorrect);
   if (!correctOption) throw new Error(`No correct option for ${game.type}.`);
 
-  await page.getByText(correctOption.text, { exact: true }).click();
+  const radios = page.getByRole("radio");
+  const targetIndex = challenge.options.findIndex((option) => option.id === correctOption.id);
+  await focusWithKeyboard(page, radios.first());
+  for (let index = 0; index < targetIndex; index += 1) {
+    await page.keyboard.press("ArrowDown");
+  }
+  await expect(radios.nth(targetIndex)).toBeFocused();
+  await page.keyboard.press("Space");
   const result = await submitAndRead<AnswerResult>(
     page,
     sessionId,
@@ -130,14 +159,13 @@ async function solveMatchingGame(
       throw new Error(`No correct matching destination for ${scenario.id}.`);
     }
 
-    await page.getByRole("button", {
+    await activateWithKeyboard(page, page.getByRole("button", {
       name: new RegExp(escapeRegExp(scenario.prompt), "i"),
-    }).click();
-    await destinationColumn
+    }));
+    await activateWithKeyboard(page, destinationColumn
       .getByRole("button", {
         name: new RegExp(escapeRegExp(correctOption.text), "i"),
-      })
-      .click();
+      }));
   }
 
   const result = await submitAndRead<MatchingResult>(
@@ -164,13 +192,15 @@ async function solveSortingGame(
     if (!configuredCard) throw new Error(`Missing sorting card ${card.id}.`);
     if (configuredCard.sortingCategory === null) continue;
 
-    await page.getByRole("button", { name: card.text, exact: true }).click();
-    await page
+    await activateWithKeyboard(
+      page,
+      page.getByRole("button", { name: card.text, exact: true }),
+    );
+    await activateWithKeyboard(page, page
       .getByRole("region", {
         name: `Sorteringsområde ${configuredCard.sortingCategory}`,
       })
-      .getByRole("button", { name: /placera här/i })
-      .click();
+      .getByRole("button", { name: /placera här/i }));
   }
 
   const result = await submitAndRead<SortingResult>(
@@ -209,9 +239,10 @@ async function solveWordAssemblyGame(
     if (currentIndex < 0) throw new Error(`Missing word part ${text}.`);
 
     while (currentIndex > targetIndex) {
-      await page
-        .getByRole("button", { name: `Flytta ${text} åt vänster`, exact: true })
-        .click();
+      await activateWithKeyboard(
+        page,
+        page.getByRole("button", { name: `Flytta ${text} åt vänster`, exact: true }),
+      );
       [currentOrder[currentIndex - 1], currentOrder[currentIndex]] =
         [currentOrder[currentIndex], currentOrder[currentIndex - 1]];
       currentIndex -= 1;
@@ -255,7 +286,7 @@ async function solveHangmanGame(
       return response.request().method() === "POST" &&
         url.pathname === `/api/sessions/${sessionId}/hangman-guesses`;
     });
-    await button.click();
+    await activateWithKeyboard(page, button);
     latestResult = await readJson<HangmanResult>(
       await responsePromise,
       `Guess hangman letter ${letter}`,
@@ -330,7 +361,7 @@ async function completeAllGames(
       return response.request().method() === "GET" &&
         url.pathname === `/api/sessions/${sessionId}/current-challenge`;
     });
-    await nextButton.click();
+    await activateWithKeyboard(page, nextButton);
     await responsePromise;
   }
 
@@ -353,9 +384,12 @@ test("hela användarresan fungerar mot en riktig isolerad miljö", async ({
 
   try {
     await page.goto("/admin/login");
-    await page.getByLabel("ANVÄNDARNAMN").fill(adminUsername);
-    await page.getByLabel("LÖSENORD").fill(adminPassword);
-    await page.getByRole("button", { name: /öppna kontrollrummet/i }).click();
+    await replaceTextWithKeyboard(page, page.getByLabel("ANVÄNDARNAMN"), adminUsername);
+    await replaceTextWithKeyboard(page, page.getByLabel("LÖSENORD"), adminPassword);
+    await activateWithKeyboard(
+      page,
+      page.getByRole("button", { name: /öppna kontrollrummet/i }),
+    );
     await expect(page).toHaveURL(/\/admin$/);
     await expect(
       page.getByRole("heading", { name: "Hantera uppdrag" }),
@@ -376,15 +410,22 @@ test("hela användarresan fungerar mot en riktig isolerad miljö", async ({
     const challengeCard = page.locator("article").filter({
       hasText: originalChallenge.prompt,
     }).first();
-    await challengeCard.getByRole("button").first().click();
-    await challengeCard.getByLabel("FRÅGA / INSTRUKTION").fill(updatedPrompt);
+    await activateWithKeyboard(page, challengeCard.getByRole("button").first());
+    await replaceTextWithKeyboard(
+      page,
+      challengeCard.getByLabel("FRÅGA / INSTRUKTION"),
+      updatedPrompt,
+    );
     await expect(
       page.getByText("Alla ändringar är sparade.", { exact: true }),
     ).toBeVisible({ timeout: 15_000 });
 
     await page.reload();
     await expect(page.getByText(updatedPrompt, { exact: true })).toBeVisible();
-    await page.getByText(updatedPrompt, { exact: true }).click();
+    const reloadedChallengeCard = page.locator("article").filter({
+      hasText: updatedPrompt,
+    }).first();
+    await activateWithKeyboard(page, reloadedChallengeCard.getByRole("button").first());
     await expect(page.getByLabel("FRÅGA / INSTRUKTION")).toHaveValue(updatedPrompt);
 
     const gamesForJourney = await readJson<AdminGame[]>(
@@ -397,8 +438,11 @@ test("hela användarresan fungerar mot en riktig isolerad miljö", async ({
     ).toBe(updatedPrompt);
 
     await page.goto("/");
-    await page.getByLabel("DITT SMEKNAMN").fill(playerName);
-    await page.getByRole("button", { name: /starta uppdraget/i }).click();
+    await replaceTextWithKeyboard(page, page.getByLabel("DITT SMEKNAMN"), playerName);
+    await activateWithKeyboard(
+      page,
+      page.getByRole("button", { name: /starta uppdraget/i }),
+    );
     await expect(page).toHaveURL(/\/play\/[0-9a-f-]+$/i);
     sessionId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
     expect(sessionId).not.toBe("");
@@ -442,7 +486,7 @@ test("hela användarresan fungerar mot en riktig isolerad miljö", async ({
       .toBe(completedSession.elapsedMilliseconds);
     expect(leaderboardResult?.score).toBe(completedSession.score);
 
-    await page.getByRole("link", { name: /visa topplistan/i }).click();
+    await activateWithKeyboard(page, page.getByRole("link", { name: /visa topplistan/i }));
     const leaderboardRow = page.locator("ol > li").filter({ hasText: playerName });
     await expect(leaderboardRow).toContainText(playerName);
     await expect(leaderboardRow).toContainText(expectedTime);

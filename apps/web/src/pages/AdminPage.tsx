@@ -11,7 +11,7 @@ import { useAdminGameEditor } from "../hooks/useAdminGameEditor";
 import { api } from "../lib/api";
 import { cx, focusRing } from "../uiStyles";
 
-const sidebarButton = `flex min-h-[45px] w-full cursor-pointer items-center gap-[11px] border-0 bg-transparent px-3 text-left text-[12px] text-[#777] disabled:cursor-not-allowed disabled:opacity-[0.42] [&>svg]:w-[17px] max-[980px]:justify-center max-[980px]:text-[0px] max-[980px]:[&>svg]:w-[19px] max-[720px]:min-h-[42px] max-[720px]:w-auto max-[720px]:justify-start max-[720px]:px-3 max-[720px]:text-[11px] max-[420px]:w-10 max-[420px]:justify-center max-[420px]:!px-0 max-[420px]:text-[0px] ${focusRing}`;
+const sidebarButton = `flex min-h-[45px] w-full cursor-pointer items-center gap-[11px] border-0 bg-transparent px-3 text-left text-[12px] text-[#777] disabled:cursor-not-allowed disabled:opacity-[0.42] [&>svg]:w-[17px] max-[980px]:justify-center max-[980px]:text-[0px] max-[980px]:[&>svg]:w-[19px] max-[720px]:min-h-[42px] max-[720px]:w-auto max-[720px]:justify-start max-[720px]:px-3 max-[720px]:text-[11px] max-[520px]:w-10 max-[520px]:justify-center max-[520px]:!px-0 max-[520px]:text-[0px] ${focusRing}`;
 
 type AdminView = "games" | "results" | "images" | "audit";
 

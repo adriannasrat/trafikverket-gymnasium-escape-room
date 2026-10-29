@@ -3,6 +3,9 @@ export const barlow = "[font-family:'Barlow_Condensed',sans-serif]"
 export const focusRing =
   'focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[rgba(215,0,0,0.25)]'
 
+export const focusWithinRing =
+  'has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[rgba(215,0,0,0.25)]'
+
 export const eyebrow =
   'mb-[13px] flex items-center gap-2 text-[10px] font-extrabold tracking-[0.18em] text-[#d70000]'
 

@@ -19,7 +19,7 @@ export function BrandHeader({ mode = 'player', playerName, elapsed, score, lives
           <i className="my-1 ml-[5px] block h-[7px] w-[35px] rounded-[1px] bg-[#d70000]" />
           <i className="my-1 ml-[10px] block h-[7px] w-[25px] rounded-[1px] bg-[#d70000]" />
         </span>
-        <span className="grid leading-none">
+        <span className="grid leading-none max-[520px]:hidden">
           <strong className={`${barlow} text-[23px] tracking-[0.08em] text-[#202020] max-[720px]:text-[18px]`}>TRAFIKVERKET</strong>
           <small className="mt-[5px] text-[9px] font-bold tracking-[0.26em] text-[#d70000] max-[720px]:text-[7px]">ESCAPE ROOM</small>
         </span>

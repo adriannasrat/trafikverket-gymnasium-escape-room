@@ -1,8 +1,30 @@
 # Trafikverket Gymnasium Escape Room
 
-A redevelopment of the Gymnasium escape room experience and management platform I designed and implemented during a university collaboration with Trafikverket.
+[![CI](https://github.com/adriannasrat/trafikverket-gymnasium-escape-room/actions/workflows/ci.yml/badge.svg)](https://github.com/adriannasrat/trafikverket-gymnasium-escape-room/actions/workflows/ci.yml)
 
-The application is intended for event computers where players complete configurable infrastructure-themed challenges. Each session has five lives shared by all seven games, and correct answers award more points when they are solved quickly. The highest verified score wins, with the fastest completion time used as the tiebreaker. Event staff can securely manage game content, complete answers, images, activation and timing without changing source code.
+A full-stack redevelopment of the Gymnasium escape room experience and
+management platform I designed and implemented during a university collaboration
+with Trafikverket. During that collaboration, my development work focused on the
+Gymnasium games and their administration/backend. This repository continues
+that scope as an independently maintained project.
+
+![The Trafikverket Escape Room landing page](docs/images/landing-page.png)
+
+The application is intended for event computers where players complete
+configurable infrastructure-themed challenges. Each session has five lives
+shared by all seven games, and correct answers award more points when they are
+solved quickly. The highest verified score wins, with the fastest completion
+time used as the tiebreaker. Event staff can securely manage challenge content,
+answers, images, activation and timing without changing source code.
+
+## What I built
+
+- A responsive player journey containing seven distinct game mechanics, shared lives, server-timed scoring, penalties, retry states and a ranked leaderboard.
+- A protected administration interface with autosaving, game and challenge activation, configurable time limits, image management, result cleanup and an audit trail.
+- An ASP.NET Core game engine that owns progression, validates every answer, keeps secret answers out of public responses and records authoritative scores and times.
+- A PostgreSQL persistence layer with automatic retention, separate demo and event results, consistent backups and guarded restore tooling.
+- Reproducible local and public Docker deployments with HTTPS termination, secure cookies, security headers, rate limiting, persistent data-protection keys and health checks.
+- Unit, component, API integration and Playwright coverage, including an isolated journey through administration and all seven games.
 
 ## Current status
 
@@ -18,14 +40,55 @@ All games use server timing and validation. The protected administration support
 
 Each completed challenge awards 100–1,000 points based on the remaining challenge time. Wrong answers consume one shared life, except individual letter guesses in Signalordet, and pause the timer until the player actively starts the next attempt. A timeout in any game immediately consumes all remaining lives and ends the session. Finished sessions, including attempts that ran out of lives, are ranked by score and then by total time; incomplete entries are clearly marked in the leaderboard.
 
+## Screenshots
+
+### Player experience
+
+![A quiz challenge with the seven-stage route, shared score, lives and timer](docs/images/player-experience.png)
+
+### Administration
+
+![The administration interface for configuring games and questions](docs/images/admin-dashboard.png)
+
+## Live demo
+
+A public demo has not been published yet. Its URL will be added here after the
+production deployment and launch checklist have been verified.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Browser["Player or event operator<br/>React + TypeScript"]
+    Caddy["Caddy<br/>HTTPS reverse proxy"]
+    App["ASP.NET Core modular monolith<br/>React assets + API + game engine"]
+    Database[(PostgreSQL)]
+    Uploads[(Uploaded images)]
+    Keys[(Data-protection keys)]
+
+    Browser -->|Public HTTPS| Caddy
+    Caddy -->|Internal HTTP| App
+    Browser -.->|Local event loopback| App
+    App --> Database
+    App --> Uploads
+    App --> Keys
+```
+
+The browser only sends player intent; the API owns timing, validation,
+progression and final results. The local event stack binds the application to
+loopback. In the public stack, Caddy is the only internet-facing service and
+forwards requests to the application over a private Docker network. See the
+[architecture notes](docs/architecture.md) for the design rationale and request
+flow.
+
 ## Technology
 
-- React 19, TypeScript, and Vite 8
+- React 19, TypeScript, Tailwind CSS 4, and Vite 8
 - ASP.NET Core on .NET 10 LTS
 - Entity Framework Core and PostgreSQL
 - Cookie authentication and anti-forgery protection
-- Docker Compose for reproducible event deployment
-- xUnit and Vitest
+- Docker Compose and Caddy for reproducible event and public deployment
+- xUnit, Vitest, React Testing Library, and Playwright
 - GitHub Actions continuous integration
 
 ## Run the event stack
@@ -135,8 +198,8 @@ production environment.
 
 Players are asked to choose a nickname instead of entering their full name. The
 nickname, elapsed time and registered answers are stored to run the game and
-produce its leaderboard. Only the nickname and completion time are shown on the
-public leaderboard.
+produce its leaderboard. The public leaderboard shows the nickname, completion
+status, score and elapsed time.
 
 Sessions and their answers are deleted automatically after 30 days by default,
 including incomplete sessions. Configure the period with `DATA_RETENTION_DAYS`
@@ -188,7 +251,8 @@ PostgreSQL database, run this from the repository root:
 ```
 
 The full-stack test logs in as an administrator, edits and reloads a question,
-starts a session, completes all seven game types with keyboard activation, verifies the registered time
+starts a session, completes all seven game types with keyboard activation,
+verifies the registered time
 in both the API and public leaderboard, and then restores the question and
 removes the result. It builds a separate temporary Docker Compose project and
 always removes its containers and database when the run ends, including after
@@ -207,6 +271,12 @@ Before an event or public release, complete the
 who has not previously seen the project. It covers physical event hardware,
 real mobile devices, keyboard use, zoom, reduced motion and interrupted networks,
 and distinguishes these human checks from the automated browser coverage.
+
+## Release
+
+The draft [v1.0.0 release notes](docs/releases/v1.0.0.md) are ready for review.
+The tag and GitHub release will only be created after the remaining launch checks
+have passed and publication has been explicitly approved.
 
 ## Repository structure
 

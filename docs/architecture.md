@@ -1,6 +1,6 @@
 # Architecture
 
-The application is a modular monolith for a single event computer. It keeps deployment simple while separating player flow, administration, game rules, persistence and infrastructure clearly enough to evolve independently.
+The application is a modular monolith designed primarily for a single event computer, with a separate hardened configuration for a public demo. It keeps deployment simple while separating player flow, administration, game rules, persistence and infrastructure clearly enough to evolve independently.
 
 ## System context
 
@@ -11,13 +11,14 @@ Player / event operator
 React + TypeScript web application
           |
           v
-ASP.NET Core API
+ASP.NET Core application and game engine
           |
-          v
-PostgreSQL + persistent upload storage
+          +-- PostgreSQL
+          +-- persistent upload storage
+          +-- persistent data-protection keys
 ```
 
-Docker Compose runs the web application, API and database as one reproducible event stack. Nginx serves the production frontend and forwards `/api` and uploaded images to the API.
+The runtime image contains both the compiled React application and the ASP.NET Core API. Local Docker Compose exposes that application on a loopback-only port and keeps PostgreSQL internal. The public Compose configuration adds Caddy as the only internet-facing service; it terminates HTTPS and forwards traffic to the application over a private Docker network.
 
 ## Design principles
 
@@ -35,7 +36,13 @@ This prevents a player from changing a browser timer or inspecting a response pa
 
 ### Feature-oriented backend
 
-Endpoints are grouped by feature under `Features/` rather than by technical layer. Session handlers are split by game family, while shared progression and timing helpers remain in the partial `SessionEndpoints` class. Administrative game validation lives separately from HTTP orchestration in `GameConfigurationValidator`.
+Endpoints are grouped by feature under `Features/` rather than by technical
+layer. Thin session HTTP handlers are split by game family into partial endpoint
+modules. Session lifecycle, progression, response shaping and time calculations
+live in `SessionService`, `SessionProgressService`,
+`CurrentChallengeResponseBuilder` and `SessionTimeCalculator`. Administrative
+game validation lives separately from HTTP orchestration in
+`GameConfigurationValidator`.
 
 Domain entities contain persisted state. Infrastructure owns Entity Framework configuration, database initialization and operational integrations. Endpoint code coordinates these pieces but does not define frontend presentation.
 
@@ -43,7 +50,10 @@ Domain entities contain persisted state. Infrastructure owns Entity Framework co
 
 The seven game types form a TypeScript union instead of unrestricted strings. Shared metadata such as route labels and administration terminology is held in one typed game catalog. Adding or renaming a game type therefore produces a compile-time error until its presentation metadata is complete.
 
-Pages coordinate data fetching and state. Reusable components own focused presentation and interaction concerns, including matching, sorting, word assembly, Signalordet, pixel reveal and answer choices.
+Pages coordinate focused feature hooks rather than individual game rules. A
+typed gameplay registry selects an independent component for each game type,
+while the administration uses its own registry for type-specific editors.
+Reusable hooks own session loading, timing, timeout, retry and navigation.
 
 ### Deliberate simplicity
 
@@ -90,8 +100,15 @@ This shared model keeps administration, ordering and progression consistent whil
 - Oxlint checks frontend code quality.
 - Vitest covers isolated frontend rules and shared metadata.
 - xUnit integration tests exercise authentication, administration and full session flows against the API.
+- Playwright covers every player interaction, network recovery, responsive layouts and an isolated full-stack journey.
+- Recovery tooling verifies restored database rows, images and authentication keys in an isolated environment.
 - GitHub Actions runs the same build, lint and test checks for every pushed change.
 
 ## Intentional next steps
 
-The current architecture is suitable for the stated single-computer event deployment. Public deployment now has an explicit backup/restore runbook and file-based Docker secrets. Before using multiple event computers, add centralized observability and move secrets to the deployment provider's managed secret service when one is available.
+The current architecture is suitable for the stated single-computer event
+deployment and a restricted public demo. Before a public launch, complete the
+manual rehearsal and verify the chosen host, domain, HTTPS and recovery process.
+Before using multiple event computers, add centralized observability and move
+secrets to the deployment provider's managed secret service when one is
+available.

@@ -31,6 +31,8 @@ builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<SessionProgressService>();
 builder.Services.AddScoped<CurrentChallengeResponseBuilder>();
 builder.Services.AddScoped<SessionRetentionService>();
+builder.Services.AddSingleton<IChallengeImageStore, ChallengeImageStore>();
+builder.Services.AddScoped<ChallengeImageService>();
 builder.Services.AddHostedService<SessionRetentionWorker>();
 builder.Services.AddOptions<ExperienceOptions>()
     .BindConfiguration("Experience")

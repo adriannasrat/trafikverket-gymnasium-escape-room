@@ -24,6 +24,7 @@ export function MatchingEditor({ controller, game }: AdminGameTypeEditorProps) {
       onAddScenario={() => void controller.addChallenge()}
       onUpdate={controller.updateGame}
       onUploadImage={(challengeId, image) => void controller.uploadImage(challengeId, image)}
+      onRemoveImage={(challengeId) => void controller.removeImage(challengeId)}
       onDeleteScenario={(challengeId) => void controller.deleteChallenge(challengeId)}
       onDeleteDestination={(sortOrder) => void controller.deleteMatchingDestination(sortOrder)}
     />

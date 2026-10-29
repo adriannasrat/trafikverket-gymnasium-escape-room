@@ -152,6 +152,7 @@ public static partial class AdminEndpoints
         Guid challengeId,
         ClaimsPrincipal principal,
         AppDbContext db,
+        ChallengeImageService imageService,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -193,6 +194,8 @@ public static partial class AdminEndpoints
             .Select(candidate => (Guid?)candidate.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
+        var detachedImagePath = challenge.ImagePath;
+        challenge.ImagePath = null;
         challenge.IsActive = false;
         for (var index = 0; index < remainingChallenges.Count; index++)
         {
@@ -232,6 +235,7 @@ public static partial class AdminEndpoints
             Summary = $"Removed challenge '{challenge.Prompt}' from game '{challenge.Game.Title}'."
         });
         await db.SaveChangesAsync(cancellationToken);
+        await imageService.DeleteIfUnreferencedAsync(detachedImagePath, CancellationToken.None);
 
         return Results.NoContent();
     }

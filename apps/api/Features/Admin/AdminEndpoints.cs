@@ -40,6 +40,11 @@ public static partial class AdminEndpoints
             .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapPost("/challenges/{challengeId:guid}/image", UploadChallengeImageAsync)
             .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
+        group.MapDelete("/challenges/{challengeId:guid}/image", RemoveChallengeImageAsync)
+            .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
+        group.MapGet("/images/unused", PreviewUnusedImagesAsync);
+        group.MapPost("/images/cleanup", CleanupUnusedImagesAsync)
+            .WithMetadata(new RequireAntiforgeryTokenAttribute(true));
         group.MapGet("/audit", GetAuditAsync);
         return endpoints;
     }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AddedMatchingOption, AdminChallenge, AdminGame, AdminOption, GameType } from "../../types";
-import { replaceChallengeImage } from "./imageCommands";
+import { removeChallengeImage, replaceChallengeImage } from "./imageCommands";
 import {
   appendMatchingDestination,
   createMatchingCommands,
@@ -107,6 +107,19 @@ describe("admin editor command transformations", () => {
     const result = replaceChallengeImage(current, "two", "/uploads/new.webp");
 
     expect(result.map((item) => item.imagePath)).toEqual([null, "/uploads/new.webp"]);
+  });
+
+  it("removes only the selected image and applies the persisted activation state", () => {
+    const one = { ...challenge("one", []), imagePath: "/uploads/one.webp" };
+    const two = { ...challenge("two", []), imagePath: "/uploads/two.webp" };
+    const current = game("PixelHunt", [one, two]);
+
+    const result = removeChallengeImage(current, "one", false);
+
+    expect(result).toEqual([
+      { ...one, imagePath: null, isEnabled: false },
+      two,
+    ]);
   });
 
   it("runs matching commands through the injected mutation and API boundaries", async () => {

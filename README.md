@@ -52,8 +52,12 @@ Each completed challenge awards 100–1,000 points based on the remaining challe
 
 ## Live demo
 
-A public demo has not been published yet. Its URL will be added here after the
-production deployment and launch checklist have been verified.
+[Open the live Trafikverket Gymnasium Escape Room demo](https://trafikverket-gymnasium-escape-room.onrender.com/).
+
+The portfolio demo runs on Render Free with Neon PostgreSQL. The first request
+after a period of inactivity can take a little longer while the service wakes
+up. Use a nickname rather than a full name; demo results are removed
+automatically after 30 days and can also be cleared by an administrator.
 
 ## Architecture
 

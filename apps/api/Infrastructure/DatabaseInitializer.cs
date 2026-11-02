@@ -23,7 +23,7 @@ public sealed class DatabaseInitializer(
 
     public async Task InitialiseAsync(CancellationToken cancellationToken = default)
     {
-        await db.Database.MigrateAsync(cancellationToken);
+        await MigrateDatabaseAsync(cancellationToken);
         await SeedGameAsync(cancellationToken);
         await SeedAdminAsync(cancellationToken);
     }
@@ -33,6 +33,28 @@ public sealed class DatabaseInitializer(
         await db.Database.EnsureCreatedAsync(cancellationToken);
         await SeedGameAsync(cancellationToken);
         await SeedAdminAsync(cancellationToken);
+    }
+
+    private async Task MigrateDatabaseAsync(CancellationToken cancellationToken)
+    {
+        var applicationConnectionString =
+            DeploymentSecurity.ResolveDatabaseConnectionString(configuration);
+        var migrationConnectionString =
+            DeploymentSecurity.ResolveMigrationDatabaseConnectionString(configuration);
+
+        if (applicationConnectionString == migrationConnectionString)
+        {
+            await db.Database.MigrateAsync(cancellationToken);
+            return;
+        }
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(
+                migrationConnectionString,
+                npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 5))
+            .Options;
+        await using var migrationDb = new AppDbContext(options);
+        await migrationDb.Database.MigrateAsync(cancellationToken);
     }
 
     private async Task SeedGameAsync(CancellationToken cancellationToken)

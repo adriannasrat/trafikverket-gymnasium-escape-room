@@ -29,7 +29,9 @@ services:
           name: trafikverket-gymnasium-escape-room
           type: web
           envVarKey: RENDER_EXTERNAL_HOSTNAME
-      - key: ConnectionStrings__Database
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_UNPOOLED
         sync: false
       - key: Admin__Username
         sync: false

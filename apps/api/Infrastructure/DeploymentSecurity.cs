@@ -21,7 +21,8 @@ public static class DeploymentSecurity
 
     public static string ResolveDatabaseConnectionString(IConfiguration configuration)
     {
-        var configuredConnectionString = configuration.GetConnectionString("Database");
+        var configuredConnectionString = configuration.GetConnectionString("Database")
+            ?? configuration["DATABASE_URL"];
         if (!string.IsNullOrWhiteSpace(configuredConnectionString))
         {
             return NormalizeDatabaseConnectionString(configuredConnectionString);
@@ -42,6 +43,14 @@ public static class DeploymentSecurity
             Username = configuration["Database:Username"] ?? "escape_room",
             Password = password
         }.ConnectionString;
+    }
+
+    public static string ResolveMigrationDatabaseConnectionString(IConfiguration configuration)
+    {
+        var directConnectionString = configuration["DATABASE_URL_UNPOOLED"];
+        return string.IsNullOrWhiteSpace(directConnectionString)
+            ? ResolveDatabaseConnectionString(configuration)
+            : NormalizeDatabaseConnectionString(directConnectionString);
     }
 
     public static DeploymentSecuritySettings ReadAndValidate(
@@ -218,7 +227,8 @@ public static class DeploymentSecurity
             return configuration["Database:Password"];
         }
 
-        var connectionString = configuration.GetConnectionString("Database");
+        var connectionString = configuration.GetConnectionString("Database")
+            ?? configuration["DATABASE_URL"];
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             return null;

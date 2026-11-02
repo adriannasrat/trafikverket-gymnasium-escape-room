@@ -8,6 +8,7 @@ using EscapeRoom.Api.Features.Sessions;
 using EscapeRoom.Api.Infrastructure;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -23,7 +24,9 @@ var cookieSecurePolicy = deploymentSecurity.SecureCookies
 
 var connectionString = DeploymentSecurity.ResolveDatabaseConnectionString(builder.Configuration);
 
-builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(
+    connectionString,
+    npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 5)));
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("database");
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<DatabaseInitializer>();
@@ -54,7 +57,11 @@ var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
 var dataProtection = builder.Services
     .AddDataProtection()
     .SetApplicationName("TrafikverketEscapeRoom");
-if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+if (deploymentSecurity.PersistDataProtectionKeysToDatabase)
+{
+    dataProtection.PersistKeysToDbContext<AppDbContext>();
+}
+else if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
 {
     Directory.CreateDirectory(dataProtectionKeysPath);
     dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
@@ -158,6 +165,15 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.ForwardedHeaders =
         ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     options.ForwardLimit = 1;
+
+    if (deploymentSecurity.TrustPlatformProxyHeaders)
+    {
+        // Render is the only network path to the container and replaces the
+        // forwarding headers at its managed TLS/load-balancer boundary.
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+        return;
+    }
 
     if (deploymentSecurity.KnownProxies.Length == 0)
     {

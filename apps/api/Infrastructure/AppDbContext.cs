@@ -1,9 +1,12 @@
 using EscapeRoom.Api.Domain;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace EscapeRoom.Api.Infrastructure;
 
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options) :
+    DbContext(options),
+    IDataProtectionKeyContext
 {
     public DbSet<Game> Games => Set<Game>();
     public DbSet<Challenge> Challenges => Set<Challenge>();
@@ -12,6 +15,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ChallengeAttempt> ChallengeAttempts => Set<ChallengeAttempt>();
     public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

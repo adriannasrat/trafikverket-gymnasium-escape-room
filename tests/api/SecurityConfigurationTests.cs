@@ -34,6 +34,28 @@ public sealed class SecurityConfigurationTests(ApiFactory factory) : IClassFixtu
     }
 
     [Fact]
+    public void NeonEnvironmentUsesPooledTrafficAndDirectMigrations()
+    {
+        var configuration = new ConfigurationManager
+        {
+            ["DATABASE_URL"] =
+                "postgresql://demo:a-long-demo-password@ep-demo-pooler.neon.tech/neondb?sslmode=require",
+            ["DATABASE_URL_UNPOOLED"] =
+                "postgresql://demo:a-long-demo-password@ep-demo.neon.tech/neondb?sslmode=require"
+        };
+
+        var applicationConnection = new NpgsqlConnectionStringBuilder(
+            DeploymentSecurity.ResolveDatabaseConnectionString(configuration));
+        var migrationConnection = new NpgsqlConnectionStringBuilder(
+            DeploymentSecurity.ResolveMigrationDatabaseConnectionString(configuration));
+
+        Assert.Equal("ep-demo-pooler.neon.tech", applicationConnection.Host);
+        Assert.Equal("ep-demo.neon.tech", migrationConnection.Host);
+        Assert.Equal(SslMode.Require, applicationConnection.SslMode);
+        Assert.Equal(SslMode.Require, migrationConnection.SslMode);
+    }
+
+    [Fact]
     public void DatabaseDataProtectionKeysSurviveServiceProviderRestart()
     {
         var databaseRoot = new InMemoryDatabaseRoot();

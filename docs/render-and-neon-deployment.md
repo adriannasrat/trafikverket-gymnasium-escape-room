@@ -27,7 +27,9 @@ screenshots, issues, chat messages, or GitHub Actions logs.
 2. Choose **New > Blueprint** and select this repository.
 3. Use `render.yaml` from the repository root and deploy the `main` branch.
 4. When Render prompts for secret environment variables, enter:
-   - `ConnectionStrings__Database`: the pooled Neon connection URL,
+   - `DATABASE_URL`: the pooled Neon connection URL,
+   - `DATABASE_URL_UNPOOLED`: the direct Neon connection URL used for schema
+     migrations,
    - `Admin__Username`: a private administrator username,
    - `Admin__Password`: a unique password containing at least 16 characters.
 5. Review the Blueprint and create the free web service.
@@ -43,6 +45,7 @@ The Blueprint configures:
 - secure authentication and antiforgery cookies,
 - HSTS and the application's security headers,
 - database-backed data-protection keys,
+- pooled application traffic and a direct migration connection,
 - demo-only results and 30-day automatic retention,
 - disabled image uploads on ephemeral storage,
 - `/health/ready` as the deployment health check,

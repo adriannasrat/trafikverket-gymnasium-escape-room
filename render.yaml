@@ -1,0 +1,59 @@
+services:
+  - type: web
+    name: trafikverket-gymnasium-escape-room
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    dockerContext: .
+    dockerfilePath: ./apps/api/Dockerfile
+    healthCheckPath: /health/ready
+    autoDeployTrigger: checksPass
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://0.0.0.0:10000
+      - key: PORT
+        value: 10000
+      - key: Deployment__Public
+        value: "true"
+      - key: Deployment__PublicDomain
+        fromService:
+          name: trafikverket-gymnasium-escape-room
+          type: web
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
+      - key: AllowedHosts
+        fromService:
+          name: trafikverket-gymnasium-escape-room
+          type: web
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
+      - key: ConnectionStrings__Database
+        sync: false
+      - key: Admin__Username
+        sync: false
+      - key: Admin__Password
+        sync: false
+      - key: Features__ChallengeImageUploads
+        value: "false"
+      - key: Experience__Mode
+        value: Demo
+      - key: DataRetention__RetentionDays
+        value: "30"
+      - key: DataRetention__CleanupIntervalHours
+        value: "6"
+      - key: Security__SecureCookies
+        value: "true"
+      - key: Security__RequireHttps
+        value: "true"
+      - key: Security__HstsMaxAgeDays
+        value: "30"
+      - key: DataProtection__PersistKeysToDatabase
+        value: "true"
+      - key: ReverseProxy__Mode
+        value: Render
+      - key: RateLimiting__SessionStartPermitLimit
+        value: "5"
+      - key: RateLimiting__SessionStartWindowSeconds
+        value: "60"

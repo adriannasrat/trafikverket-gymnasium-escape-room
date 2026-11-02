@@ -60,14 +60,14 @@ production deployment and launch checklist have been verified.
 ```mermaid
 flowchart LR
     Browser["Player or event operator<br/>React + TypeScript"]
-    Caddy["Caddy<br/>HTTPS reverse proxy"]
+    Edge["HTTPS edge<br/>Render or Caddy"]
     App["ASP.NET Core modular monolith<br/>React assets + API + game engine"]
-    Database[(PostgreSQL)]
-    Uploads[(Uploaded images)]
-    Keys[(Data-protection keys)]
+    Database[("PostgreSQL<br/>Neon or Docker volume")]
+    Uploads[("Images<br/>bundled assets or volume")]
+    Keys[("Data-protection keys<br/>database or volume")]
 
-    Browser -->|Public HTTPS| Caddy
-    Caddy -->|Internal HTTP| App
+    Browser -->|Public HTTPS| Edge
+    Edge -->|Internal HTTP| App
     Browser -.->|Local event loopback| App
     App --> Database
     App --> Uploads
@@ -123,6 +123,23 @@ Stop the stack without deleting event data:
 ```sh
 docker compose down
 ```
+
+## Free public portfolio demo
+
+The recommended free demo architecture uses one Render web service and a Neon
+PostgreSQL database. Render builds the existing Dockerfile, terminates HTTPS and
+serves both the React application and API from one origin. Neon persists game
+data and the data-protection keys required by authentication cookies. The
+repository's [`render.yaml`](render.yaml) keeps the non-secret deployment
+configuration reviewable, while Render prompts for the database URL and
+administrator credentials without committing them.
+
+Image uploads are disabled in this hosted demo because Render Free does not
+provide durable local file storage. Bundled game images remain available. The
+local event stack continues to support image uploads and volume backups.
+
+Follow the [Render and Neon deployment runbook](docs/render-and-neon-deployment.md)
+for account setup, secret configuration and the required live verification.
 
 ## Public deployment on a VPS
 

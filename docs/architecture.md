@@ -14,11 +14,11 @@ React + TypeScript web application
 ASP.NET Core application and game engine
           |
           +-- PostgreSQL
-          +-- persistent upload storage
-          +-- persistent data-protection keys
+          +-- bundled or persistent image storage
+          +-- database or file-based data-protection keys
 ```
 
-The runtime image contains both the compiled React application and the ASP.NET Core API. Local Docker Compose exposes that application on a loopback-only port and keeps PostgreSQL internal. The public Compose configuration adds Caddy as the only internet-facing service; it terminates HTTPS and forwards traffic to the application over a private Docker network.
+The runtime image contains both the compiled React application and the ASP.NET Core API. Local Docker Compose exposes that application on a loopback-only port and keeps PostgreSQL internal. The public VPS configuration adds Caddy as the only internet-facing service; it terminates HTTPS and forwards traffic to the application over a private Docker network. The free portfolio configuration instead uses Render's managed HTTPS edge, a Render Docker service and Neon PostgreSQL. In that configuration, data-protection keys are kept in PostgreSQL because Render Free has no persistent local file system.
 
 ## Design principles
 
@@ -63,7 +63,8 @@ The deployment target does not justify microservices, a message bus or separate 
 
 - The player experience runs without authentication in kiosk mode.
 - The administration area uses secure cookie authentication, login throttling and anti-forgery protection.
-- Data-protection keys, PostgreSQL data and uploaded images use persistent Docker volumes.
+- Local/VPS data-protection keys, PostgreSQL data and uploaded images use persistent Docker volumes.
+- The free demo persists application data and data-protection keys in Neon and disables new uploads on Render's ephemeral file system.
 - Games and their content can be edited without rebuilding the application.
 - Uploaded images are type- and size-validated before storage.
 - Challenges are soft-deleted so historical attempts remain valid.
@@ -107,8 +108,8 @@ This shared model keeps administration, ordering and progression consistent whil
 ## Intentional next steps
 
 The current architecture is suitable for the stated single-computer event
-deployment and a restricted public demo. Before a public launch, complete the
-manual rehearsal and verify the chosen host, domain, HTTPS and recovery process.
+deployment and a restricted public demo. Before a public launch, verify the
+chosen host, domain, HTTPS and recovery process.
 Before using multiple event computers, add centralized observability and move
 secrets to the deployment provider's managed secret service when one is
 available.

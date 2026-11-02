@@ -29,6 +29,7 @@ services:
       Security__SecureCookies: "false"
       RateLimiting__LoginPermitLimit: "1000"
       RateLimiting__SessionStartPermitLimit: "1000"
+      DataProtection__PersistKeysToDatabase: "true"
       DataProtection__KeysPath: /app/data-protection-keys
     depends_on:
       db:

@@ -17,7 +17,7 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -151,12 +151,12 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
                     b.Property<Guid?>("SelectedOptionId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset>("SubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("SubmittedValue")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
-
-                    b.Property<DateTimeOffset>("SubmittedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("WasExpired")
                         .HasColumnType("boolean");
@@ -263,28 +263,28 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
                     b.Property<Guid?>("CurrentChallengeId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("ExperienceMode")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("LivesRemaining")
-                        .HasColumnType("integer");
-
                     b.Property<long>("CurrentChallengePenaltyMilliseconds")
                         .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset?>("CurrentChallengeStartedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("PlayerName")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
+                    b.Property<int>("ExperienceMode")
+                        .HasColumnType("integer");
 
-                    b.Property<int>("PixelRevealCount")
+                    b.Property<int>("LivesRemaining")
                         .HasColumnType("integer");
 
                     b.Property<DateTimeOffset?>("PausedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PixelRevealCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlayerName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
 
                     b.Property<int>("Score")
                         .HasColumnType("integer");
@@ -308,6 +308,25 @@ namespace EscapeRoom.Api.Infrastructure.Migrations
                     b.HasIndex("ExperienceMode", "Status", "CompletedAtUtc");
 
                     b.ToTable("GameSessions");
+                });
+
+            modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FriendlyName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Xml")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DataProtectionKeys");
                 });
 
             modelBuilder.Entity("EscapeRoom.Api.Domain.Challenge", b =>

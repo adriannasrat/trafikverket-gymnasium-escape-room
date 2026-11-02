@@ -7,6 +7,8 @@ public sealed record DeploymentSecuritySettings(
     bool IsPublic,
     bool RequireHttps,
     bool SecureCookies,
+    bool PersistDataProtectionKeysToDatabase,
+    bool TrustPlatformProxyHeaders,
     string[] KnownProxies);
 
 public static class DeploymentSecurity
@@ -22,7 +24,7 @@ public static class DeploymentSecurity
         var configuredConnectionString = configuration.GetConnectionString("Database");
         if (!string.IsNullOrWhiteSpace(configuredConnectionString))
         {
-            return configuredConnectionString;
+            return NormalizeDatabaseConnectionString(configuredConnectionString);
         }
 
         var password = configuration["Database:Password"];
@@ -50,9 +52,23 @@ public static class DeploymentSecurity
         var secureCookies = configuration.GetValue<bool?>("Security:SecureCookies")
             ?? (!environment.IsDevelopment() && !environment.IsEnvironment("Testing"));
         var requireHttps = configuration.GetValue("Security:RequireHttps", isPublic);
+        var persistDataProtectionKeysToDatabase = configuration.GetValue(
+            "DataProtection:PersistKeysToDatabase",
+            false);
+        var proxyMode = configuration["ReverseProxy:Mode"] ?? "KnownProxies";
+        var trustPlatformProxyHeaders = proxyMode.Equals(
+            "Render",
+            StringComparison.OrdinalIgnoreCase);
         var knownProxies = configuration
             .GetSection("ReverseProxy:KnownProxies")
             .Get<string[]>() ?? [];
+
+        if (!proxyMode.Equals("KnownProxies", StringComparison.OrdinalIgnoreCase) &&
+            !trustPlatformProxyHeaders)
+        {
+            throw new InvalidOperationException(
+                "ReverseProxy:Mode must be KnownProxies or Render.");
+        }
 
         foreach (var proxy in knownProxies)
         {
@@ -70,6 +86,8 @@ public static class DeploymentSecurity
                 environment,
                 secureCookies,
                 requireHttps,
+                persistDataProtectionKeysToDatabase,
+                trustPlatformProxyHeaders,
                 knownProxies);
         }
 
@@ -77,6 +95,8 @@ public static class DeploymentSecurity
             isPublic,
             requireHttps,
             secureCookies,
+            persistDataProtectionKeysToDatabase,
+            trustPlatformProxyHeaders,
             knownProxies);
     }
 
@@ -110,6 +130,8 @@ public static class DeploymentSecurity
         IHostEnvironment environment,
         bool secureCookies,
         bool requireHttps,
+        bool persistDataProtectionKeysToDatabase,
+        bool trustPlatformProxyHeaders,
         string[] knownProxies)
     {
         var errors = new List<string>();
@@ -152,14 +174,16 @@ public static class DeploymentSecurity
             errors.Add("AllowedHosts must include Deployment:PublicDomain");
         }
 
-        if (knownProxies.Length == 0)
+        if (!trustPlatformProxyHeaders && knownProxies.Length == 0)
         {
             errors.Add("at least one trusted ReverseProxy:KnownProxies address is required");
         }
 
-        if (string.IsNullOrWhiteSpace(configuration["DataProtection:KeysPath"]))
+        if (!persistDataProtectionKeysToDatabase &&
+            string.IsNullOrWhiteSpace(configuration["DataProtection:KeysPath"]))
         {
-            errors.Add("DataProtection:KeysPath must use persistent storage");
+            errors.Add(
+                "data-protection keys must use persistent database or file-system storage");
         }
 
         if (string.IsNullOrWhiteSpace(configuration["Admin:Username"]))
@@ -202,11 +226,40 @@ public static class DeploymentSecurity
 
         try
         {
-            return new NpgsqlConnectionStringBuilder(connectionString).Password;
+            return new NpgsqlConnectionStringBuilder(
+                NormalizeDatabaseConnectionString(connectionString)).Password;
         }
-        catch (ArgumentException)
+        catch (Exception exception) when (
+            exception is ArgumentException or FormatException or UriFormatException)
         {
             return null;
         }
+    }
+
+    private static string NormalizeDatabaseConnectionString(string connectionString)
+    {
+        if (!connectionString.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) &&
+            !connectionString.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+        {
+            return connectionString;
+        }
+
+        var uri = new Uri(connectionString, UriKind.Absolute);
+        var userInfo = uri.UserInfo.Split(':', 2);
+        if (userInfo.Length != 2 || string.IsNullOrWhiteSpace(uri.AbsolutePath.Trim('/')))
+        {
+            throw new FormatException("The PostgreSQL URL is missing credentials or a database name.");
+        }
+
+        return new NpgsqlConnectionStringBuilder
+        {
+            Host = uri.Host,
+            Port = uri.IsDefaultPort ? 5432 : uri.Port,
+            Database = Uri.UnescapeDataString(uri.AbsolutePath.Trim('/')),
+            Username = Uri.UnescapeDataString(userInfo[0]),
+            Password = Uri.UnescapeDataString(userInfo[1]),
+            SslMode = SslMode.Require,
+            MaxPoolSize = 10
+        }.ConnectionString;
     }
 }

@@ -1,12 +1,57 @@
 using System.Net;
 using System.Net.Http.Json;
+using EscapeRoom.Api.Infrastructure;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace EscapeRoom.Api.Tests;
 
 public sealed class SecurityConfigurationTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
+    [Fact]
+    public void NeonPostgresUrlIsConvertedToSecureNpgsqlConnectionString()
+    {
+        var configuration = new ConfigurationManager();
+        configuration["ConnectionStrings:Database"] =
+            "postgresql://demo_user:a%2Flong-demo-password@ep-demo-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require";
+
+        var connectionString = DeploymentSecurity.ResolveDatabaseConnectionString(configuration);
+        var parsed = new NpgsqlConnectionStringBuilder(connectionString);
+
+        Assert.Equal("ep-demo-pooler.eu-central-1.aws.neon.tech", parsed.Host);
+        Assert.Equal("demo_user", parsed.Username);
+        Assert.Equal("a/long-demo-password", parsed.Password);
+        Assert.Equal("neondb", parsed.Database);
+        Assert.Equal(SslMode.Require, parsed.SslMode);
+        Assert.Equal(10, parsed.MaxPoolSize);
+    }
+
+    [Fact]
+    public void DatabaseDataProtectionKeysSurviveServiceProviderRestart()
+    {
+        var databaseRoot = new InMemoryDatabaseRoot();
+        using var firstProvider = CreateDataProtectionServiceProvider(databaseRoot);
+        var protectedValue = firstProvider
+            .GetRequiredService<IDataProtectionProvider>()
+            .CreateProtector("restart-test")
+            .Protect("admin-session");
+
+        using var restartedProvider = CreateDataProtectionServiceProvider(databaseRoot);
+        var unprotectedValue = restartedProvider
+            .GetRequiredService<IDataProtectionProvider>()
+            .CreateProtector("restart-test")
+            .Unprotect(protectedValue);
+
+        Assert.Equal("admin-session", unprotectedValue);
+    }
+
     [Fact]
     public async Task ResponsesIncludeSecurityHeadersAndCompatibleContentSecurityPolicy()
     {
@@ -89,6 +134,45 @@ public sealed class SecurityConfigurationTests(ApiFactory factory) : IClassFixtu
     }
 
     [Fact]
+    public async Task RenderDeploymentPersistsDataProtectionKeysInDatabase()
+    {
+        using var renderFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Deployment:Public", "true");
+            builder.UseSetting("Deployment:PublicDomain", "escape-room.onrender.com");
+            builder.UseSetting("AllowedHosts", "escape-room.onrender.com");
+            builder.UseSetting("Security:SecureCookies", "true");
+            builder.UseSetting("Security:RequireHttps", "true");
+            builder.UseSetting("DataProtection:PersistKeysToDatabase", "true");
+            builder.UseSetting("ReverseProxy:Mode", "Render");
+            builder.UseSetting(
+                "ConnectionStrings:Database",
+                "postgresql://demo:a-long-test-database-password@db.example/neondb?sslmode=require");
+        });
+        using var client = renderFactory.CreateClient(
+            new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                BaseAddress = new Uri("http://escape-room.onrender.com")
+            });
+        client.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
+        client.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.10");
+
+        var response = await client.GetAsync("/api/auth/csrf");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains(
+            "max-age=2592000",
+            GetSingleHeader(response, "Strict-Transport-Security"));
+        Assert.Contains(
+            response.Headers.GetValues("Set-Cookie"),
+            cookie => cookie.Contains("secure", StringComparison.OrdinalIgnoreCase));
+        using var scope = renderFactory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.True(await db.DataProtectionKeys.AnyAsync());
+    }
+
+    [Fact]
     public async Task StartingTooManySessionsFromOneAddressIsRateLimited()
     {
         using var limitedFactory = factory.WithWebHostBuilder(builder =>
@@ -113,4 +197,19 @@ public sealed class SecurityConfigurationTests(ApiFactory factory) : IClassFixtu
 
     private static string GetSingleHeader(HttpResponseMessage response, string name) =>
         Assert.Single(response.Headers.GetValues(name));
+
+    private static ServiceProvider CreateDataProtectionServiceProvider(
+        InMemoryDatabaseRoot databaseRoot)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase(
+            "data-protection-restart-test",
+            databaseRoot));
+        services
+            .AddDataProtection()
+            .SetApplicationName("TrafikverketEscapeRoomTests")
+            .PersistKeysToDbContext<AppDbContext>();
+        return services.BuildServiceProvider();
+    }
 }

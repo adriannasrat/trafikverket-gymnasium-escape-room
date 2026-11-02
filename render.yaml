@@ -9,7 +9,6 @@ services:
     dockerfilePath: ./apps/api/Dockerfile
     healthCheckPath: /health/ready
     autoDeployTrigger: checksPass
-    maxShutdownDelaySeconds: 30
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production

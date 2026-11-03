@@ -162,6 +162,45 @@ function adminQuiz(): AdminGame {
   };
 }
 
+function adminSorting(): AdminGame {
+  const game = adminQuiz();
+  return {
+    ...game,
+    id: "game-sorting",
+    slug: "sortera-ratt",
+    title: "Sortera rätt",
+    summary: "Sortera kort till rätt målområde.",
+    sortOrder: 5,
+    type: "Sorting",
+    supportsChallengeImages: false,
+    allowsChallengeImageUploads: false,
+    supportsChallengeActivation: false,
+    challenges: [{
+      ...game.challenges[0],
+      id: "challenge-sorting",
+      prompt: "Sortera korten i rätt område.",
+      options: [
+        {
+          id: "sorting-card-1",
+          text: "Tågtrafikledning",
+          sortOrder: 1,
+          isCorrect: false,
+          sortingCategory: "Trafikledning",
+          matchingIconKey: null,
+        },
+        {
+          id: "sorting-card-2",
+          text: "Bluffkort",
+          sortOrder: 2,
+          isCorrect: false,
+          sortingCategory: null,
+          matchingIconKey: null,
+        },
+      ],
+    }],
+  };
+}
+
 async function mockStartPage(page: Page) {
   const challenge = quizChallenge();
   await page.route("**/api/games", (route) => route.fulfill({ json: [challenge.game] }));
@@ -314,7 +353,7 @@ test("spelare och admin ryms på mobil och spelarvyn på eventskärm", async ({ 
   await page.route(`**/api/sessions/${sessionId}/current-challenge`, (route) =>
     route.fulfill({ json: currentChallenge }));
   await page.route("**/api/admin/games", (route) =>
-    route.fulfill({ json: [adminQuiz()] }));
+    route.fulfill({ json: [adminSorting()] }));
 
   const gameTypes: GameType[] = [
     "Quiz",
@@ -327,6 +366,7 @@ test("spelare och admin ryms på mobil och spelarvyn på eventskärm", async ({ 
   ];
 
   for (const viewport of [
+    { width: 320, height: 700 },
     { width: 360, height: 800 },
     { width: 430, height: 932 },
   ]) {
@@ -340,11 +380,25 @@ test("spelare och admin ryms på mobil och spelarvyn på eventskärm", async ({ 
       await page.goto(`/play/${sessionId}`);
       await expect(page.getByRole("main")).toBeVisible();
       await expectNoHorizontalOverflow(page);
+
+      if (gameType === "Hangman") {
+        const letterButton = page.getByRole("button", { name: "Gissa på Q" });
+        const bounds = await letterButton.boundingBox();
+        expect(bounds).not.toBeNull();
+        expect(bounds?.width).toBeGreaterThanOrEqual(48);
+        expect(bounds?.height).toBeGreaterThanOrEqual(48);
+      }
     }
 
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "Hantera uppdrag" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
+    const addSortingButton = page.getByRole("button", { name: "Lägg till sortering" });
+    const addSortingBounds = await addSortingButton.boundingBox();
+    expect(addSortingBounds).not.toBeNull();
+    expect(addSortingBounds?.x).toBeGreaterThanOrEqual(0);
+    expect((addSortingBounds?.x ?? 0) + (addSortingBounds?.width ?? 0))
+      .toBeLessThanOrEqual(viewport.width);
   }
 
   await page.setViewportSize({ width: 1920, height: 1080 });

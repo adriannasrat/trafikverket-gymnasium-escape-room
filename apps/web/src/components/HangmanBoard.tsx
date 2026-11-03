@@ -116,7 +116,10 @@ export function HangmanBoard({
         </div>
         <div className="grid gap-2" aria-label="Tangentbord">
           {keyboardRows.map((row, rowIndex) => (
-            <div key={rowIndex} className="mx-auto grid w-full max-w-[580px] grid-cols-[repeat(11,minmax(0,1fr))] gap-1">
+            <div
+              key={rowIndex}
+              className="mx-auto grid w-full max-w-[580px] grid-cols-[repeat(11,minmax(0,1fr))] gap-1 max-[480px]:flex max-[480px]:flex-wrap max-[480px]:justify-center"
+            >
               {row.map((letter, letterIndex) => {
                 const wasGuessed = guessed.has(letter);
                 const wasCorrect = wasGuessed && answerLetters.has(letter);
@@ -125,7 +128,7 @@ export function HangmanBoard({
                     key={letter}
                     type="button"
                     className={cx(
-                      `${barlow} grid h-12 min-w-0 place-items-center border border-[#bfbfbf] bg-[#f7f7f7] px-1 text-[20px] font-bold text-[#202020] hover:border-[#d70000] hover:bg-[#fffafa] disabled:cursor-not-allowed max-[560px]:h-11 max-[560px]:px-0 max-[560px]:text-[16px] ${focusRing}`,
+                      `${barlow} grid h-12 min-w-0 place-items-center border border-[#bfbfbf] bg-[#f7f7f7] px-1 text-[20px] font-bold text-[#202020] hover:border-[#d70000] hover:bg-[#fffafa] disabled:cursor-not-allowed max-[560px]:px-0 max-[560px]:text-[16px] max-[480px]:size-12 max-[480px]:shrink-0 max-[480px]:text-[18px] ${focusRing}`,
                       rowIndex === 2 && letterIndex === 0 && "col-start-3",
                       wasGuessed && wasCorrect && "!border-[#23845e] !bg-[#eaf6f0] !text-[#176b4c]",
                       wasGuessed && !wasCorrect && "!border-[#c7352d] !bg-[#fde8e6] !text-[#9f302b]",

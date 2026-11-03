@@ -25,13 +25,13 @@ export function ChallengeListEditor({
 
   return (
     <>
-      <div className="mb-[18px] flex items-end justify-between gap-5 border-b border-[#dedede] pb-[17px] max-[720px]:items-stretch">
+      <div className="mb-[18px] flex items-end justify-between gap-5 border-b border-[#dedede] pb-[17px] max-[720px]:items-stretch max-[480px]:flex-col max-[480px]:gap-3">
         <div>
           <p className={`${eyebrow} mb-[5px]`}>{copy.listTitle}</p>
           <p className="m-0 text-[11px] text-[#686868]">{copy.listDescription}</p>
         </div>
         <button
-          className={`${secondaryButton} shrink-0 max-[720px]:px-3`}
+          className={`${secondaryButton} shrink-0 max-[720px]:px-3 max-[480px]:w-full max-[480px]:whitespace-normal`}
           type="button"
           onClick={() => void controller.addChallenge()}
           disabled={controller.mutating !== null || addDisabled}

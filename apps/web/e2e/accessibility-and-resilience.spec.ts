@@ -383,10 +383,29 @@ test("spelare och admin ryms på mobil och spelarvyn på eventskärm", async ({ 
 
       if (gameType === "Hangman") {
         const letterButton = page.getByRole("button", { name: "Gissa på Q" });
+        const lastLetterButton = page.getByRole("button", { name: "Gissa på M" });
         const bounds = await letterButton.boundingBox();
+        const lastBounds = await lastLetterButton.boundingBox();
         expect(bounds).not.toBeNull();
-        expect(bounds?.width).toBeGreaterThanOrEqual(48);
-        expect(bounds?.height).toBeGreaterThanOrEqual(48);
+        expect(lastBounds).not.toBeNull();
+        expect(bounds?.width).toBeGreaterThanOrEqual(44);
+        expect(bounds?.height).toBeGreaterThanOrEqual(44);
+        expect(lastBounds?.width).toBe(bounds?.width);
+        expect(lastBounds?.height).toBe(bounds?.height);
+      }
+
+      if (gameType === "WordAssembly") {
+        const dragSurface = page.getByRole("button", {
+          name: /Dra orddelen System/i,
+        });
+        const dragBounds = await dragSurface.boundingBox();
+        expect(dragBounds).not.toBeNull();
+        expect(dragBounds?.width).toBeGreaterThan(200);
+        expect(dragBounds?.height).toBeGreaterThanOrEqual(80);
+
+        const compoundWord = page.getByText("SystemTrafikInformation", { exact: true });
+        expect(await compoundWord.evaluate((element) =>
+          element.scrollWidth <= element.clientWidth + 1)).toBe(true);
       }
     }
 

@@ -6,6 +6,7 @@ const keyboardRows = [
   ["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ö", "Ä"],
   ["Z", "X", "C", "V", "B", "N", "M"],
 ];
+const mobileKeyboardSlots: Array<string | null> = [...keyboardRows.flat(), null];
 
 type HangmanBoardProps = {
   pattern: Array<string | null>;
@@ -83,6 +84,28 @@ export function HangmanBoard({
   const answerLetters = new Set(pattern.filter((character): character is string => Boolean(character && /[A-ZÅÄÖ]/.test(character))));
   const solved = pattern.every((character) => character !== null);
 
+  function renderLetterButton(letter: string, key: string, className: string) {
+    const wasGuessed = guessed.has(letter);
+    const wasCorrect = wasGuessed && answerLetters.has(letter);
+    return (
+      <button
+        key={key}
+        type="button"
+        className={cx(
+          `${barlow} grid min-w-0 place-items-center border border-[#bfbfbf] bg-[#f7f7f7] font-bold text-[#202020] hover:border-[#d70000] hover:bg-[#fffafa] disabled:cursor-not-allowed ${focusRing}`,
+          className,
+          wasGuessed && wasCorrect && "!border-[#23845e] !bg-[#eaf6f0] !text-[#176b4c]",
+          wasGuessed && !wasCorrect && "!border-[#c7352d] !bg-[#fde8e6] !text-[#9f302b]",
+        )}
+        disabled={disabled || submitting || wasGuessed}
+        onClick={() => onGuess(letter)}
+        aria-label={wasGuessed ? `${letter}, redan gissad` : `Gissa på ${letter}`}
+      >
+        {wasGuessed ? wasCorrect ? <Check size={18} /> : <X size={18} /> : letter}
+      </button>
+    );
+  }
+
   return (
     <section aria-label="Gissa signalordet" className="grid gap-6">
       <div className="border border-[#d7d7d7] bg-white p-[clamp(18px,3vw,30px)] shadow-[0_8px_26px_rgba(30,30,30,0.05)]">
@@ -114,35 +137,29 @@ export function HangmanBoard({
         <div className="mb-4 flex items-center gap-2 text-[10px] font-extrabold tracking-[0.14em] text-[#666] uppercase">
           <CircleAlert size={16} className="text-[#d70000]" /> Välj en bokstav
         </div>
-        <div className="grid gap-2" aria-label="Tangentbord">
+        <div className="grid gap-2 max-[480px]:hidden" aria-label="Tangentbord">
           {keyboardRows.map((row, rowIndex) => (
-            <div
-              key={rowIndex}
-              className="mx-auto grid w-full max-w-[580px] grid-cols-[repeat(11,minmax(0,1fr))] gap-1 max-[480px]:flex max-[480px]:flex-wrap max-[480px]:justify-center"
-            >
+            <div key={rowIndex} className="mx-auto grid w-full max-w-[580px] grid-cols-[repeat(11,minmax(0,1fr))] gap-1">
               {row.map((letter, letterIndex) => {
-                const wasGuessed = guessed.has(letter);
-                const wasCorrect = wasGuessed && answerLetters.has(letter);
-                return (
-                  <button
-                    key={letter}
-                    type="button"
-                    className={cx(
-                      `${barlow} grid h-12 min-w-0 place-items-center border border-[#bfbfbf] bg-[#f7f7f7] px-1 text-[20px] font-bold text-[#202020] hover:border-[#d70000] hover:bg-[#fffafa] disabled:cursor-not-allowed max-[560px]:px-0 max-[560px]:text-[16px] max-[480px]:size-12 max-[480px]:shrink-0 max-[480px]:text-[18px] ${focusRing}`,
-                      rowIndex === 2 && letterIndex === 0 && "col-start-3",
-                      wasGuessed && wasCorrect && "!border-[#23845e] !bg-[#eaf6f0] !text-[#176b4c]",
-                      wasGuessed && !wasCorrect && "!border-[#c7352d] !bg-[#fde8e6] !text-[#9f302b]",
-                    )}
-                    disabled={disabled || submitting || wasGuessed}
-                    onClick={() => onGuess(letter)}
-                    aria-label={wasGuessed ? `${letter}, redan gissad` : `Gissa på ${letter}`}
-                  >
-                    {wasGuessed ? wasCorrect ? <Check size={18} /> : <X size={18} /> : letter}
-                  </button>
+                return renderLetterButton(
+                  letter,
+                  letter,
+                  cx(
+                    "h-12 px-1 text-[20px] max-[560px]:px-0 max-[560px]:text-[16px]",
+                    rowIndex === 2 && letterIndex === 0 && "col-start-3",
+                  ),
                 );
               })}
             </div>
           ))}
+        </div>
+        <div
+          className="mx-auto hidden w-fit grid-cols-5 gap-1.5 max-[480px]:grid"
+          aria-label="Tangentbord"
+        >
+          {mobileKeyboardSlots.map((letter, index) => letter
+            ? renderLetterButton(letter, `mobile-${letter}`, "size-11 text-[18px]")
+            : <span key={`empty-${index}`} className="size-11" aria-hidden="true" />)}
         </div>
       </div>
     </section>

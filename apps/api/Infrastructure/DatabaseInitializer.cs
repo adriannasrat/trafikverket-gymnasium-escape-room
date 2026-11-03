@@ -61,18 +61,23 @@ public sealed class DatabaseInitializer(
     {
         if (!await db.Games.AnyAsync(game => game.Slug == "trafikverket-uppdraget", cancellationToken))
         {
-            var challenge = new Challenge
-            {
-                Prompt = "Vad står IKT för i Trafikverkets verksamhet?",
-                SortOrder = 1,
-                Options =
-                [
-                    new ChallengeOption { Text = "Intern kontroll av transporter", SortOrder = 1 },
-                    new ChallengeOption { Text = "Informations- och kommunikationsteknik", SortOrder = 2, IsCorrect = true },
-                    new ChallengeOption { Text = "Infrastruktur, kvalitet och trafik", SortOrder = 3 },
-                    new ChallengeOption { Text = "Integrerad kollektivtrafik", SortOrder = 4 }
-                ]
-            };
+            static Challenge CreateQuizQuestion(
+                string prompt,
+                int sortOrder,
+                string correctAnswer,
+                string? imagePath,
+                params string[] answers) => new()
+                {
+                    Prompt = prompt,
+                    ImagePath = imagePath,
+                    SortOrder = sortOrder,
+                    Options = answers.Select((text, index) => new ChallengeOption
+                    {
+                        Text = text,
+                        SortOrder = index + 1,
+                        IsCorrect = text == correctAnswer
+                    }).ToList()
+                };
 
             db.Games.Add(new Game
             {
@@ -83,7 +88,45 @@ public sealed class DatabaseInitializer(
                 SortOrder = 1,
                 DefaultTimeLimitSeconds = 30,
                 SuccessMessage = "Rätt! IKT hjälper Trafikverket att övervaka, styra och skydda transportsystemet.",
-                Challenges = [challenge]
+                Challenges =
+                [
+                    CreateQuizQuestion(
+                        "Vad står IKT för i Trafikverkets verksamhet?",
+                        1,
+                        "Informations- och kommunikationsteknik",
+                        null,
+                        "Intern kontroll av transporter",
+                        "Informations- och kommunikationsteknik",
+                        "Infrastruktur, kvalitet och trafik",
+                        "Integrerad kollektivtrafik"),
+                    CreateQuizQuestion(
+                        "Vad är det för skylt?",
+                        2,
+                        "Huvudled",
+                        "/assets/images/quiz/main-road.png",
+                        "Huvudled",
+                        "Körfält upphör",
+                        "Väjningsplikt",
+                        "Huvudled upphör"),
+                    CreateQuizQuestion(
+                        "Vad heter den runda skylten med en röd cirkel och gul bakgrund?",
+                        3,
+                        "Förbud mot trafik med fordon",
+                        null,
+                        "Förbud mot trafik med fordon",
+                        "Förbud mot infart med fordon",
+                        "Förbud mot motordrivna fordon",
+                        "Förbud mot fordonstrafik i båda riktningar"),
+                    CreateQuizQuestion(
+                        "Vad är det för skylt?",
+                        4,
+                        "Påbjuden körriktning",
+                        "/assets/images/quiz/mandatory-direction.png",
+                        "Påbjuden körbana",
+                        "Cirkulationsplats",
+                        "Påbjuden gångbana",
+                        "Påbjuden körriktning")
+                ]
             });
         }
 

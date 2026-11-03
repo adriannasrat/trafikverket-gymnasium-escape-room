@@ -32,33 +32,32 @@ public sealed class AdminChallengeAvailabilityTests(ApiFactory factory)
 
         var quiz = games.Single(candidate => candidate.Type == "Quiz");
         Assert.Equal("Uppdraget", quiz.Title);
-        using var addRequest = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/api/admin/games/{quiz.Id}/challenges");
-        await AddAntiforgeryTokenAsync(addRequest);
-        var addResponse = await Client.SendAsync(addRequest);
-        Assert.Equal(HttpStatusCode.Created, addResponse.StatusCode);
-        var added = await addResponse.Content.ReadFromJsonAsync<AdminChallengeResponse>();
-        Assert.NotNull(added);
+        var orderedChallenges = quiz.Challenges.OrderBy(challenge => challenge.SortOrder).ToList();
+        Assert.True(orderedChallenges.Count > 1);
 
-        games = await Client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
-        quiz = games!.Single(candidate => candidate.Id == quiz.Id);
-        var disabledId = quiz.Challenges.OrderBy(challenge => challenge.SortOrder).First().Id;
+        var disabledIds = orderedChallenges
+            .Take(orderedChallenges.Count - 1)
+            .Select(challenge => challenge.Id)
+            .ToList();
+        var lastEnabledId = orderedChallenges[^1].Id;
+        var updatedQuiz = quiz;
 
-        var disableResponse = await UpdateChallengeAvailabilityAsync(quiz, disabledId, false);
-        Assert.Equal(HttpStatusCode.OK, disableResponse.StatusCode);
-        var updatedQuiz = await disableResponse.Content.ReadFromJsonAsync<AdminGameResponse>();
-        Assert.NotNull(updatedQuiz);
-        Assert.False(updatedQuiz.Challenges.Single(challenge => challenge.Id == disabledId).IsEnabled);
+        foreach (var disabledId in disabledIds)
+        {
+            var disableResponse = await UpdateChallengeAvailabilityAsync(updatedQuiz, disabledId, false);
+            Assert.Equal(HttpStatusCode.OK, disableResponse.StatusCode);
+            updatedQuiz = (await disableResponse.Content.ReadFromJsonAsync<AdminGameResponse>())!;
+            Assert.False(updatedQuiz.Challenges.Single(challenge => challenge.Id == disabledId).IsEnabled);
+        }
 
         var adminGames = await Client.GetFromJsonAsync<List<AdminGameResponse>>("/api/admin/games");
         Assert.Contains(
             adminGames!.Single(game => game.Id == quiz.Id).Challenges,
-            challenge => challenge.Id == disabledId && !challenge.IsEnabled);
+            challenge => challenge.Id == disabledIds[0] && !challenge.IsEnabled);
 
         var disableLastResponse = await UpdateChallengeAvailabilityAsync(
             updatedQuiz,
-            added.Id,
+            lastEnabledId,
             false);
         Assert.Equal(HttpStatusCode.BadRequest, disableLastResponse.StatusCode);
 
@@ -67,17 +66,14 @@ public sealed class AdminChallengeAvailabilityTests(ApiFactory factory)
         var session = await started.Content.ReadFromJsonAsync<SessionResponse>();
         var current = await Client.GetFromJsonAsync<ChallengeEnvelope>(
             $"/api/sessions/{session!.Id}/current-challenge");
-        Assert.NotEqual(disabledId, current!.Challenge.Id);
+        Assert.Equal(lastEnabledId, current!.Challenge.Id);
 
-        var enableResponse = await UpdateChallengeAvailabilityAsync(updatedQuiz, disabledId, true);
-        Assert.Equal(HttpStatusCode.OK, enableResponse.StatusCode);
-
-        using var deleteRequest = new HttpRequestMessage(
-            HttpMethod.Delete,
-            $"/api/admin/challenges/{added.Id}");
-        await AddAntiforgeryTokenAsync(deleteRequest);
-        var deleteResponse = await Client.SendAsync(deleteRequest);
-        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+        foreach (var disabledId in disabledIds)
+        {
+            var enableResponse = await UpdateChallengeAvailabilityAsync(updatedQuiz, disabledId, true);
+            Assert.Equal(HttpStatusCode.OK, enableResponse.StatusCode);
+            updatedQuiz = (await enableResponse.Content.ReadFromJsonAsync<AdminGameResponse>())!;
+        }
     }
 
 

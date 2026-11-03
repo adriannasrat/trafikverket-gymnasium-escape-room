@@ -102,6 +102,38 @@ public sealed class AdminChallengeLifecycleTests(ApiFactory factory)
 
         var imageChallenge = await Client.GetFromJsonAsync<ChallengeEnvelope>(
             $"/api/sessions/{session.Id}/current-challenge");
+        for (
+            var question = 1;
+            question < initialChallengeCount && imageChallenge?.Challenge.Id != created.Id;
+            question++)
+        {
+            Guid nextCorrectOptionId;
+            await using (var answerScope = Factory.Services.CreateAsyncScope())
+            {
+                nextCorrectOptionId = await answerScope.ServiceProvider
+                    .GetRequiredService<AppDbContext>()
+                    .ChallengeOptions
+                    .Where(option =>
+                        option.ChallengeId == imageChallenge!.Challenge.Id && option.IsCorrect)
+                    .Select(option => option.Id)
+                    .SingleAsync();
+            }
+
+            var nextAnswer = await Client.PostAsJsonAsync(
+                $"/api/sessions/{session.Id}/answers",
+                new
+                {
+                    challengeId = imageChallenge!.Challenge.Id,
+                    optionId = nextCorrectOptionId
+                });
+            nextAnswer.EnsureSuccessStatusCode();
+
+            var advanceResponse = await Client.PostAsync($"/api/sessions/{session.Id}/next", null);
+            Assert.Equal(HttpStatusCode.NoContent, advanceResponse.StatusCode);
+            imageChallenge = await Client.GetFromJsonAsync<ChallengeEnvelope>(
+                $"/api/sessions/{session.Id}/current-challenge");
+        }
+
         Assert.Equal(created.Id, imageChallenge?.Challenge.Id);
         Assert.Equal(uploaded?.ImagePath, imageChallenge?.Challenge.ImagePath);
 

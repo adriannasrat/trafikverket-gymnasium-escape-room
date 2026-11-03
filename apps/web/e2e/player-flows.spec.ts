@@ -199,6 +199,72 @@ test("ett fel svar pausar tiden tills spelaren försöker igen", async ({ page }
   await expect(page.getByRole("button", { name: "Bekräfta svar" })).toBeDisabled();
 });
 
+test("timeout försöker igen när serverklockan fortfarande har tid kvar", async ({ page }) => {
+  let current = challengeResponse("Quiz");
+  current.challenge.timeLimitSeconds = 1;
+  current.challenge.secondsRemaining = 0;
+  current.challenge.challengeStartedAtUtc = new Date(Date.now() - 1_100).toISOString();
+  current.challenge.options = [
+    { id: "train", text: "Tåg" },
+    { id: "car", text: "Bil" },
+  ];
+
+  await page.route(`**/api/sessions/${sessionId}/current-challenge`, (route) =>
+    route.fulfill({ json: current }));
+
+  let timeoutAttempts = 0;
+  await page.route(`**/api/sessions/${sessionId}/timeout`, async (route) => {
+    timeoutAttempts += 1;
+    expect(route.request().postDataJSON()).toEqual({ challengeId: "challenge-Quiz" });
+
+    if (timeoutAttempts === 1) {
+      const serverStartedAt = new Date(Date.now() - 800).toISOString();
+      current = {
+        ...current,
+        challenge: {
+          ...current.challenge,
+          challengeStartedAtUtc: serverStartedAt,
+          secondsRemaining: 0.2,
+        },
+      };
+      await route.fulfill({
+        json: {
+          expired: false,
+          challengeStartedAtUtc: serverStartedAt,
+          timeLimitSeconds: 1,
+          secondsRemaining: 0.2,
+        },
+      });
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        expired: true,
+        message: "Game over – tiden tog slut. Alla liv är förlorade.",
+        challengeStartedAtUtc: new Date().toISOString(),
+        timeLimitSeconds: 1,
+        secondsRemaining: 1,
+        currentChallengePenaltyMilliseconds: 0,
+        progress: {
+          score: 0,
+          scoreAwarded: 0,
+          livesRemaining: 0,
+          lifeLost: true,
+          gameOver: true,
+          timedOut: true,
+        },
+      },
+    });
+  });
+
+  await page.goto(`/play/${sessionId}`);
+  await expect(page.getByText("Game over", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Uppdraget misslyckades." }))
+    .toBeVisible({ timeout: 5_000 });
+  expect(timeoutAttempts).toBe(2);
+});
+
 for (const game of [
   { type: "Quiz", option: "Tåg", optionId: "train" },
   { type: "TrueFalse", option: "Sant", optionId: "true" },

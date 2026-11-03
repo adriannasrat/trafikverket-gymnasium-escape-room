@@ -55,7 +55,7 @@ function WordPartCard({
         droppable.setNodeRef(node);
       }}
       className={cx(
-        "relative grid min-w-[180px] flex-1 grid-cols-[42px_minmax(0,1fr)] border-2 bg-white shadow-[0_6px_18px_rgba(25,25,25,0.07)] max-[560px]:min-w-0 max-[560px]:grid-cols-[38px_minmax(0,1fr)]",
+        "relative grid min-w-[180px] flex-1 border-2 bg-white shadow-[0_6px_18px_rgba(25,25,25,0.07)] max-[560px]:min-w-0",
         !correct && !incorrect && "border-[#cfcfcf]",
         correct && "!border-[#23845e] !bg-[#eaf6f0] shadow-[0_6px_18px_rgba(35,132,94,0.12)]",
         incorrect && "!border-[#c7352d] !bg-[#fde8e6] shadow-[0_6px_18px_rgba(199,53,45,0.12)]",
@@ -70,9 +70,7 @@ function WordPartCard({
     >
       <button
         className={cx(
-          `row-span-2 grid touch-none cursor-grab place-items-center border-0 border-r border-[#dedede] bg-[#f5f5f5] text-[#777] active:cursor-grabbing disabled:cursor-default ${focusRing}`,
-          correct && "!bg-[#23845e] !text-white",
-          incorrect && "!bg-[#c7352d] !text-white",
+          `grid min-h-[82px] w-full touch-none cursor-grab grid-cols-[42px_minmax(0,1fr)] border-0 bg-transparent p-0 text-[#202020] active:cursor-grabbing disabled:cursor-default max-[560px]:grid-cols-[38px_minmax(0,1fr)] ${focusRing}`,
         )}
         type="button"
         aria-label={`Dra orddelen ${part.text}, position ${index + 1} av ${total}`}
@@ -80,15 +78,23 @@ function WordPartCard({
         {...draggable.listeners}
         {...draggable.attributes}
       >
-        {correct ? <Check size={19} /> : incorrect ? <X size={19} /> : <GripVertical size={19} />}
+        <span
+          className={cx(
+            "grid h-full place-items-center border-r border-[#dedede] bg-[#f5f5f5] text-[#777]",
+            correct && "!bg-[#23845e] !text-white",
+            incorrect && "!bg-[#c7352d] !text-white",
+          )}
+        >
+          {correct ? <Check size={19} /> : incorrect ? <X size={19} /> : <GripVertical size={19} />}
+        </span>
+        <span className="grid h-full place-items-center px-4 py-3 text-center">
+          <span className={cx(
+            `${barlow} text-[clamp(25px,3vw,35px)] leading-none font-bold text-[#202020] uppercase`,
+            correct && "!text-[#176b4c]",
+            incorrect && "!text-[#8f2424]",
+          )}>{part.text}</span>
+        </span>
       </button>
-      <div className="grid min-h-[82px] place-items-center px-4 py-3 text-center">
-        <span className={cx(
-          `${barlow} text-[clamp(25px,3vw,35px)] leading-none font-bold text-[#202020] uppercase`,
-          correct && "!text-[#176b4c]",
-          incorrect && "!text-[#8f2424]",
-        )}>{part.text}</span>
-      </div>
       <div className="flex border-t border-[#e2e2e2]">
         <button
           className={`grid min-h-9 flex-1 cursor-pointer place-items-center border-0 border-r border-[#e2e2e2] bg-transparent text-[#666] hover:bg-[#f5f5f5] disabled:cursor-not-allowed disabled:text-[#ccc] ${focusRing}`}
@@ -159,7 +165,7 @@ export function WordAssemblyBoard({
         </div>
         <div className="mt-5 border border-[#dedede] bg-white px-5 py-4 text-center">
           <p className="m-0 text-[8px] font-extrabold tracking-[0.15em] text-[#777] uppercase">DITT SAMMANSATTA ORD</p>
-          <p className={`${barlow} mt-2 mb-0 break-words text-[clamp(31px,5vw,52px)] leading-none font-bold text-[#202020] uppercase`}>
+          <p className={`${barlow} mt-2 mb-0 break-words text-[clamp(31px,5vw,52px)] leading-none font-bold text-[#202020] uppercase [overflow-wrap:anywhere] max-[480px]:text-[clamp(22px,8vw,31px)] max-[480px]:leading-[0.95]`}>
             {orderedParts.map((part) => part.text).join("")}
           </p>
         </div>

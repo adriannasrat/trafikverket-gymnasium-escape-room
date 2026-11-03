@@ -59,6 +59,46 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.True(result?.Correct);
         Assert.False(result?.Completed);
 
+        for (var question = 1; question < 4; question++)
+        {
+            var nextQuizResponse = await client.PostAsync(
+                $"/api/sessions/{session.Id}/next",
+                null);
+            Assert.Equal(HttpStatusCode.NoContent, nextQuizResponse.StatusCode);
+
+            challenge = await client.GetFromJsonAsync<ChallengeResponse>(
+                $"/api/sessions/{session.Id}/current-challenge");
+            Assert.NotNull(challenge);
+            Assert.Equal("Quiz", challenge.Game.Type);
+            Assert.Equal(question + 1, challenge.Challenge.QuestionNumber);
+            Assert.Equal(4, challenge.Challenge.QuestionTotal);
+            if (question == 1)
+            {
+                Assert.Equal("/assets/images/quiz/main-road.png", challenge.Challenge.ImagePath);
+            }
+            else if (question == 3)
+            {
+                Assert.Equal(
+                    "/assets/images/quiz/mandatory-direction.png",
+                    challenge.Challenge.ImagePath);
+            }
+
+            using (var scope = factory.Services.CreateScope())
+            {
+                correctOptionId = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+                    .ChallengeOptions
+                    .Where(option => option.ChallengeId == challenge.Challenge.Id && option.IsCorrect)
+                    .Select(option => option.Id)
+                    .SingleAsync();
+            }
+
+            var quizAnswer = await client.PostAsJsonAsync(
+                $"/api/sessions/{session.Id}/answers",
+                new { challengeId = challenge.Challenge.Id, optionId = correctOptionId });
+            quizAnswer.EnsureSuccessStatusCode();
+            Assert.True((await quizAnswer.Content.ReadFromJsonAsync<AnswerResponse>())?.Correct);
+        }
+
         var nextResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
         Assert.Equal(HttpStatusCode.NoContent, nextResponse.StatusCode);
         var matching = await client.GetFromJsonAsync<ChallengeResponse>(
@@ -405,13 +445,47 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.Equal(4, correct?.Progress.LivesRemaining);
         Assert.InRange(correct!.Progress.ScoreAwarded, 100, 1_000);
 
+        for (var question = 1; question < 4; question++)
+        {
+            var nextQuizResponse = await client.PostAsync(
+                $"/api/sessions/{session.Id}/next",
+                null);
+            Assert.Equal(HttpStatusCode.NoContent, nextQuizResponse.StatusCode);
+
+            var nextQuiz = await client.GetFromJsonAsync<ChallengeResponse>(
+                $"/api/sessions/{session.Id}/current-challenge");
+            Assert.NotNull(nextQuiz);
+            Assert.Equal("Quiz", nextQuiz.Game.Type);
+
+            Guid nextCorrectOptionId;
+            await using (var scope = factory.Services.CreateAsyncScope())
+            {
+                nextCorrectOptionId = await scope.ServiceProvider
+                    .GetRequiredService<AppDbContext>()
+                    .ChallengeOptions
+                    .Where(option =>
+                        option.ChallengeId == nextQuiz.Challenge.Id && option.IsCorrect)
+                    .Select(option => option.Id)
+                    .SingleAsync();
+            }
+
+            var nextQuizAnswer = await client.PostAsJsonAsync(
+                $"/api/sessions/{session.Id}/answers",
+                new
+                {
+                    challengeId = nextQuiz.Challenge.Id,
+                    optionId = nextCorrectOptionId
+                });
+            nextQuizAnswer.EnsureSuccessStatusCode();
+        }
+
         var nextResponse = await client.PostAsync($"/api/sessions/{session.Id}/next", null);
         Assert.Equal(HttpStatusCode.NoContent, nextResponse.StatusCode);
         var nextGame = await client.GetFromJsonAsync<ChallengeResponse>(
             $"/api/sessions/{session.Id}/current-challenge");
         Assert.Equal("Matching", nextGame?.Game.Type);
         Assert.Equal(4, nextGame?.LivesRemaining);
-        Assert.Equal(correct.Progress.Score, nextGame?.Score);
+        Assert.True(nextGame?.Score > correct.Progress.Score);
     }
 
     [Fact]
@@ -709,6 +783,7 @@ public sealed class SessionFlowTests(ApiFactory factory) : IClassFixture<ApiFact
         int Total,
         int QuestionNumber,
         int QuestionTotal,
+        string? ImagePath,
         int PixelRevealCount,
         bool RetryRequired,
         List<OptionBody> Options);
